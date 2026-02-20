@@ -163,17 +163,17 @@
 
 ### Implementação
 
-- [ ] T032 [US4] Adicionar comando `cvmdata query --cnpj TEXT [--year INT]` em `cli.py`:
+- [x] T032 [US4] Adicionar comando `cvmdata query --cnpj TEXT [--year INT]` em `cli.py`:
   - Executar `SELECT cnpj_cia, dt_refer, indicador, valor FROM indicators WHERE cnpj_cia = ? ORDER BY dt_refer, indicador`
   - Formatar saída como tabela ASCII via `typer.echo` ou `rich.table` (se `rich` já é dep transitiva do Typer)
   - Sem `--cnpj`: listar as 10 empresas com mais indicadores calculados como sumário
 
 ### Testes US4
 
-- [ ] T033 [P] [US4] Adicionar teste em `tests/test_indicators.py`:
+- [x] T033 [P] [US4] Adicionar teste em `tests/test_indicators.py`:
   - Popular `indicators` com dados conhecidos → verificar que query retorna os registros corretos ordenados por `dt_refer`
 
-**Checkpoint US4**: `cvmdata query --cnpj "00.000.000/0001-91"` exibe indicadores em tabela.
+**Checkpoint US4** ✅: `cvmdata query --cnpj "00.000.000/0001-91"` exibe indicadores em tabela; `uv run pytest` 100/100 passando, 2 xfailed esperados; `ruff check` limpo.
 
 ---
 

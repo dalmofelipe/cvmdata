@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from cvmdata.ingestion.db import init_schema
+from cvmdata.ingestion.db import init_indicators_schema, init_schema
 from cvmdata.ingestion.loader import load_csv
 from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
 from cvmdata.transform.indicators import (
@@ -465,3 +465,115 @@ def test_bank_sector_divida_bruta_not_none(db):
     ).fetchone()
     # xfail: banco não tem 2.01.04 → emprestimos_cp = None → divida_bruta = None
     assert row is not None and row[0] is not None
+
+
+# ── T033: US4 — Consulta de indicadores ──────────────────────────────────────
+
+_QUERY_SQL = """
+    SELECT cnpj_cia, dt_refer, indicador, valor
+    FROM   indicators
+    WHERE  cnpj_cia = ?
+    ORDER BY dt_refer, indicador
+"""
+
+_SUMMARY_SQL = """
+    SELECT cnpj_cia,
+           COUNT(DISTINCT indicador) AS n_indicadores,
+           MIN(dt_refer)             AS primeiro_periodo,
+           MAX(dt_refer)             AS ultimo_periodo
+    FROM   indicators
+    GROUP BY cnpj_cia
+    ORDER BY n_indicadores DESC
+    LIMIT 10
+"""
+
+
+def _insert_indicators(db, rows: list[tuple]) -> None:
+    """Insere linhas (cnpj_cia, dt_refer, indicador, valor) em indicators."""
+    db.executemany(
+        "INSERT OR REPLACE INTO indicators (cnpj_cia, dt_refer, indicador, valor) VALUES (?,?,?,?)",
+        rows,
+    )
+
+
+def test_query_returns_records_for_cnpj(db):
+    """Query com CNPJ retorna os registros conhecidos da tabela indicators."""
+    init_indicators_schema(db)
+    _insert_indicators(db, [
+        ("11.111.111/0001-11", "2024-03-31", "roe", 20.0),
+        ("11.111.111/0001-11", "2024-03-31", "roa", 10.0),
+        ("22.222.222/0002-22", "2024-03-31", "roe", 5.0),
+    ])
+
+    rows = db.execute(_QUERY_SQL, ["11.111.111/0001-11"]).fetchall()
+
+    assert len(rows) == 2
+    assert rows[0][2] == "roa"   # ORDER BY indicador → roa antes de roe
+    assert rows[1][2] == "roe"
+    assert rows[0][3] == pytest.approx(10.0)
+    assert rows[1][3] == pytest.approx(20.0)
+
+
+def test_query_ordered_by_dt_refer(db):
+    """Registros de múltiplos períodos devem estar ordenados por dt_refer ASC."""
+    init_indicators_schema(db)
+    _insert_indicators(db, [
+        ("33.333.333/0003-33", "2024-09-30", "roe", 18.0),
+        ("33.333.333/0003-33", "2024-03-31", "roe", 15.0),
+        ("33.333.333/0003-33", "2024-06-30", "roe", 17.0),
+    ])
+
+    rows = db.execute(_QUERY_SQL, ["33.333.333/0003-33"]).fetchall()
+
+    assert len(rows) == 3
+    datas = [str(r[1]) for r in rows]
+    assert datas == sorted(datas)
+
+
+def test_query_unknown_cnpj_returns_empty(db):
+    """CNPJ sem indicadores retorna lista vazia."""
+    init_indicators_schema(db)
+    rows = db.execute(_QUERY_SQL, ["99.999.999/0009-99"]).fetchall()
+    assert rows == []
+
+
+def test_query_summary_top10(db):
+    """Sem filtro de CNPJ, resumo lista até 10 empresas ordenadas por n_indicadores DESC."""
+    init_indicators_schema(db)
+    _insert_indicators(db, [
+        ("44.444.444/0001-44", "2024-03-31", "roe", 1.0),
+        ("44.444.444/0001-44", "2024-03-31", "roa", 2.0),
+        ("55.555.555/0001-55", "2024-03-31", "roe", 3.0),
+    ])
+
+    rows = db.execute(_SUMMARY_SQL).fetchall()
+
+    assert len(rows) == 2
+    # Empresa com 2 indicadores vem primeiro
+    assert rows[0][0] == "44.444.444/0001-44"
+    assert rows[0][1] == 2
+    assert rows[1][0] == "55.555.555/0001-55"
+    assert rows[1][1] == 1
+
+
+def test_query_year_filter(db):
+    """Filtro --year restringe resultados ao ano solicitado."""
+    init_indicators_schema(db)
+    _insert_indicators(db, [
+        ("66.666.666/0001-66", "2023-12-31", "roe", 10.0),
+        ("66.666.666/0001-66", "2024-03-31", "roe", 12.0),
+        ("66.666.666/0001-66", "2024-06-30", "roe", 14.0),
+    ])
+
+    rows = db.execute(
+        """
+        SELECT cnpj_cia, dt_refer, indicador, valor
+        FROM   indicators
+        WHERE  cnpj_cia = ? AND YEAR(dt_refer) = ?
+        ORDER BY dt_refer, indicador
+        """,
+        ["66.666.666/0001-66", 2024],
+    ).fetchall()
+
+    assert len(rows) == 2
+    assert all(str(r[1]).startswith("2024") for r in rows)

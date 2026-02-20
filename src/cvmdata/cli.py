@@ -5,6 +5,7 @@ Uso:
     cvmdata load     [--year 2024]
     cvmdata normalize
     cvmdata indicators [--cnpj 00.000.000/0001-00]
+    cvmdata query [--cnpj 00.000.000/0001-00] [--year 2024]
 """
 from __future__ import annotations
 
@@ -12,6 +13,8 @@ import logging
 from typing import Optional
 
 import typer
+from rich.console import Console
+from rich.table import Table
 
 from cvmdata.config import settings
 from cvmdata.ingestion.db import get_connection
@@ -133,6 +136,82 @@ def indicators(
         typer.echo("⚠ Nenhum indicador calculado — rode 'normalize' primeiro")
     else:
         typer.echo(f"✓ {total:,} indicadores gravados em indicators")
+
+
+@app.command()
+def query(
+    cnpj: Optional[str] = typer.Option(
+        None, "--cnpj", help="CNPJ da empresa (ex: 00.000.000/0001-00)."
+    ),
+    year: Optional[int] = typer.Option(None, "--year", "-y", help="Filtrar por ano (ex: 2024)."),
+) -> None:
+    """Consulta indicadores fundamentalistas calculados."""
+    console = Console()
+
+    with get_connection(settings.db_path) as conn:
+        try:
+            # Sem --cnpj: resumo das 10 empresas com mais indicadores
+            if cnpj is None:
+                rows = conn.execute(
+                    """
+                    SELECT cnpj_cia,
+                           COUNT(DISTINCT indicador) AS n_indicadores,
+                           MIN(dt_refer)             AS primeiro_periodo,
+                           MAX(dt_refer)             AS ultimo_periodo
+                    FROM   indicators
+                    GROUP BY cnpj_cia
+                    ORDER BY n_indicadores DESC
+                    LIMIT  10
+                    """
+                ).fetchall()
+
+                if not rows:
+                    typer.echo("⚠ Nenhum indicador encontrado — rode 'indicators' primeiro")
+                    return
+
+                tbl = Table(title="Top 10 empresas com mais indicadores", show_lines=False)
+                tbl.add_column("CNPJ", style="cyan", no_wrap=True)
+                tbl.add_column("Indicadores", justify="right")
+                tbl.add_column("Primeiro período", justify="center")
+                tbl.add_column("Último período", justify="center")
+                for row in rows:
+                    tbl.add_row(row[0], str(row[1]), str(row[2]), str(row[3]))
+                console.print(tbl)
+                return
+
+            # Com --cnpj: detalhe por período
+            params: list = [cnpj]
+            year_clause = ""
+            if year is not None:
+                year_clause = " AND YEAR(dt_refer) = ?"
+                params.append(year)
+
+            rows = conn.execute(
+                f"""
+                SELECT cnpj_cia, dt_refer, indicador, valor
+                FROM   indicators
+                WHERE  cnpj_cia = ?{year_clause}
+                ORDER BY dt_refer, indicador
+                """,
+                params,
+            ).fetchall()
+
+            if not rows:
+                typer.echo(f"⚠ Nenhum indicador encontrado para CNPJ {cnpj!r}")
+                return
+
+            tbl = Table(title=f"Indicadores — {cnpj}", show_lines=False)
+            tbl.add_column("dt_refer", style="cyan", no_wrap=True)
+            tbl.add_column("indicador", style="bold")
+            tbl.add_column("valor", justify="right")
+            for row in rows:
+                valor = f"{row[3]:.4f}" if row[3] is not None else "—"
+                tbl.add_row(str(row[1]), row[2], valor)
+            console.print(tbl)
+
+        except Exception as exc:
+            typer.echo(f"✗ Erro: {exc}", err=True)
+            raise typer.Exit(1) from exc
 
 
 if __name__ == "__main__":
