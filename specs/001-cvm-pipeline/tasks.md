@@ -68,24 +68,20 @@
 
 ### Implementação
 
-- [ ] T017 [US2] Implementar `src/cvmdata/transform/normalize.py`:
+- [x] T017 [US2] Implementar `src/cvmdata/transform/normalize.py`:
   - Função `normalize_table(table: str, repo: BaseRepository) -> int` que cria `{table}_clean`
   - SQL de deduplicação: `ROW_NUMBER() OVER (PARTITION BY CNPJ_CIA, DT_REFER, CD_CONTA, ORDEM_EXERC ORDER BY VERSAO DESC)` mantendo `rn = 1` e `ORDEM_EXERC = 'ÚLTIMO'`
   - Cast de tipos: `DT_REFER::DATE`, `DT_FIM_EXERC::DATE`, `VL_CONTA::DECIMAL(29,10)`
   - Padronização `CD_CVM`: `TRY_CAST(TRIM(CD_CVM) AS INTEGER)`
   - Retornar contagem de linhas na tabela limpa
   - Função `normalize_all(repo: BaseRepository) -> dict[str, int]` que itera sobre todas as tabelas raw existentes
-- [ ] T018 [US2] Conectar `normalize.py` ao comando CLI `cvmdata normalize` em `cli.py`
+- [x] T018 [US2] Conectar `normalize.py` ao comando CLI `cvmdata normalize` em `cli.py`
 
 ### Testes US2
 
-- [ ] T019 [P] [US2] Criar `tests/test_normalize.py`:
-  - Fixture com 2 linhas idênticas em tudo exceto `VERSAO` (1 e 2) para o mesmo `(CNPJ_CIA, DT_REFER, CD_CONTA)` → verificar que `normalize_table` mantém apenas `VERSAO = 2`
-  - Verificar que `ORDEM_EXERC = 'PENÚLTIMO'` é removido
-  - Verificar que `DT_REFER` é tipo `DATE` após normalização
-  - Verificar que `CD_CVM = '001023'` vira `1023` após normalização
+- [x] T019 [P] [US2] Criar `tests/test_normalize.py` com 13 testes: dedup (VERSAO mais alta), remoção PENÚLTIMO, tipos DATE/DECIMAL, CD_CVM stripped, idempotência, tabela vazia, normalize_all
 
-**Checkpoint US2**: `cvmdata normalize` cria tabelas `*_clean`; `SELECT COUNT(*) FROM itr_bpa_con_clean WHERE ORDEM_EXERC != 'ÚLTIMO'` = 0; `uv run pytest tests/test_normalize.py` passa.
+**Checkpoint US2** ✅: `cvmdata normalize` cria tabelas `*_clean`; `uv run pytest tests/test_normalize.py` 13/13 passando; `uv run pytest` 37/37 passando; `ruff check` limpo.
 
 ---
 

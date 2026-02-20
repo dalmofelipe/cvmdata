@@ -17,6 +17,7 @@ from cvmdata.config import settings
 from cvmdata.ingestion.db import get_connection
 from cvmdata.ingestion.downloader import download_source_year
 from cvmdata.ingestion.loader import load_source_year
+from cvmdata.transform.normalize import normalize_all
 
 app = typer.Typer(
     name="cvmdata",
@@ -86,9 +87,28 @@ def load(
 
 
 @app.command()
-def normalize() -> None:
+def normalize(
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
     """Normaliza, deduplica e consolida os dados brutos no DuckDB."""
-    typer.echo("[normalize]  — não implementado ainda")
+    _setup_logging(verbose)
+
+    with get_connection(settings.db_path) as conn:
+        try:
+            results = normalize_all(conn)
+        except Exception as exc:
+            typer.echo(f"✗ Erro durante normalização: {exc}", err=True)
+            raise typer.Exit(1) from exc
+
+    if not results:
+        typer.echo("⚠ Nenhuma tabela raw_* encontrada — rode 'load' primeiro")
+        return
+
+    for table, count in sorted(results.items()):
+        typer.echo(f"  ✓ {table}_clean: {count:,} linhas")
+
+    total = sum(results.values())
+    typer.echo(f"✓ {len(results)} tabela(s) normalizadas, {total:,} linhas totais")
 
 
 @app.command()
