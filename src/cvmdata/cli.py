@@ -17,6 +17,7 @@ from cvmdata.config import settings
 from cvmdata.ingestion.db import get_connection
 from cvmdata.ingestion.downloader import download_source_year
 from cvmdata.ingestion.loader import load_source_year
+from cvmdata.transform.indicators import calculate_all
 from cvmdata.transform.normalize import normalize_all
 
 app = typer.Typer(
@@ -116,9 +117,22 @@ def indicators(
     cnpj: Optional[str] = typer.Option(
         None, "--cnpj", help="Filtrar por CNPJ (ex: 00.000.000/0001-00)."
     ),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Calcula indicadores fundamentalistas e grava no DuckDB."""
-    typer.echo(f"[indicators] cnpj={cnpj}  — não implementado ainda")
+    _setup_logging(verbose)
+
+    with get_connection(settings.db_path) as conn:
+        try:
+            total = calculate_all(conn, cnpj=cnpj)
+        except Exception as exc:
+            typer.echo(f"✗ Erro: {exc}", err=True)
+            raise typer.Exit(1) from exc
+
+    if total == 0:
+        typer.echo("⚠ Nenhum indicador calculado — rode 'normalize' primeiro")
+    else:
+        typer.echo(f"✓ {total:,} indicadores gravados em indicators")
 
 
 if __name__ == "__main__":

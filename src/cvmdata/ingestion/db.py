@@ -81,6 +81,16 @@ def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
     return conn
 
 
+_INDICATORS_DDL = """\
+CREATE TABLE IF NOT EXISTS indicators (
+    cnpj_cia  VARCHAR NOT NULL,
+    dt_refer  DATE    NOT NULL,
+    indicador VARCHAR NOT NULL,
+    valor     DOUBLE,
+    PRIMARY KEY (cnpj_cia, dt_refer, indicador)
+);"""
+
+
 def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
     """Cria tabelas raw_* se ainda não existirem (idempotente)."""
     for demo in sorted(BALANCE_DEMOS):
@@ -90,3 +100,9 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
         conn.execute(_FLOW_DDL.format(demo=demo.lower()))
 
     logger.info("Schema raw_* OK (%d tabelas)", len(DEMOS))
+
+
+def init_indicators_schema(conn: duckdb.DuckDBPyConnection) -> None:
+    """Cria tabela `indicators` se ainda não existir (idempotente)."""
+    conn.execute(_INDICATORS_DDL)
+    logger.debug("Schema indicators OK")

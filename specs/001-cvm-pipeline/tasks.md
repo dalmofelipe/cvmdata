@@ -93,7 +93,7 @@
 
 ### Account Map
 
-- [ ] T020 [US3] Criar `src/cvmdata/transform/account_map.py`:
+- [x] T020 [US3] Criar `src/cvmdata/transform/account_map.py`:
   - Dicionário `ACCOUNT_MAP: dict[str, str]` com 16 contas mapeadas (BPA: 6, BPP: 5, DRE: 5) — ver plan.md Phase 4
   - Função `get_component(cd_conta: str) -> str | None` com match exato
   - Logar `WARNING` para cada `cd_conta` não encontrado
@@ -101,17 +101,17 @@
 
 ### Funções de Cálculo
 
-- [ ] T021 [P] [US3] Implementar funções puras de rentabilidade em `src/cvmdata/transform/indicators.py`:
+- [x] T021 [P] [US3] Implementar funções puras de rentabilidade em `src/cvmdata/transform/indicators.py`:
   - `roe`, `roa`, `margem_bruta`, `margem_operacional`, `margem_liquida`, `giro_ativo`
   - Retornar `None` se qualquer argumento for `None` ou denominador for `0`
-- [ ] T022 [P] [US3] Implementar funções puras de liquidez em `src/cvmdata/transform/indicators.py`:
+- [x] T022 [P] [US3] Implementar funções puras de liquidez em `src/cvmdata/transform/indicators.py`:
   - `liquidez_corrente`, `liquidez_seca`, `liquidez_imediata`, `liquidez_geral`
-- [ ] T023 [P] [US3] Implementar funções puras de endividamento em `src/cvmdata/transform/indicators.py`:
+- [x] T023 [P] [US3] Implementar funções puras de endividamento em `src/cvmdata/transform/indicators.py`:
   - `endividamento_geral`, `divida_bruta`, `divida_liquida`, `divida_liquida_pl`, `cobertura_juros`
 
 ### Schema e Orquestrador
 
-- [ ] T024 [US3] Criar tabela `indicators` no schema DuckDB via `repo.create_schema()` (depende de T021, T022, T023):
+- [x] T024 [US3] Criar tabela `indicators` no schema DuckDB via `repo.create_schema()` (depende de T021, T022, T023):
   ```sql
   CREATE TABLE IF NOT EXISTS indicators (
       cnpj_cia  VARCHAR NOT NULL,
@@ -121,37 +121,37 @@
       PRIMARY KEY (cnpj_cia, dt_refer, indicador)
   )
   ```
-- [ ] T025 [US3] Implementar orquestrador `calculate_all(cnpj: str | None, repo: BaseRepository)` em `indicators.py`:
+- [x] T025 [US3] Implementar orquestrador `calculate_all(cnpj: str | None, repo: BaseRepository)` em `indicators.py`:
   - Listar todos os `(cnpj_cia, dt_refer)` distintos nas tabelas `*_clean`
   - Filtrar por `cnpj` se fornecido
   - Para cada empresa/período: extrair componentes via `get_component` das tabelas `*_clean`
   - Calcular todos os 15 indicadores (6 rentabilidade + 4 liquidez + 5 endividamento)
   - `INSERT OR REPLACE INTO indicators` para cada resultado
   - Nunca interromper por empresa com dados incompletos — `try/except` por empresa, logar `ERROR` e continuar
-- [ ] T026 [US3] Conectar orquestrador ao comando CLI `cvmdata indicators [--cnpj TEXT]` em `cli.py`
+- [x] T026 [US3] Conectar orquestrador ao comando CLI `cvmdata indicators [--cnpj TEXT]` em `cli.py`
 
 ### Testes US3
 
-- [ ] T027 [P] [US3] Criar `tests/test_indicators.py` — funções puras (pelo menos 1 caso feliz + 1 None por função):
+- [x] T027 [P] [US3] Criar `tests/test_indicators.py` — funções puras (pelo menos 1 caso feliz + 1 None por função):
   - Rentabilidade: `roe(100,500)`→`20.0`; `margem_bruta(300,1000)`→`30.0`; `margem_operacional(200,1000)`→`20.0`; `giro_ativo(1000,2000)`→`0.5`
   - Liquidez: `liquidez_corrente(200,100)`→`2.0`; `liquidez_seca(200,50,100)`→`1.5`; `liquidez_imediata(80,100)`→`0.8`
   - Endividamento: `endividamento_geral(100,200,1000)`→`30.0`; `divida_liquida(300,400,80,120)`→`500.0`; `cobertura_juros(200,50)`→`4.0`
   - Denominador zero → `None` para todas as funções; argumento `None` → `None`
-- [ ] T028 [P] [US3] Criar `tests/fixtures/sample_bank_bpp.csv` e `tests/fixtures/sample_bank_dre.csv` com linhas de BCO Brasil
-- [ ] T029 [US3] Adicionar teste de integração em `tests/test_indicators.py` usando fixture in-memory:
+- [x] T028 [P] [US3] Criar `tests/fixtures/sample_bank_bpp.csv` e `tests/fixtures/sample_bank_dre.csv` com linhas de BCO Brasil
+- [x] T029 [US3] Adicionar teste de integração em `tests/test_indicators.py` usando fixture in-memory:
   - Carregar `sample_bank_bpa.csv` + `sample_bank_bpp.csv` + `sample_bank_dre.csv` → normalizar → calcular indicadores
   - Verificar que `indicators` contém registros para BCO Brasil
   - Verificar que `ROE` não é `None` para empresa com todos os dados presentes
 
 ### Testes Multi-Setor (descoberta empírica de diferenças)
 
-- [ ] T030 [P] [US3] Criar `tests/fixtures/sample_industrial_bpa.csv` e `tests/fixtures/sample_industrial_dre.csv` com linhas de VALE S.A. ou PETROBRAS extraídas dos CSVs reais
-- [ ] T031 [US3] Adicionar testes em `tests/test_indicators.py` para empresas industriais:
+- [x] T030 [P] [US3] Criar `tests/fixtures/sample_industrial_bpa.csv` e `tests/fixtures/sample_industrial_dre.csv` com linhas de VALE S.A. ou PETROBRAS extraídas dos CSVs reais
+- [x] T031 [US3] Adicionar testes em `tests/test_indicators.py` para empresas industriais:
   - Calcular indicadores para empresa industrial via fixture
   - Marcar com `@pytest.mark.xfail(reason="sector_profile pending")` os casos onde `CD_CONTA` difere do mapeamento atual
   - Documentar nos comentários do teste qual `CD_CONTA` foi encontrado e qual era o esperado
 
-**Checkpoint US3**: `cvmdata indicators --cnpj "00.000.000/0001-91"` insere 15 indicadores por período disponível; `uv run pytest tests/test_indicators.py` passa (xfail marcados mas não bloqueantes).
+**Checkpoint US3** ✅: `calculate_all` guarda contra tabelas *_clean ausentes; 15 indicadores (6 rentabilidade + 4 liquidez + 5 endividamento) calculados via `_CALC_PLAN`; `INSERT OR REPLACE` em `indicators`; CLI `cvmdata indicators [--cnpj]` wired; `uv run pytest` 90/90 passando; `ruff check` limpo.
 
 ---
 
