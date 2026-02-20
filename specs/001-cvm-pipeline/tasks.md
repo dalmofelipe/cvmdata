@@ -15,17 +15,17 @@
 
 **Purpose**: Projeto Python instalável, com linter, testes e CLI funcionando antes de qualquer lógica de negócio.
 
-- [ ] T001 Criar `pyproject.toml` com dependências (`duckdb`, `httpx`, `typer`, `pydantic-settings`), `[project.scripts]`, `[tool.ruff.lint]` e extras `api` e `dev`
-- [ ] T002 Criar `.python-version` com `3.12` e executar `uv python pin 3.12 && uv sync`
-- [ ] T003 [P] Criar `.gitignore` cobrindo `data/`, `*.duckdb`, `.env`, `__pycache__/`, `.venv/`, `*.pyc`
-- [ ] T004 [P] Criar estrutura de pastas: `src/cvmdata/{ingestion/,transform/,api/}`, `data/{raw/,db/}`, `tests/fixtures/`, `docs/`
-- [ ] T005 [P] Criar todos os arquivos `__init__.py` vazios: `src/cvmdata/__init__.py`, `src/cvmdata/ingestion/__init__.py`, `src/cvmdata/transform/__init__.py`
-- [ ] T006 Criar `src/cvmdata/config.py` com classe `Settings` via `pydantic-settings` lendo `DATA_DIR`, `DB_PATH`, `YEARS`, `ITR_URL`, `DFP_URL` do `.env`; criar `.env.example` com valores padrão
-- [ ] T007 Criar `src/cvmdata/cli.py` com app Typer vazio e subcomandos stub: `download`, `load`, `normalize`, `indicators` — cada um imprimindo `"not implemented"` por enquanto
-- [ ] T008 [P] Criar `Makefile` com targets: `install`, `download`, `load`, `normalize`, `indicators`, `all`, `test`, `lint`
-- [ ] T009 [P] Criar `tests/conftest.py` com fixture `repo` que instancia `DuckDBRepository(":memory:")` (stub — `DuckDBRepository` será implementado em T011)
+- [x] T001 Criar `pyproject.toml` com dependências (`duckdb`, `httpx`, `typer`, `pydantic-settings`), `[project.scripts]`, `[tool.ruff.lint]` e extras `api` e `dev`
+- [x] T002 Criar `.python-version` com `3.12` e executar `uv python pin 3.12 && uv sync`
+- [x] T003 [P] Criar `.gitignore` cobrindo `data/`, `*.duckdb`, `.env`, `__pycache__/`, `.venv/`, `*.pyc`
+- [x] T004 [P] Criar estrutura de pastas: `src/cvmdata/{ingestion/,transform/,api/}`, `data/{raw/,db/}`, `tests/fixtures/`, `docs/`
+- [x] T005 [P] Criar todos os arquivos `__init__.py` vazios: `src/cvmdata/__init__.py`, `src/cvmdata/ingestion/__init__.py`, `src/cvmdata/transform/__init__.py`
+- [x] T006 Criar `src/cvmdata/config.py` com classe `Settings` via `pydantic-settings` lendo `DATA_DIR`, `DB_PATH`, `YEARS`, `ITR_URL`, `DFP_URL` do `.env`; criar `.env.example` com valores padrão
+- [x] T007 Criar `src/cvmdata/cli.py` com app Typer e subcomandos `download`, `load`, `normalize` (stub), `indicators` (stub)
+- [x] T008 [P] Criar `Makefile` com targets: `install`, `download`, `load`, `normalize`, `indicators`, `all`, `test`, `lint`
+- [x] T009 [P] Criar `tests/conftest.py` com fixture `db` instanciando DuckDB in-memory
 
-**Checkpoint**: `uv run cvmdata --help` exibe os subcomandos; `uv run ruff check src/` passa sem erros; `uv run pytest` coleta 0 testes sem falhar.
+**Checkpoint** ✅: `uv run cvmdata --help` exibe os subcomandos; `uv run ruff check src/` passa sem erros; `uv run pytest` coleta 0 testes sem falhar.
 
 ---
 
@@ -37,43 +37,26 @@
 
 ### Infraestrutura compartilhada (bloqueante)
 
-- [ ] T010 Criar `src/cvmdata/db.py` com `BaseRepository` (ABC) e `DuckDBRepository` implementando `create_schema()`, `load_csv(path, table) -> int`, `execute(sql)` e `query(sql) -> list[dict]`
-- [ ] T010b [P] Verificar schemas reais dos CSVs antes de implementar o loader: para cada tipo de demonstrativo, executar `SELECT * FROM read_csv('data/raw/itr/2024/itr_cia_aberta_{TIPO}_con_2024.csv', delim=';', encoding='latin1', auto_detect=true) LIMIT 0` no DuckDB e listar colunas retornadas; documentar diferenças em relação às 14 colunas padrão (atenção especial a `DMPL`, `DFC_MD`, `DFC_MI`); referência: `meta_itr_cia_aberta_*.txt` disponível em `https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/ITR/META/meta_itr_cia_aberta_txt.zip`
+- [x] T010 Criar `src/cvmdata/ingestion/db.py` com DDLs dos 3 demonstrativos em escopo (BPA, BPP, DRE), `get_connection()` e `init_schema()`
+- [x] T010b [P] Verificar schemas reais dos CSVs: 3 grupos descobertos (BALANCE 14 cols, FLOW 15 cols+DT_INI_EXERC, DMPL 16 cols); bugs de schema corrigidos (encoding `latin-1`, DMPL sem VL_CONTA_01..09, FLOW com DT_INI_EXERC)
+- [x] T010c [P] Refatoração de escopo — definir `INDICATOR_DEMOS = {"BPA", "BPP", "DRE"}` em `db.py` e `downloader.py`; filtrar extração do ZIP para apenas esses 3 demos; remover DDLs de DFC_MD, DFC_MI, DMPL, DRA, DVA; atualizar spec.md/plan.md/tasks.md com ADR *(descoberta pós-análise de dados reais: nenhuma conta dos 5 demos descartados é necessária para os 7 indicadores planejados)*
 
 ### Implementação do Downloader
 
-- [ ] T011 [P] [US1] Implementar `src/cvmdata/ingestion/downloader.py`:
-  - Função `download_year(doc_type: str, year: int, settings: Settings) -> Path`
-  - Download em streaming com `httpx` para `data/raw/{doc_type}/{year}/`
-  - Cálculo e verificação de checksum MD5 (arquivo `.md5` ao lado do ZIP)
-  - Se MD5 confere: pular download, logar `INFO "skipped {filename} (cached)"`
-  - Extrair ZIP para o mesmo diretório após download bem-sucedido
-  - Logar tamanho do arquivo e status
-- [ ] T012 [US1] Conectar `downloader.py` ao comando CLI `cvmdata download [--year INT]` em `cli.py`:
-  - Sem `--year`: iterar sobre todos os anos em `settings.years`
-  - Com `--year`: processar apenas aquele ano
-  - Processar `itr` e `dfp` para cada ano
+- [x] T011 [P] [US1] Implementar `src/cvmdata/ingestion/downloader.py`: download streaming httpx, extração filtrada por `INDICATOR_DEMOS`, idempotência por existência do arquivo
+- [x] T012 [US1] Conectar `downloader.py` ao CLI `cvmdata download [--year INT] [--force] [--verbose]`
 
 ### Implementação do Loader
 
-- [ ] T013 [US1] Implementar `src/cvmdata/ingestion/loader.py`:
-  - Função `load_year(doc_type: str, year: int, repo: BaseRepository, settings: Settings) -> dict[str, int]`
-  - Iterar sobre todos os tipos (`BPA`, `BPP`, `DRE`, `DFC_MD`, `DFC_MI`, `DRA`, `DMPL`, `DVA`) e escopos (`con`, `ind`)
-  - Nome da tabela: `{doc_type}_{tipo}_{escopo}` (ex: `itr_bpa_con`, `dfp_dre_ind`)
-  - Usar `repo.load_csv(path, table)` — `CREATE TABLE IF NOT EXISTS … WHERE 1=0` seguido de `INSERT INTO … SELECT * FROM read_csv(…, delim=';', encoding='latin1', auto_detect=true)`
-  - Retornar dict `{tabela: linhas_inseridas}`
-  - Logar contagem de linhas por arquivo; pular arquivo silenciosamente se não existir no ZIP
-- [ ] T014 [US1] Conectar `loader.py` ao comando CLI `cvmdata load [--year INT]` em `cli.py`
+- [x] T013 [US1] Implementar `src/cvmdata/ingestion/loader.py`: `parse_csv_filename()`, `_build_insert_sql()` (3 branches por grupo de schema), `load_csv()` idempotente (DELETE+INSERT), `load_source_year()`
+- [x] T014 [US1] Conectar `loader.py` ao CLI `cvmdata load [--year INT] [--verbose]`
 
 ### Testes US1
 
-- [ ] T015 [P] [US1] Criar `tests/test_loader.py`:
-  - Carregar `tests/fixtures/sample_bank_bpa.csv` via `repo.load_csv()` → verificar contagem de linhas
-  - Verificar que colunas `CNPJ_CIA`, `DT_REFER`, `CD_CONTA`, `VL_CONTA` existem na tabela
-  - Verificar que segunda execução de `load_csv` não duplica linhas (idempotência via count antes/depois)
-- [ ] T016 [P] [US1] Criar `tests/fixtures/sample_bank_bpa.csv` com ~20 linhas extraídas de `data/raw/itr/2024/itr_cia_aberta_BPA_con_2024.csv` (BCO Brasil e BRB, múltiplos períodos e versões)
+- [x] T015 [P] [US1] Criar `tests/test_loader.py` com 17 testes: `parse_csv_filename` (válido/inválido), `load_csv` (insert, idempotência), `load_source_year` (dir vazio, multi-demo, skip não-demo); criar `tests/test_downloader.py` com 4 testes
+- [x] T016 [P] [US1] Fixtures in-memory via helpers `_make_bpa_csv()` e `_make_flow_csv()` — dados reais não necessários para testes unitários
 
-**Checkpoint US1**: `cvmdata download --year 2024 && cvmdata load --year 2024` funciona; `uv run pytest tests/test_loader.py` passa.
+**Checkpoint US1** ✅: `cvmdata download --year 2024` (ITR 31.2 MB, DFP 12.7 MB); `cvmdata load --year 2024` (5.016.187 linhas em 6 tabelas — BPA/BPP/DRE × con/ind, ITR+DFP); `uv run pytest` 24/24 passando; `ruff check` limpo.
 
 ---
 
@@ -115,24 +98,20 @@
 ### Account Map
 
 - [ ] T020 [US3] Criar `src/cvmdata/transform/account_map.py`:
-  - Dicionário `ACCOUNT_MAP: dict[str, str]` com mapeamento inicial (BPA, BPP, DRE, DFC)
-  - Função `get_component(cd_conta: str) -> str | None` com match exato primeiro, depois prefixo mais específico disponível
+  - Dicionário `ACCOUNT_MAP: dict[str, str]` com 16 contas mapeadas (BPA: 6, BPP: 5, DRE: 5) — ver plan.md Phase 4
+  - Função `get_component(cd_conta: str) -> str | None` com match exato
   - Logar `WARNING` para cada `cd_conta` não encontrado
-  - Comentários `# TODO: sector_profile` nas entradas suspeitas de variação por setor
+  - Comentários `# TODO: sector_profile` nas entradas suspeitas de variação por setor (ex: `emprestimos_cp` em bancos)
 
 ### Funções de Cálculo
 
 - [ ] T021 [P] [US3] Implementar funções puras de rentabilidade em `src/cvmdata/transform/indicators.py`:
-  - `roe(lucro_liquido, patrimonio_liquido) -> float | None`
-  - `roa(lucro_liquido, ativo_total) -> float | None`
-  - `margem_liquida(lucro_liquido, receita_liquida) -> float | None`
+  - `roe`, `roa`, `margem_bruta`, `margem_operacional`, `margem_liquida`, `giro_ativo`
   - Retornar `None` se qualquer argumento for `None` ou denominador for `0`
 - [ ] T022 [P] [US3] Implementar funções puras de liquidez em `src/cvmdata/transform/indicators.py`:
-  - `liquidez_corrente(ativo_circulante, passivo_circulante) -> float | None`
-  - `liquidez_geral(ativo_circulante, realizavel_lp, passivo_circulante, passivo_nao_circulante) -> float | None`
-  - `liquidez_imediata(caixa_equivalentes, passivo_circulante) -> float | None`
-- [ ] T023 [P] [US3] Implementar função pura de endividamento em `src/cvmdata/transform/indicators.py`:
-  - `endividamento_geral(passivo_circulante, passivo_nao_circulante, ativo_total) -> float | None`
+  - `liquidez_corrente`, `liquidez_seca`, `liquidez_imediata`, `liquidez_geral`
+- [ ] T023 [P] [US3] Implementar funções puras de endividamento em `src/cvmdata/transform/indicators.py`:
+  - `endividamento_geral`, `divida_bruta`, `divida_liquida`, `divida_liquida_pl`, `cobertura_juros`
 
 ### Schema e Orquestrador
 
@@ -150,19 +129,18 @@
   - Listar todos os `(cnpj_cia, dt_refer)` distintos nas tabelas `*_clean`
   - Filtrar por `cnpj` se fornecido
   - Para cada empresa/período: extrair componentes via `get_component` das tabelas `*_clean`
-  - Calcular todos os 7 indicadores
+  - Calcular todos os 15 indicadores (6 rentabilidade + 4 liquidez + 5 endividamento)
   - `INSERT OR REPLACE INTO indicators` para cada resultado
   - Nunca interromper por empresa com dados incompletos — `try/except` por empresa, logar `ERROR` e continuar
 - [ ] T026 [US3] Conectar orquestrador ao comando CLI `cvmdata indicators [--cnpj TEXT]` em `cli.py`
 
 ### Testes US3
 
-- [ ] T027 [P] [US3] Criar `tests/test_indicators.py` — funções puras:
-  - `roe(100, 500)` → `20.0`
-  - `roe(100, 0)` → `None`
-  - `roe(None, 500)` → `None`
-  - `liquidez_corrente(200, 100)` → `2.0`
-  - `endividamento_geral(100, 200, 1000)` → `30.0`
+- [ ] T027 [P] [US3] Criar `tests/test_indicators.py` — funções puras (pelo menos 1 caso feliz + 1 None por função):
+  - Rentabilidade: `roe(100,500)`→`20.0`; `margem_bruta(300,1000)`→`30.0`; `margem_operacional(200,1000)`→`20.0`; `giro_ativo(1000,2000)`→`0.5`
+  - Liquidez: `liquidez_corrente(200,100)`→`2.0`; `liquidez_seca(200,50,100)`→`1.5`; `liquidez_imediata(80,100)`→`0.8`
+  - Endividamento: `endividamento_geral(100,200,1000)`→`30.0`; `divida_liquida(300,400,80,120)`→`500.0`; `cobertura_juros(200,50)`→`4.0`
+  - Denominador zero → `None` para todas as funções; argumento `None` → `None`
 - [ ] T028 [P] [US3] Criar `tests/fixtures/sample_bank_bpp.csv` e `tests/fixtures/sample_bank_dre.csv` com linhas de BCO Brasil
 - [ ] T029 [US3] Adicionar teste de integração em `tests/test_indicators.py` usando fixture in-memory:
   - Carregar `sample_bank_bpa.csv` + `sample_bank_bpp.csv` + `sample_bank_dre.csv` → normalizar → calcular indicadores
@@ -177,7 +155,7 @@
   - Marcar com `@pytest.mark.xfail(reason="sector_profile pending")` os casos onde `CD_CONTA` difere do mapeamento atual
   - Documentar nos comentários do teste qual `CD_CONTA` foi encontrado e qual era o esperado
 
-**Checkpoint US3**: `cvmdata indicators --cnpj "00.000.000/0001-91"` insere 7 indicadores por período disponível; `uv run pytest tests/test_indicators.py` passa (xfail marcados mas não bloqueantes).
+**Checkpoint US3**: `cvmdata indicators --cnpj "00.000.000/0001-91"` insere 15 indicadores por período disponível; `uv run pytest tests/test_indicators.py` passa (xfail marcados mas não bloqueantes).
 
 ---
 

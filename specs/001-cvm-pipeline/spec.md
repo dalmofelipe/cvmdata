@@ -17,7 +17,7 @@ Como analista/investidor, quero que o sistema baixe automaticamente os documento
 **Acceptance Scenarios**:
 
 1. **Given** conexão com a internet disponível, **When** o usuário executa o comando de download para 2024, **Then** os ZIPs da CVM são baixados para `data/raw/` e extraídos sem erros
-2. **Given** os CSVs estão extraídos em `data/raw/`, **When** o usuário executa o comando de carga, **Then** os 8 tipos de demonstrativo (BPA, BPP, DRE, DFC-MD, DFC-MI, DRA, DMPL, DVA) são carregados no banco para as variantes consolidada e individual
+2. **Given** os CSVs estão extraídos em `data/raw/`, **When** o usuário executa o comando de carga, **Then** os demonstrativos necessários para indicadores (BPA, BPP, DRE) são carregados no banco para as variantes consolidada e individual
 3. **Given** um ZIP já foi baixado anteriormente, **When** o comando de download é reexecutado, **Then** o arquivo não é rebaixado (checksum idêntico) e o processo termina mais rápido
 4. **Given** os dados de 2024 já estão carregados, **When** o usuário executa o download para 2023, **Then** os dados de 2023 são adicionados sem apagar os de 2024
 
@@ -50,9 +50,9 @@ Como analista/investidor, quero calcular os indicadores de análise fundamentali
 
 **Acceptance Scenarios**:
 
-1. **Given** dados normalizados de uma empresa no banco, **When** o cálculo de indicadores é executado para aquela empresa/período, **Then** ROE, ROA e Margem Líquida são calculados e salvos na tabela `indicators`
-2. **Given** dados normalizados de uma empresa no banco, **When** o cálculo é executado, **Then** Liquidez Corrente, Liquidez Geral e Liquidez Imediata são calculados e salvos
-3. **Given** dados normalizados de uma empresa no banco, **When** o cálculo é executado, **Then** Endividamento Geral é calculado e salvo
+1. **Given** dados normalizados de uma empresa no banco, **When** o cálculo de indicadores é executado para aquela empresa/período, **Then** os indicadores de rentabilidade são calculados e salvos na tabela `indicators`: ROE, ROA, Margem Bruta, Margem Operacional (EBIT), Margem Líquida, Giro do Ativo
+2. **Given** dados normalizados de uma empresa no banco, **When** o cálculo é executado, **Then** os indicadores de liquidez são calculados e salvos: Liquidez Corrente, Liquidez Seca, Liquidez Imediata, Liquidez Geral
+3. **Given** dados normalizados de uma empresa no banco, **When** o cálculo é executado, **Then** os indicadores de endividamento são calculados e salvos: Endividamento Geral, Dívida Bruta, Dívida Líquida, Dívida Líquida/PL, Cobertura de Juros
 4. **Given** uma conta necessária para um indicador não existe para uma empresa/período, **When** o cálculo é executado, **Then** o indicador retorna `null` e o processamento das demais empresas continua sem interrupção
 5. **Given** indicadores já calculados para um período, **When** o cálculo é reexecutado, **Then** os valores existentes são substituídos (operação idempotente)
 6. **Given** o comando é executado sem `--cnpj`, **When** o cálculo roda, **Then** todos os indicadores são calculados para todas as empresas/períodos disponíveis no banco
@@ -89,9 +89,12 @@ Como analista, quero consultar os indicadores calculados por empresa e período,
 - **FR-001**: O sistema DEVE baixar os ZIPs de ITR e DFP da CVM para anos configuráveis (padrão: 2021–2025) via HTTP
 - **FR-002**: O sistema DEVE extrair os CSVs dos ZIPs para `data/raw/{tipo}/{year}/` sem modificar os arquivos originais
 - **FR-003**: O sistema DEVE detectar ZIPs já baixados via checksum MD5 e pular o redownload quando idênticos
-- **FR-004**: O sistema DEVE carregar os 8 tipos de demonstrativo (BPA, BPP, DRE, DFC-MD, DFC-MI, DRA, DMPL, DVA) nas variantes consolidada e individual
+- **FR-004**: O sistema DEVE extrair e carregar os demonstrativos necessários para indicadores (BPA, BPP, DRE) nas variantes consolidada e individual *(ADR 2026-02-20: DFC-MD, DFC-MI, DMPL, DRA, DVA descartados — nenhuma conta requerida pelos 7 indicadores planejados; ZIPs da CVM permanecem íntegros e completos)*
 - **FR-005**: O sistema DEVE deduplicar registros mantendo apenas o de maior `VERSAO` por `(CNPJ_CIA, DT_REFER, CD_CONTA, ORDEM_EXERC)`
-- **FR-006**: O sistema DEVE calcular os seguintes indicadores quando os dados estiverem disponíveis: ROE, ROA, Margem Líquida, Liquidez Corrente, Liquidez Geral, Liquidez Imediata, Endividamento Geral
+- **FR-006**: O sistema DEVE calcular os seguintes indicadores quando os dados estiverem disponíveis (todos extraídos de BPA + BPP + DRE):
+  - *Rentabilidade*: ROE, ROA, Margem Bruta, Margem Operacional (EBIT), Margem Líquida, Giro do Ativo
+  - *Liquidez*: Liquidez Corrente, Liquidez Seca, Liquidez Imediata, Liquidez Geral
+  - *Endividamento*: Endividamento Geral, Dívida Bruta, Dívida Líquida, Dívida Líquida/PL, Cobertura de Juros
 - **FR-007**: O sistema DEVE retornar `null` para qualquer indicador cujo denominador seja zero ou cuja conta necessária esteja ausente
 - **FR-008**: O sistema DEVE processar todas as ~600 empresas sem interromper o pipeline por erro em uma empresa individual
 - **FR-009**: O sistema DEVE expor todas as operações via CLI com os comandos: `download`, `load`, `normalize`, `indicators`

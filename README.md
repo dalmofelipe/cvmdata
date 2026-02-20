@@ -7,3 +7,4 @@
 - Usando Copilot Pro + Claude Sonnet 4.6 1x
 - Contexto e Planejamento: 3%
 - Phase 0: 3%
+- Phase 1: 5% (grande refatoração)

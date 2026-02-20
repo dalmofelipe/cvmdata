@@ -4,7 +4,7 @@
 
 ## Summary
 
-Pipeline Python que baixa os ZIPs da CVM (ITR trimestral + DFP anual, 2021–2025), ingere os 8 tipos de demonstrativo financeiro de todas as ~600 empresas abertas da B3 em DuckDB, normaliza e deduplica os dados e calcula os indicadores de análise fundamentalista (rentabilidade, liquidez, endividamento). Stack local-first: DuckDB como banco de dados de arquivo único sem servidor, com caminho de migração clara para PostgreSQL na Fase 2.
+Pipeline Python que baixa os ZIPs da CVM (ITR trimestral + DFP anual, 2021–2025), ingere os 3 demonstrativos necessários (BPA, BPP, DRE) de todas as ~728 empresas abertas da B3 em DuckDB, normaliza e deduplica os dados e calcula os indicadores de análise fundamentalista (rentabilidade, liquidez, endividamento). Stack local-first: DuckDB como banco de dados de arquivo único sem servidor, com caminho de migração clara para PostgreSQL na Fase 2.
 
 ## Technical Context
 
@@ -16,7 +16,7 @@ Pipeline Python que baixa os ZIPs da CVM (ITR trimestral + DFP anual, 2021–202
 **Project Type**: single — CLI Python com módulos de ingestão e transformação
 **Performance Goals**: processar ~600 empresas × 5 anos × 8 demonstrativos sem timeout; DuckDB lê 60k+ linhas em milissegundos via `read_csv` nativo
 **Constraints**: sem Pandas na ingestão (DuckDB nativo); sem PostgreSQL na Fase 1; todos os comandos CLI idempotentes; `None` em indicadores com dados ausentes, nunca exception
-**Scale/Scope**: ~600 empresas, 5 anos, 8 tipos × 2 variantes (con/ind) = ~80 arquivos CSV por ano; tabela `indicators` com ~600 empresas × ~20 períodos × 7 indicadores ≈ 84k registros
+**Scale/Scope**: ~728 empresas confirmadas (2024), 5 anos, 3 tipos (BPA, BPP, DRE) × 2 variantes (con/ind) = ~12 CSVs por ano; tabela `indicators` com ~728 empresas × ~20 períodos × 15 indicadores ≈ 218k registros
 
 ## Constitution Check
 
@@ -241,24 +241,29 @@ Regra de implementação: o loader **nunca deve fazer `UNION` ou `INSERT` entre 
 
 ```python
 ACCOUNT_MAP: dict[str, str] = {
-    # BPA — Balanço Patrimonial Ativo
+    # BPA — Balanço Patrimonial Ativo (confirmado nos dados CVM 2024)
     "1":        "ativo_total",
     "1.01":     "ativo_circulante",
     "1.01.01":  "caixa_equivalentes",
+    "1.01.02":  "aplicacoes_financeiras",
+    "1.01.04":  "estoques",
     "1.02":     "ativo_nao_circulante",
-    "1.02.03":  "realizavel_longo_prazo",
-    # BPP — Balanço Patrimonial Passivo
+    "1.02.01":  "realizavel_longo_prazo",
+    # BPP — Balanço Patrimonial Passivo (confirmado nos dados CVM 2024)
     "2":        "passivo_total",
     "2.01":     "passivo_circulante",
+    "2.01.04":  "emprestimos_cp",
     "2.02":     "passivo_nao_circulante",
+    "2.02.01":  "emprestimos_lp",
     "2.03":     "patrimonio_liquido",
-    # DRE — Demonstração de Resultado
+    # DRE — Demonstração de Resultado (confirmado nos dados CVM 2024)
     "3.01":     "receita_liquida",
+    "3.03":     "resultado_bruto",
+    "3.05":     "ebit",
+    "3.06.02":  "despesas_financeiras",
     "3.11":     "lucro_liquido",
-    # DFC — Fluxo de Caixa Operacional
-    "6.01":     "caixa_operacional",
-    # TODO: sector_profile — verificar se bancos usam CD_CONTA diferente
-    # Evidência necessária: testes com fixtures industriais (VALE, PETROBRAS)
+    # TODO: sector_profile — verificar se bancos usam CD_CONTA diferente para empréstimos
+    # Evidência necessária: testes com fixtures de bancos (BCO Brasil, BRB)
 }
 
 def get_component(cd_conta: str) -> str | None:
@@ -280,32 +285,53 @@ def get_component(cd_conta: str) -> str | None:
 
 **Funções puras** (todas retornam `float | None`):
 ```python
-# Rentabilidade
-def roe(lucro_liquido: float | None, patrimonio_liquido: float | None) -> float | None:
-    # Lucro Líquido / Patrimônio Líquido × 100
-    # Retorna None se qualquer argumento for None ou patrimonio_liquido == 0
+# ── Rentabilidade ─────────────────────────────────────────────────────────────
+def roe(lucro_liquido, patrimonio_liquido) -> float | None:
+    # Lucro Líquido / Patrimônio Líquido × 100  |  conta: 3.11 / 2.03
 
-def roa(lucro_liquido: float | None, ativo_total: float | None) -> float | None:
-    # Lucro Líquido / Ativos Totais × 100
+def roa(lucro_liquido, ativo_total) -> float | None:
+    # Lucro Líquido / Ativo Total × 100  |  conta: 3.11 / 1
 
-def margem_liquida(lucro_liquido: float | None, receita_liquida: float | None) -> float | None:
-    # Lucro Líquido / Receita Líquida × 100
+def margem_bruta(resultado_bruto, receita_liquida) -> float | None:
+    # Resultado Bruto / Receita Líquida × 100  |  conta: 3.03 / 3.01
 
-# Liquidez
-def liquidez_corrente(ativo_circulante: float | None, passivo_circulante: float | None) -> float | None:
-    # Ativo Circulante / Passivo Circulante
+def margem_operacional(ebit, receita_liquida) -> float | None:
+    # EBIT / Receita Líquida × 100  |  conta: 3.05 / 3.01
 
-def liquidez_geral(ativo_circulante: float | None, realizavel_lp: float | None,
-                   passivo_circulante: float | None, passivo_nao_circulante: float | None) -> float | None:
-    # (AC + RLP) / (PC + PNC)
+def margem_liquida(lucro_liquido, receita_liquida) -> float | None:
+    # Lucro Líquido / Receita Líquida × 100  |  conta: 3.11 / 3.01
 
-def liquidez_imediata(caixa_equivalentes: float | None, passivo_circulante: float | None) -> float | None:
-    # Disponibilidades / Passivo Circulante
+def giro_ativo(receita_liquida, ativo_total) -> float | None:
+    # Receita Líquida / Ativo Total  |  conta: 3.01 / 1
 
-# Endividamento
-def endividamento_geral(passivo_circulante: float | None, passivo_nao_circulante: float | None,
-                        ativo_total: float | None) -> float | None:
-    # (PC + PNC) / Ativo Total × 100
+# ── Liquidez ──────────────────────────────────────────────────────────────────
+def liquidez_corrente(ativo_circulante, passivo_circulante) -> float | None:
+    # AC / PC  |  conta: 1.01 / 2.01
+
+def liquidez_seca(ativo_circulante, estoques, passivo_circulante) -> float | None:
+    # (AC - Estoques) / PC  |  conta: (1.01 - 1.01.04) / 2.01
+
+def liquidez_imediata(caixa_equivalentes, passivo_circulante) -> float | None:
+    # Caixa / PC  |  conta: 1.01.01 / 2.01
+
+def liquidez_geral(ativo_circulante, realizavel_lp, passivo_circulante, passivo_nao_circulante) -> float | None:
+    # (AC + RLP) / (PC + PNC)  |  conta: (1.01 + 1.02.01) / (2.01 + 2.02)
+
+# ── Endividamento ─────────────────────────────────────────────────────────────
+def endividamento_geral(passivo_circulante, passivo_nao_circulante, ativo_total) -> float | None:
+    # (PC + PNC) / AT × 100  |  conta: (2.01 + 2.02) / 1
+
+def divida_bruta(emprestimos_cp, emprestimos_lp) -> float | None:
+    # Emprést. CP + LP  |  conta: 2.01.04 + 2.02.01
+
+def divida_liquida(emprestimos_cp, emprestimos_lp, caixa_equivalentes, aplicacoes_financeiras) -> float | None:
+    # Dívida Bruta - Caixa - Aplicações  |  conta: (2.01.04+2.02.01) - 1.01.01 - 1.01.02
+
+def divida_liquida_pl(divida_liq, patrimonio_liquido) -> float | None:
+    # Dívida Líquida / PL  |  derivado / 2.03
+
+def cobertura_juros(ebit, despesas_financeiras) -> float | None:
+    # EBIT / Despesas Financeiras  |  conta: 3.05 / 3.06.02
 ```
 
 **Schema da tabela `indicators`**:
@@ -322,7 +348,7 @@ CREATE TABLE IF NOT EXISTS indicators (
 **Orquestrador** `calculate_all(cnpj: str | None, repo: BaseRepository)`:
 - Se `cnpj` fornecido: processar apenas aquela empresa
 - Se `cnpj = None`: processar todas as empresas distintas nas tabelas `*_clean`
-- Para cada `(cnpj_cia, dt_refer)`: extrair componentes via `account_map`, calcular todos os 7 indicadores, fazer `INSERT OR REPLACE INTO indicators`
+- Para cada `(cnpj_cia, dt_refer)`: extrair componentes via `account_map`, calcular todos os 15 indicadores, fazer `INSERT OR REPLACE INTO indicators`
 - Logar `WARNING` para cada componente não encontrado no `account_map`
 - Nunca parar por empresa com dados incompletos — continuar para a próxima
 
