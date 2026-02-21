@@ -194,10 +194,10 @@
 
 **Goal**: Pipeline completo funcionando end-to-end; cobertura ≥ 80% em `transform/`.
 
-- [ ] T035 Executar pipeline completo para 2024: `make all` — documentar quaisquer erros encontrados e corrigir
-- [ ] T036 [P] Verificar cobertura de testes: `uv run pytest --cov=src/cvmdata/transform --cov-report=term-missing` — garantir ≥ 80%
-- [ ] T037 [P] Executar `uv run ruff check src/ tests/` e corrigir todos os warnings
-- [ ] T038 [P] Criar `README.md` com: pré-requisitos, instalação (`uv sync`), uso (`make all`), descrição dos comandos CLI e estrutura de pastas
+- [x] T035 Executar pipeline completo para 2024: `make all` — documentar quaisquer erros encontrados e corrigir
+- [x] T036 [P] Verificar cobertura de testes: `uv run pytest --cov=src/cvmdata/transform --cov-report=term-missing` — garantir ≥ 80%
+- [x] T037 [P] Executar `uv run ruff check src/ tests/` e corrigir todos os warnings
+- [x] T038 [P] Criar `README.md` com: pré-requisitos, instalação (`uv sync`), uso (`make all`), descrição dos comandos CLI e estrutura de pastas
 
 **Checkpoint Final**: `make all` executa sem erros fatais para 2024; `make test` passa com ≥ 80% cobertura em `transform/`; `make lint` sem warnings.
 

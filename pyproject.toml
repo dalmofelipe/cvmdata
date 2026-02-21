@@ -40,3 +40,8 @@ select = ["E", "F", "I"]
 testpaths = ["tests"]
 # exit 0 quando não há testes coletados (útil nos estágios iniciais)
 addopts = ["--tb=short"]
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.0.0",
+]
