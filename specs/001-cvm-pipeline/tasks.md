@@ -181,7 +181,7 @@
 
 **Goal**: Documentar P/L, P/VPA, DY para iteração futura sem bloquear o pipeline atual.
 
-- [ ] T034 [P] Criar `docs/valuation_future.md` com:
+- [x] T034 [P] Criar `docs/valuation_future.md` com:
   - Fórmulas de P/L, P/VPA, Dividend Yield (referenciando `docs/analise_fundamentalista.md`)
   - Dependência de preço histórico da ação (não disponível nos dados CVM)
   - Problema do mapeamento `CD_CVM → ticker B3` com exemplo (`1023 → BBAS3`)
