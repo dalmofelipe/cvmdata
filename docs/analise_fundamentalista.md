@@ -1,56 +1,70 @@
 
 ### Análise Fundamentalista
 
-A análise fundamentalista utiliza indicadores extraídos de demonstrativos contábeis (Balanço Patrimonial, DRE, DFC, dentre outros) para avaliar a saúde e o valor real de uma empresa.
+A análise fundamentalista utiliza indicadores extraídos de demonstrativos contábeis (Balanço Patrimonial, DRE) para avaliar a saúde e o valor real de uma empresa.
 
-Abaixo estão as fórmulas e cálculos dos principais indicadores divididos por categoria:
+Os indicadores abaixo são todos **computáveis a partir dos arquivos CVM** (BPA + BPP + DRE), sem necessidade de dados externos de mercado.
 
-1. Indicadores de Rentabilidade
+---
+
+#### 1. Rentabilidade
 
 Avaliam a eficiência da empresa em gerar lucro a partir de seus recursos.
 
-- **ROE (Return on Equity):** Mede o retorno sobre o capital dos acionistas.
-    - *Fórmula:* `Lucro Líquido / Patrimônio Líquido × 100`
-- **ROA (Return on Assets):** Mede a eficiência no uso de todos os ativos.
-    - *Fórmula:* `Lucro Líquido / Ativos Totais × 100`
-- **Margem Líquida:** Percentual de lucro para cada real de receita.
-    - *Fórmula:* `Lucro Líquido / Receita Líquida × 100`
+| Indicador | Fórmula | Contas CVM |
+|---|---|---|
+| **ROE** (Return on Equity) | `Lucro Líquido / Patrimônio Líquido × 100` | `3.11` / `2.03` |
+| **ROA** (Return on Assets) | `Lucro Líquido / Ativo Total × 100` | `3.11` / `1` |
+| **Margem Bruta** | `Resultado Bruto / Receita Líquida × 100` | `3.03` / `3.01` |
+| **Margem Operacional** (EBIT) | `EBIT / Receita Líquida × 100` | `3.05` / `3.01` |
+| **Margem Líquida** | `Lucro Líquido / Receita Líquida × 100` | `3.11` / `3.01` |
+| **Giro do Ativo** | `Receita Líquida / Ativo Total` | `3.01` / `1` |
 
-2. Indicadores de Valuation (Preço)
+> **Decomposição DuPont:** ROE = Margem Líquida × Giro do Ativo × (Ativo Total / PL)
 
-Utilizados para saber se uma ação está "cara" ou "barata" em relação aos seus fundamentos.
+---
 
-- **P/L (Preço/Lucro):** Tempo que o investidor levaria para recuperar o capital via lucros.
-    - *Fórmula:* `Preço da Ação / Lucro por Ação (LPA)`
-- **P/VPA (Preço sobre Valor Patrimonial):** Quanto o mercado paga pelo patrimônio líquido.
-    - *Fórmula:* `Preço da Ação / Valor Patrimonial por Ação (VPA)`
-- **Dividend Yield (DY):** Retorno em dividendos nos últimos 12 meses.
-    - *Fórmula:* `Dividendos Pagos por Ação / Preço da Ação × 100`
-
-3. Indicadores de Liquidez
+#### 2. Liquidez
 
 Medem a capacidade da empresa de honrar suas obrigações financeiras.
 
-- **Liquidez Corrente:** Capacidade de pagar dívidas de curto prazo.
-    - *Fórmula:* `Ativo Circulante / Passivo Circulante`
-- **Liquidez Geral:** Capacidade de pagamento a curto e longo prazo.
-    - *Fórmula:* `(Ativo Circulante + Realizável a Longo Prazo) / (Passivo Circulante + Passivo Não Circulante)`
-- **Liquidez Imediata:** Disponibilidade imediata de caixa para dívidas curtas.
-    - *Fórmula:* `Disponibilidades (Caixa) / Passivo Circulante`
+| Indicador | Fórmula | Contas CVM |
+|---|---|---|
+| **Liquidez Corrente** | `Ativo Circulante / Passivo Circulante` | `1.01` / `2.01` |
+| **Liquidez Seca** | `(Ativo Circulante − Estoques) / Passivo Circulante` | `(1.01 − 1.01.04)` / `2.01` |
+| **Liquidez Imediata** | `Caixa e Equivalentes / Passivo Circulante` | `1.01.01` / `2.01` |
+| **Liquidez Geral** | `(AC + Realizável LP) / (PC + Passivo Não Circ.)` | `(1.01 + 1.02.01)` / `(2.01 + 2.02)` |
 
-4. Indicadores de Endividamento
+---
+
+#### 3. Endividamento
 
 Analisa o nível de exposição financeira e dependência de capital de terceiros.
 
-- **Endividamento Geral:** Percentual de ativos financiados por terceiros.
-    - *Fórmula:* `(Passivo Circulante + Passivo Não Circulante) / Ativo Total × 100`
-- **Dívida Líquida / EBITDA:** Tempo necessário para pagar a dívida com a geração de caixa operacional.
-    - *Fórmula:* `(Dívida Bruta - Disponibilidades) / EBITDA`
+| Indicador | Fórmula | Contas CVM |
+|---|---|---|
+| **Endividamento Geral** | `(PC + PNC) / Ativo Total × 100` | `(2.01 + 2.02)` / `1` |
+| **Dívida Bruta** | `Empréstimos CP + Empréstimos LP` | `2.01.04 + 2.02.01` |
+| **Dívida Líquida** | `Dívida Bruta − Caixa − Aplicações Financeiras` | `(2.01.04 + 2.02.01) − 1.01.01 − 1.01.02` |
+| **Dívida Líquida / PL** | `Dívida Líquida / Patrimônio Líquido` | derivado / `2.03` |
+| **Cobertura de Juros** | `EBIT / Despesas Financeiras` | `3.05` / `3.06.02` |
 
-Para uma análise completa, recomenda-se comparar esses números com a média histórica da própria empresa e com seus concorrentes diretos no setor.
+---
 
+#### 4. Indicadores de Valuation — fora do escopo (requerem preço de ação)
 
-### Mais Referências
+Os indicadores abaixo dependem de dados de mercado não presentes nos arquivos CVM. Estão documentados em `docs/valuation_future.md`.
+
+| Indicador | Dependência externa |
+|---|---|
+| **P/L** — `Preço / LPA` | Preço da ação (B3) |
+| **P/VPA** — `Preço / VPA` | Preço da ação (B3) |
+| **Dividend Yield** — `Div/Ação / Preço × 100` | Preço da ação + proventos (B3) |
+| **Dívida Líquida / EBITDA** | EBITDA requer D&A da DFC (não baixamos) |
+
+---
+
+### Referências
 
 - https://www.infomoney.com.br/guias/indicadores-fundamentalistas/
 

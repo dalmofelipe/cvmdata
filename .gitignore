@@ -1,0 +1,32 @@
+# dados brutos e banco — nunca versionar
+data/
+*.duckdb
+
+# ambiente
+.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# uv
+uv.lock
+
+# ruff / pytest cache
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/settings.json
+.idea/
+*.swp
+*~
+
+# dist / build
+dist/
+build/
+*.egg-info/
