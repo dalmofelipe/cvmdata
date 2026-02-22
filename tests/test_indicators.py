@@ -9,6 +9,7 @@ from cvmdata.ingestion.db import init_indicators_schema, init_schema
 from cvmdata.ingestion.loader import load_csv
 from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
 from cvmdata.transform.indicators import (
+    _get_ttm_value,
     calculate_all,
     cobertura_juros,
     divida_bruta,
@@ -577,3 +578,238 @@ def test_query_year_filter(db):
 
     assert len(rows) == 2
     assert all(str(r[1]).startswith("2024") for r in rows)
+
+
+# ── Helpers para testes TTM ───────────────────────────────────────────────────
+
+_TTM_CNPJ = "33.000.167/0001-01"  # Petrobras-like CNPJ para testes TTM
+
+
+def _insert_raw_dre(
+    db,
+    *,
+    cnpj: str = _TTM_CNPJ,
+    dt_refer: str = "2024-09-30",
+    versao: int = 1,
+    cd_conta: str = "3.01",
+    vl_conta: float = 369.0,
+    ordem_exerc: str = "ÚLTIMO",
+    dt_ini_exerc: str = "2024-01-01",
+    dt_fim_exerc: str = "2024-09-30",
+    cd_cvm: str = "009512",
+    source: str = "itr",
+) -> None:
+    """Insere linha em raw_dre para testes de TTM (18 colunas do schema DRE)."""
+    db.execute(
+        """
+        INSERT INTO raw_dre VALUES (
+            ?, ?, ?, 'EMPRESA TEST', ?,
+            'DF Consolidado - DRE', 'REAL', 'MIL',
+            ?, ?, ?,
+            ?, 'Conta Teste', ?, 'S',
+            ?, 2024, 'con'
+        )
+        """,
+        [cnpj, dt_refer, versao, cd_cvm,
+         ordem_exerc, dt_ini_exerc, dt_fim_exerc,
+         cd_conta, vl_conta, source],
+    )
+
+
+# ── T015: TTM completo ────────────────────────────────────────────────────────
+
+
+def test_ttm_full(db):
+    """T015 — YTD=369, FY=494, YTD_ant=377 → TTM = 369 + (494-377) = 486."""
+    init_schema(db)
+    # ITR Q3/2024 — ÚLTIMO (YTD janeiro-setembro)
+    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="ÚLTIMO",
+                    dt_ini_exerc="2024-01-01", dt_fim_exerc="2024-09-30", vl_conta=369.0)
+    # ITR Q3/2024 — PENÚLTIMO (YTD ano anterior, mesmo período)
+    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="PENÚLTIMO",
+                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2024-09-30", vl_conta=377.0)
+    # DFP FY2023 — ÚLTIMO (ano completo)
+    _insert_raw_dre(db, dt_refer="2023-12-31", ordem_exerc="ÚLTIMO",
+                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2023-12-31",
+                    vl_conta=494.0, source="dfp")
+    from cvmdata.transform.normalize import normalize_table
+    normalize_table("raw_dre", db)
+
+    result = _get_ttm_value(db, _TTM_CNPJ, "2024-09-30", "3.01")
+
+    assert result == pytest.approx(486.0)  # 369 + (494 - 377)
+
+
+# ── T016: Fallback sem PENÚLTIMO ──────────────────────────────────────────────
+
+
+def test_ttm_fallback_no_penultimo(db):
+    """T016 — Sem PENÚLTIMO → retorna FY direto (494)."""
+    init_schema(db)
+    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="ÚLTIMO",
+                    dt_ini_exerc="2024-01-01", dt_fim_exerc="2024-09-30", vl_conta=369.0)
+    _insert_raw_dre(db, dt_refer="2023-12-31", ordem_exerc="ÚLTIMO",
+                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2023-12-31",
+                    vl_conta=494.0, source="dfp")
+    from cvmdata.transform.normalize import normalize_table
+    normalize_table("raw_dre", db)
+
+    result = _get_ttm_value(db, _TTM_CNPJ, "2024-09-30", "3.01")
+
+    assert result == pytest.approx(494.0)
+
+
+# ── T017: Fallback sem DFP anterior ──────────────────────────────────────────
+
+
+def test_ttm_fallback_no_dfp(db):
+    """T017 — Sem DFP anterior → retorna YTD parcial (369)."""
+    init_schema(db)
+    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="ÚLTIMO",
+                    dt_ini_exerc="2024-01-01", dt_fim_exerc="2024-09-30", vl_conta=369.0)
+    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="PENÚLTIMO",
+                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2024-09-30", vl_conta=377.0)
+    # Sem DFP
+    from cvmdata.transform.normalize import normalize_table
+    normalize_table("raw_dre", db)
+
+    result = _get_ttm_value(db, _TTM_CNPJ, "2024-09-30", "3.01")
+
+    assert result == pytest.approx(369.0)
+
+
+# ── T018: Fallback sem ITR (só DFP) ──────────────────────────────────────────
+
+
+def test_ttm_fallback_no_itr(db):
+    """T018 — Sem ITR (só DFP FY2023) → retorna FY direto (494) para dt_refer inexistente."""
+    init_schema(db)
+    _insert_raw_dre(db, dt_refer="2023-12-31", ordem_exerc="ÚLTIMO",
+                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2023-12-31",
+                    vl_conta=494.0, source="dfp")
+    from cvmdata.transform.normalize import normalize_table
+    normalize_table("raw_dre", db)
+
+    # Consulta para dt_refer que não tem ITR
+    result = _get_ttm_value(db, _TTM_CNPJ, "2024-09-30", "3.01")
+
+    assert result == pytest.approx(494.0)
+
+
+# ── T019: Ano fiscal não-dezembro ─────────────────────────────────────────────
+
+
+def test_ttm_non_december_fiscal_year(db):
+    """T019 — Empresa com fiscal year abril-março: DFP em março localizado corretamente."""
+    init_schema(db)
+    # DFP FY2024 terminando em março (ano fiscal abril-março)
+    _insert_raw_dre(db, dt_refer="2024-03-31", ordem_exerc="ÚLTIMO",
+                    dt_ini_exerc="2023-04-01", dt_fim_exerc="2024-03-31",
+                    vl_conta=300.0, source="dfp")
+    # ITR Q1 (abril-junho 2024) — ÚLTIMO (YTD desde abril)
+    _insert_raw_dre(db, dt_refer="2024-06-30", ordem_exerc="ÚLTIMO",
+                    dt_ini_exerc="2024-04-01", dt_fim_exerc="2024-06-30", vl_conta=80.0)
+    # ITR Q1 — PENÚLTIMO (YTD mesmo período ano anterior)
+    _insert_raw_dre(db, dt_refer="2024-06-30", ordem_exerc="PENÚLTIMO",
+                    dt_ini_exerc="2023-04-01", dt_fim_exerc="2024-06-30", vl_conta=70.0)
+    from cvmdata.transform.normalize import normalize_table
+    normalize_table("raw_dre", db)
+
+    result = _get_ttm_value(db, _TTM_CNPJ, "2024-06-30", "3.01")
+
+    # TTM = 80 + (300 - 70) = 310
+    assert result == pytest.approx(310.0)
+
+
+# ── T019b: Dois DFPs — seleciona o FY correto ───────────────────────────────
+
+def test_ttm_two_dfps_selects_correct_fy(db):
+    """T019b — Dois DFPs (FY2022 e FY2023) → seleciona FY2023 para ITR Q3/2024."""
+    init_schema(db)
+    # DFP FY2022
+    _insert_raw_dre(db, dt_refer="2022-12-31", ordem_exerc="ÚLTIMO",
+                    dt_ini_exerc="2022-01-01", dt_fim_exerc="2022-12-31",
+                    vl_conta=400.0, source="dfp", versao=1)
+    # DFP FY2023
+    _insert_raw_dre(db, dt_refer="2023-12-31", ordem_exerc="ÚLTIMO",
+                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2023-12-31",
+                    vl_conta=494.0, source="dfp", versao=1)
+    # ITR Q3/2024 — ÚLTIMO
+    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="ÚLTIMO",
+                    dt_ini_exerc="2024-01-01", dt_fim_exerc="2024-09-30", vl_conta=369.0)
+    # ITR Q3/2024 — PENÚLTIMO
+    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="PENÚLTIMO",
+                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2024-09-30", vl_conta=377.0)
+    from cvmdata.transform.normalize import normalize_table
+    normalize_table("raw_dre", db)
+
+    result = _get_ttm_value(db, _TTM_CNPJ, "2024-09-30", "3.01")
+
+    # FY2023 (494) should win over FY2022 (400)
+    # TTM = 369 + (494 - 377) = 486
+    assert result == pytest.approx(486.0)
+
+
+# ── T025: Regressão batch — calculate_all com múltiplas empresas ─────────────
+
+
+def test_calculate_all_regression_batch(tmp_path, db):
+    """T025 — calculate_all produz indicadores corretos via batch (vs. comportamento esperado).
+
+    Usa fixture com BPA/BPP+DRE ITR, confirma que os indicadores de resultado
+    (margem_liquida, roe) são calculados com TTM quando possível, ou YTD quando
+    não há DFP anterior (fixture sem DFP → fallback para YTD).
+    """
+    init_schema(db)
+
+    # Carregar BPA, BPP e DRE via CSV (mesmo padrão dos testes existentes)
+    DT = "2024-03-31"
+    BPA_ROWS = [
+        ("1",       "Ativo Total",        DT, 10000.0),
+        ("1.01",    "Ativo Circulante",   DT, 4000.0),
+        ("1.01.01", "Caixa",              DT, 500.0),
+        ("1.01.02", "Aplicações",         DT, 300.0),
+        ("1.01.04", "Estoques",           DT, 200.0),
+        ("1.02",    "Ativo Não Circ.",    DT, 6000.0),
+        ("1.02.01", "Realizável LP",      DT, 800.0),
+    ]
+    BPP_ROWS = [
+        ("2",       "Passivo Total",      DT, 6000.0),
+        ("2.01",    "Passivo Circ.",      DT, 2000.0),
+        ("2.01.04", "Empréstimos CP",     DT, 600.0),
+        ("2.02",    "Passivo Não Circ.",  DT, 3000.0),
+        ("2.02.01", "Empréstimos LP",     DT, 1200.0),
+        ("2.03",    "Patrimônio Líq.",    DT, 1000.0),
+    ]
+    DRE_ROWS = [
+        ("3.01",    "Receita Líquida",    DT, 5000.0),
+        ("3.03",    "Resultado Bruto",    DT, 2000.0),
+        ("3.05",    "EBIT",               DT, 800.0),
+        ("3.06.02", "Desp. Financeiras",  DT, 200.0),
+        ("3.11",    "Lucro Líquido",      DT, 500.0),
+    ]
+
+    load_csv(db, _bpa_csv(tmp_path, "itr_cia_aberta_BPA_con_2024.csv", BPA_ROWS),
+             "BPA", "itr", 2024, "con")
+    load_csv(db, _bpa_csv(tmp_path, "itr_cia_aberta_BPP_con_2024.csv", BPP_ROWS),
+             "BPP", "itr", 2024, "con")
+    load_csv(db, _dre_csv(tmp_path, "itr_cia_aberta_DRE_con_2024.csv", DRE_ROWS),
+             "DRE", "itr", 2024, "con")
+
+    from cvmdata.transform.normalize import normalize_table
+    normalize_table("raw_bpa", db)
+    normalize_table("raw_bpp", db)
+    normalize_table("raw_dre", db)
+
+    total = calculate_all(db)
+
+    assert total == 15
+    # Sem DFP → fallback YTD; margem_liquida = 500/5000*100 = 10.0
+    row = db.execute(
+        "SELECT valor FROM indicators WHERE indicador = 'margem_liquida'"
+    ).fetchone()
+    assert row is not None
+    assert row[0] == pytest.approx(10.0)
+    # ROE = 500/1000*100 = 50.0
+    roe_row = db.execute("SELECT valor FROM indicators WHERE indicador = 'roe'").fetchone()
+    assert roe_row[0] == pytest.approx(50.0)

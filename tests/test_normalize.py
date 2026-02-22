@@ -211,3 +211,127 @@ def test_normalize_all_keys_match_raw_tables(db: duckdb.DuckDBPyConnection) -> N
 
     # init_schema cria raw_bpa, raw_bpp, raw_dre
     assert set(results.keys()) == {"raw_bpa", "raw_bpp", "raw_dre"}
+
+
+# ── Helpers DRE ──────────────────────────────────────────────────────────────
+
+
+def _insert_dre(
+    db: duckdb.DuckDBPyConnection,
+    *,
+    cnpj: str = "00.000.000/0001-91",
+    dt_refer: str = "2024-09-30",
+    versao: int = 1,
+    cd_conta: str = "3.01",
+    vl_conta: float = 369.561,
+    ordem_exerc: str = "ÚLTIMO",
+    dt_ini_exerc: str = "2024-01-01",
+    dt_fim_exerc: str = "2024-09-30",
+    cd_cvm: str = "009512",
+    source: str = "itr",
+) -> None:
+    """Insere uma linha mínima na tabela raw_dre (DRE tem 18 colunas incluindo DT_INI_EXERC)."""
+    db.execute(
+        """
+        INSERT INTO raw_dre VALUES (
+            ?, ?, ?, 'EMPRESA TEST', ?,
+            'DF Consolidado - DRE', 'REAL', 'MIL',
+            ?, ?, ?,
+            ?, 'Conta Teste', ?, 'S',
+            ?, 2024, 'con'
+        )
+        """,
+        [cnpj, dt_refer, versao, cd_cvm,
+         ordem_exerc, dt_ini_exerc, dt_fim_exerc,
+         cd_conta, vl_conta, source],
+    )
+
+
+# ── Testes US1: normalização DRE ─────────────────────────────────────────────
+
+
+def test_normalize_dre_retains_ytd(db: duckdb.DuckDBPyConnection) -> None:
+    """T006 — DRE com duas linhas (YTD vs trimestral) → clean retém apenas YTD.
+
+    YTD tem DT_INI_EXERC mais antigo (2024-01-01) e vale 369M.
+    Trimestral tem DT_INI_EXERC mais recente (2024-07-01) e vale 129M.
+    Após normalização, raw_dre_clean deve ter apenas a linha com VL_CONTA=369.
+    """
+    init_schema(db)
+    # Linha YTD (DT_INI mais antigo — deve vencer)
+    _insert_dre(db, dt_ini_exerc="2024-01-01", vl_conta=369.561)
+    # Linha trimestral (DT_INI mais recente — deve ser descartada)
+    _insert_dre(db, dt_ini_exerc="2024-07-01", vl_conta=129.582)
+
+    count = normalize_table("raw_dre", db)
+
+    assert count == 1
+    row = db.execute("SELECT VL_CONTA FROM raw_dre_clean WHERE ORDEM_EXERC = 'ÚLTIMO'").fetchone()
+    assert row is not None
+    assert float(row[0]) == pytest.approx(369.561)
+
+
+def test_normalize_dre_preserves_penultimo(db: duckdb.DuckDBPyConnection) -> None:
+    """T007 — PENÚLTIMO deve estar presente em raw_dre_clean após normalização DRE."""
+    init_schema(db)
+    _insert_dre(db, ordem_exerc="ÚLTIMO", vl_conta=369.561, dt_ini_exerc="2024-01-01")
+    _insert_dre(db, ordem_exerc="PENÚLTIMO", vl_conta=377.736, dt_ini_exerc="2023-01-01")
+
+    count = normalize_table("raw_dre", db)
+
+    assert count == 2
+    ordens = {
+        r[0]
+        for r in db.execute("SELECT DISTINCT ORDEM_EXERC FROM raw_dre_clean").fetchall()
+    }
+    assert "ÚLTIMO" in ordens
+    assert "PENÚLTIMO" in ordens
+
+
+def test_normalize_dre_non_january_fiscal_year(db: duckdb.DuckDBPyConnection) -> None:
+    """T008 — Empresa com ano fiscal abril: DT_INI=2024-04-01 ganha sobre 2024-07-01."""
+    init_schema(db)
+    # Fiscal year starts April — YTD from April
+    _insert_dre(db, dt_ini_exerc="2024-04-01", vl_conta=200.0)
+    # Q trimestral from July
+    _insert_dre(db, dt_ini_exerc="2024-07-01", vl_conta=80.0)
+
+    normalize_table("raw_dre", db)
+
+    row = db.execute("SELECT VL_CONTA FROM raw_dre_clean WHERE ORDEM_EXERC = 'ÚLTIMO'").fetchone()
+    assert row is not None
+    assert float(row[0]) == pytest.approx(200.0)
+
+
+def test_normalize_balance_still_filters_penultimo(db: duckdb.DuckDBPyConnection) -> None:
+    """T009 — Regressão: BPA/BPP continuam descartando PENÚLTIMO (sem mudança de comportamento)."""
+    init_schema(db)
+    _insert_bpa(db, cd_conta="1.01", ordem_exerc="ÚLTIMO")
+    _insert_bpa(db, cd_conta="1.01", ordem_exerc="PENÚLTIMO")
+
+    normalize_table("raw_bpa", db)
+
+    count = db.execute("SELECT COUNT(*) FROM raw_bpa_clean").fetchone()[0]
+    assert count == 1
+
+    ordem = db.execute("SELECT ORDEM_EXERC FROM raw_bpa_clean").fetchone()[0]
+    assert ordem == "ÚLTIMO"
+
+
+def test_normalize_dre_q1_single_line(db: duckdb.DuckDBPyConnection) -> None:
+    """T010 — DRE Q1 com uma única linha por conta não causa erro (YTD = trimestral)."""
+    init_schema(db)
+    _insert_dre(
+        db,
+        dt_refer="2024-03-31",
+        dt_ini_exerc="2024-01-01",
+        dt_fim_exerc="2024-03-31",
+        vl_conta=90.0,
+        ordem_exerc="ÚLTIMO",
+    )
+
+    count = normalize_table("raw_dre", db)
+
+    assert count == 1
+    row = db.execute("SELECT VL_CONTA FROM raw_dre_clean").fetchone()
+    assert float(row[0]) == pytest.approx(90.0)

@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 # Demonstrativos necessários para os 7 indicadores planejados
 INDICATOR_DEMOS: list[str] = ["BPA", "BPP", "DRE"]
 DEMOS: list[str] = INDICATOR_DEMOS  # alias mantido para retrocompatibilidade
-SCOPES: list[str] = ["con", "ind"]
 
 # Grupos por schema real (verificado nos CSVs 2024)
 BALANCE_DEMOS: frozenset[str] = frozenset({"BPA", "BPP"})

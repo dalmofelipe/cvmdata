@@ -11,6 +11,8 @@ Cada etapa do pipeline (`download → load → normalize → indicators`) é um 
 ### III. Dados como Fonte da Verdade
 Os CSVs da CVM são a fonte primária e autoritativa; nenhum valor de indicador é calculado sem rastreabilidade ao `CNPJ_CIA + DT_REFER + CD_CONTA + VERSAO` de origem; deduplicação sempre mantém a versão mais recente (`ORDER BY VERSAO DESC`); nunca modificar os arquivos `data/raw/` após extração.
 
+**Exceção DRE (ratificada 2026-02-22 — branch 002-p1-refactor-scope-con)**: A tabela `raw_dre` publica dois registros por `(CNPJ_CIA, DT_REFER, CD_CONTA, ORDEM_EXERC)` a partir do Q2 — valor YTD e valor trimestral isolado — ambos com o **mesmo** `VERSAO`. O critério `ORDER BY VERSAO DESC` é portanto não-determinístico para DRE nesses casos. A deduplicação de `raw_dre` usa `ORDER BY DT_INI_EXERC ASC, VERSAO DESC`, selecionando sempre o acumulado YTD (início do exercício = `DT_INI_EXERC` mais antiga). Esta regra é determinística, rastreável ao dado CVM e mais fiel ao significado econômico do período. O princípio `ORDER BY VERSAO DESC` permanece inalterado para BPA e BPP.
+
 ### IV. Tolerância a Falhas e Dados Incompletos
 Indicadores retornam `None` quando qualquer componente estiver ausente — nunca lançar exceção por conta ausente; logar contas não mapeadas em `account_map.py` com nível `WARNING` para descoberta incremental; o pipeline deve processar ~600 empresas sem parar em um erro isolado.
 
