@@ -22,8 +22,6 @@ DEMOS: list[str] = ["BPA", "BPP", "DFC_MD", "DFC_MI", "DMPL", "DRA", "DRE", "DVA
 # indicador planejado requer contas desses demonstrativos.
 INDICATOR_DEMOS: frozenset[str] = frozenset({"BPA", "BPP", "DRE"})
 
-SCOPES: list[str] = ["con", "ind"]
-
 # Arquivos que NÃO são demonstrativos — ignorados no load
 _SKIP_PATTERNS: tuple[str, ...] = (
     "composicao_capital",
@@ -39,8 +37,8 @@ def _is_demo_csv(filename: str) -> bool:
         return False
     if any(skip in fname for skip in _SKIP_PATTERNS):
         return False
-    # Deve conter _con_ ou _ind_ e ser um demo em escopo (INDICATOR_DEMOS)
-    if "_con_" not in fname and "_ind_" not in fname:
+    # Deve conter _con_ e ser um demo em escopo (INDICATOR_DEMOS) — _ind_ ignorado
+    if "_con_" not in fname:
         return False
     return any(f"_{demo.lower()}_" in fname for demo in INDICATOR_DEMOS)
 

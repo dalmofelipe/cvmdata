@@ -10,15 +10,22 @@ from cvmdata.ingestion.loader import load_csv, load_source_year, parse_csv_filen
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
+# Códigos reais do ACCOUNT_MAP usados nos fixtures
+_BPA_CODES = ["1", "1.01", "1.01.01", "1.01.02", "1.01.04", "1.02", "1.02.01",
+              "2", "2.01", "2.01.04", "2.02", "2.02.01", "2.03"]
+_DRE_CODES = ["3.01", "3.03", "3.05", "3.06.02", "3.11"]
+
+
 def _make_bpa_csv(path: Path, rows: int = 3) -> Path:
     """Cria um CSV mínimo de BPA/BPP (14 cols, sem DT_INI_EXERC)."""
     header = "CNPJ_CIA;DT_REFER;VERSAO;DENOM_CIA;CD_CVM;GRUPO_DFP;MOEDA;ESCALA_MOEDA;ORDEM_EXERC;DT_FIM_EXERC;CD_CONTA;DS_CONTA;VL_CONTA;ST_CONTA_FIXA"  # noqa: E501
     lines = [header]
     for i in range(rows):
+        cd = _BPA_CODES[i % len(_BPA_CODES)]
         lines.append(
             f"00.000.000/0001-91;2024-03-31;1;EMPRESA TEST;001000;"
             f"DF Consolidado;REAL;MIL;ÚLTIMO;2024-03-31;"
-            f"1.0{i};Conta {i};{1000 + i * 100}.0;S"
+            f"{cd};Conta {i};{1000 + i * 100}.0;S"
         )
     path.write_bytes("\n".join(lines).encode("latin1"))
     return path
@@ -29,10 +36,11 @@ def _make_flow_csv(path: Path, rows: int = 3) -> Path:
     header = "CNPJ_CIA;DT_REFER;VERSAO;DENOM_CIA;CD_CVM;GRUPO_DFP;MOEDA;ESCALA_MOEDA;ORDEM_EXERC;DT_INI_EXERC;DT_FIM_EXERC;CD_CONTA;DS_CONTA;VL_CONTA;ST_CONTA_FIXA"  # noqa: E501
     lines = [header]
     for i in range(rows):
+        cd = _DRE_CODES[i % len(_DRE_CODES)]
         lines.append(
             f"00.000.000/0001-91;2024-03-31;1;EMPRESA TEST;001000;"
             f"DF Consolidado;REAL;MIL;ÚLTIMO;2024-01-01;2024-03-31;"
-            f"1.0{i};Conta {i};{1000 + i * 100}.0;S"
+            f"{cd};Conta {i};{1000 + i * 100}.0;S"
         )
     path.write_bytes("\n".join(lines).encode("latin1"))
     return path
@@ -44,8 +52,8 @@ def _make_flow_csv(path: Path, rows: int = 3) -> Path:
     "filename, expected",
     [
         ("itr_cia_aberta_BPA_con_2024.csv", ("BPA", "con", "itr", 2024)),
-        ("dfp_cia_aberta_BPP_ind_2021.csv", ("BPP", "ind", "dfp", 2021)),
         ("itr_cia_aberta_DRE_con_2024.csv", ("DRE", "con", "itr", 2024)),
+        ("dfp_cia_aberta_BPP_con_2021.csv", ("BPP", "con", "dfp", 2021)),
     ],
 )
 def test_parse_csv_filename_valid(tmp_path, filename, expected):
@@ -60,7 +68,9 @@ def test_parse_csv_filename_valid(tmp_path, filename, expected):
         "itr_cia_aberta_parecer_2024.csv",             # sem scope
         "itr_cia_aberta_2024.csv",                     # índice
         "outro_arquivo.csv",                           # padrão diferente
-        "dfp_cia_aberta_DFC_MD_ind_2021.csv",          # fora de INDICATOR_DEMOS
+        "dfp_cia_aberta_BPP_ind_2021.csv",             # individual — ignorado
+        "dfp_cia_aberta_DFC_MD_con_2021.csv",          # fora de INDICATOR_DEMOS
+        "dfp_cia_aberta_DFC_MD_ind_2021.csv",          # individual + fora de INDICATOR_DEMOS
         "itr_cia_aberta_DMPL_con_2023.csv",            # fora de INDICATOR_DEMOS
         "itr_cia_aberta_DRA_con_2024.csv",             # fora de INDICATOR_DEMOS
     ],

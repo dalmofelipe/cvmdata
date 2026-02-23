@@ -1,7 +1,10 @@
 """Ingestão de CSVs extraídos dos ZIPs CVM para o DuckDB.
 
+Apenas arquivos consolidados (_con_) são aceitos — individuais (_ind_) são
+ignorados em todas as etapas (extração, parse e load).
+
 Padrão de nome de arquivo (CVM usa maiúsculas no demo):
-  {source}_cia_aberta_{DEMO}_{scope}_{year}.csv
+  {source}_cia_aberta_{DEMO}_con_{year}.csv
   ex: itr_cia_aberta_BPA_con_2024.csv
 
 Cada arquivo é carregado na tabela raw_{demo} com colunas
@@ -19,19 +22,27 @@ from pathlib import Path
 import duckdb
 
 from cvmdata.ingestion.db import BALANCE_DEMOS, DEMOS, FLOW_DEMOS, init_schema
+from cvmdata.transform.account_map import ACCOUNT_MAP
 
 logger = logging.getLogger(__name__)
 
-# Regex extrai (source, demo, scope, year) do basename
+# Regex extrai (source, demo, year) do basename — apenas scope=con
 # Ex: itr_cia_aberta_BPA_con_2024.csv
-#     dfp_cia_aberta_DFC_MD_ind_2021.csv
 _FILENAME_RE = re.compile(
-    r"^(?P<source>itr|dfp)_cia_aberta_(?P<demo>[A-Z_]+)_(?P<scope>con|ind)_(?P<year>\d{4})\.csv$",
+    r"^(?P<source>itr|dfp)_cia_aberta_(?P<demo>[A-Z_]+)_(?P<scope>con)_(?P<year>\d{4})\.csv$",
     re.IGNORECASE,
 )
 
+# Contas necessárias para os indicadores — filtragem aplicada no load
+_ACCOUNT_CODES_SQL = ", ".join(f"'{k}'" for k in sorted(ACCOUNT_MAP.keys()))
+
+
 def _build_insert_sql(csv_path: Path, demo: str, source: str, year: int, scope: str) -> str:
-    """Monta o SQL de INSERT conforme o grupo de schema do demonstrativo."""
+    """Monta o SQL de INSERT conforme o grupo de schema do demonstrativo.
+
+    Filtra apenas as linhas cujo CD_CONTA está no ACCOUNT_MAP, descartando
+    todas as contas irrelevantes para os indicadores antes da persistência.
+    """
     table = f"raw_{demo.lower()}"
     demo_upper = demo.upper()
     fpath = csv_path.as_posix()
@@ -104,13 +115,15 @@ FROM read_csv(
     header   = true,
     encoding = 'latin-1',
     nullstr  = ''
-);"""
+)
+WHERE CD_CONTA::VARCHAR IN ({_ACCOUNT_CODES_SQL});"""
 
 
 def parse_csv_filename(path: Path) -> tuple[str, str, str, int] | None:
     """Extrai (demo, scope, source, year) do nome do arquivo.
 
-    Retorna None se o arquivo não for um demonstrativo com scope (con/ind).
+    Retorna None se o arquivo não for um demonstrativo consolidado (_con_)
+    de um demo em escopo. Arquivos _ind_ não casam com o regex e retornam None.
     """
     m = _FILENAME_RE.match(path.name)
     if not m:
@@ -119,7 +132,7 @@ def parse_csv_filename(path: Path) -> tuple[str, str, str, int] | None:
     if demo not in DEMOS:
         logger.debug("Demo desconhecido '%s', pulando %s", demo, path.name)
         return None
-    return demo, m.group("scope").lower(), m.group("source").lower(), int(m.group("year"))
+    return demo, "con", m.group("source").lower(), int(m.group("year"))
 
 
 def load_csv(
@@ -130,10 +143,16 @@ def load_csv(
     year: int,
     scope: str,
 ) -> int:
-    """Carrega um CSV na tabela raw_{demo}. Retorna o número de linhas inseridas.
+    """Carrega um CSV consolidado na tabela raw_{demo}. Retorna linhas inseridas.
 
     Idempotente: deleta linhas existentes para (source, year, scope) antes do INSERT.
+    Levanta ValueError se scope != 'con' — apenas consolidado é suportado.
     """
+    if scope != "con":
+        raise ValueError(
+            f"load_csv: escopo '{scope}' não suportado — apenas 'con' (consolidado) é aceito. "
+            f"Arquivo: {csv_path.name}"
+        )
     table = f"raw_{demo.lower()}"
 
     # Remove dados anteriores desse arquivo específico

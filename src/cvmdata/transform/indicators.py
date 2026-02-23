@@ -11,6 +11,7 @@ Contas CVM de referência documentadas nos comentários inline.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 
 import duckdb
 
@@ -18,6 +19,11 @@ from cvmdata.ingestion.db import init_indicators_schema
 from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
 
 logger = logging.getLogger(__name__)
+
+# Contas de resultado (3.xx) — usam TTM em vez de YTD parcial
+DRE_ACCOUNTS: frozenset[str] = frozenset(
+    v for k, v in ACCOUNT_MAP.items() if k.startswith("3.")
+)
 
 # ── Rentabilidade ─────────────────────────────────────────────────────────────
 
@@ -230,37 +236,212 @@ _CALC_PLAN: list[tuple[str, object, list[str]]] = [
 ]
 
 
-def _extract_components(
+def _get_ttm_value(
     conn: duckdb.DuckDBPyConnection,
     cnpj: str,
     dt_refer: str,
-) -> dict[str, float | None]:
-    """Extrai todos os componentes mapeados para uma empresa/período."""
-    placeholders = ", ".join(f"'{cd}'" for cd in ACCOUNT_MAP)
+    cd_conta: str,
+) -> float | None:
+    """Retorna o valor TTM (Trailing Twelve Months) para uma conta DRE.
+
+    Fórmula: ``YTD_atual + (FY_anterior − YTD_anterior_mesmo_periodo)``
+
+    Fallback chain (nunca levanta exceção):
+    1. TTM completo          — ITR recente + PENÚLTIMO + DFP anterior disponíveis
+    2. Sem PENÚLTIMO         — retorna ``FY_anterior`` direto
+    3. Sem DFP anterior      — retorna ``YTD_atual`` (YTD parcial como proxy)
+    4. Sem YTD atual (ITR)   — retorna ``FY_anterior`` se disponível, senão None
+
+    Args:
+        conn:     Conexão DuckDB com ``raw_dre_clean`` já populado.
+        cnpj:     CNPJ da empresa (ex: ``"33.000.167/0001-01"``).
+        dt_refer: Data de referência do período (ex: ``"2024-09-30"``).
+        cd_conta: Código da conta CVM (ex: ``"3.01"``).
+
+    Returns:
+        Valor TTM como float, ou None se dados insuficientes.
+    """
+    # 1. YTD atual (ÚLTIMO, row já deduplicado pelo normalize_table com DT_INI ASC)
+    ytd_row = conn.execute(
+        """
+        SELECT VL_CONTA FROM raw_dre_clean
+        WHERE CNPJ_CIA = ? AND DT_REFER = ? AND CD_CONTA = ? AND ORDEM_EXERC = 'ÚLTIMO'
+        """,
+        [cnpj, dt_refer, cd_conta],
+    ).fetchone()
+    ytd_val: float | None = float(ytd_row[0]) if ytd_row and ytd_row[0] is not None else None
+
+    # 2. YTD do ano anterior (PENÚLTIMO, mesmo DT_REFER)
+    penu_row = conn.execute(
+        """
+        SELECT VL_CONTA FROM raw_dre_clean
+        WHERE CNPJ_CIA = ? AND DT_REFER = ? AND CD_CONTA = ? AND ORDEM_EXERC = 'PENÚLTIMO'
+        """,
+        [cnpj, dt_refer, cd_conta],
+    ).fetchone()
+    penu_val: float | None = float(penu_row[0]) if penu_row and penu_row[0] is not None else None
+
+    # 3. FY anterior: MAX(DT_FIM_EXERC) do DFP antes do DT_REFER
+    fy_dt_row = conn.execute(
+        """
+        SELECT MAX(DT_FIM_EXERC) FROM raw_dre_clean
+        WHERE CNPJ_CIA = ? AND source = 'dfp' AND DT_FIM_EXERC < ?
+        """,
+        [cnpj, dt_refer],
+    ).fetchone()
+    fy_val: float | None = None
+    if fy_dt_row and fy_dt_row[0] is not None:
+        fy_vl_row = conn.execute(
+            """
+            SELECT VL_CONTA FROM raw_dre_clean
+            WHERE CNPJ_CIA = ? AND DT_FIM_EXERC = ? AND CD_CONTA = ? AND ORDEM_EXERC = 'ÚLTIMO'
+            """,
+            [cnpj, str(fy_dt_row[0]), cd_conta],
+        ).fetchone()
+        fy_val = float(fy_vl_row[0]) if fy_vl_row and fy_vl_row[0] is not None else None
+
+    # Fallback chain
+    if ytd_val is None:
+        return fy_val                        # sem ITR recente
+    if fy_val is None:
+        return ytd_val                       # sem DFP anterior — YTD parcial
+    if penu_val is None:
+        return fy_val                        # sem PENÚLTIMO — FY completo como proxy
+    return ytd_val + (fy_val - penu_val)     # TTM completo
+
+
+def _fetch_all_components(
+    conn: duckdb.DuckDBPyConnection,
+    cnpj: str | None = None,
+) -> dict[tuple[str, str], dict[str, float | None]]:
+    """Batch query para BPA/BPP: retorna ``{(cnpj, dt_refer): {componente: valor}}``.
+
+    Executa uma única query (UNION ALL de raw_bpa_clean + raw_bpp_clean) para
+    todas as empresas/períodos, eliminando N round-trips para contas de balanço.
+    """
+    balance_codes = [cd for cd in ACCOUNT_MAP if not cd.startswith("3.")]
+    placeholders = ", ".join(f"'{cd}'" for cd in balance_codes)
+    filter_clause = "AND CNPJ_CIA = ?" if cnpj else ""
+    params: list[str] = [cnpj] if cnpj else []
+
     rows = conn.execute(
         f"""
-        SELECT CD_CONTA, VL_CONTA
+        SELECT CNPJ_CIA, DT_REFER::VARCHAR, CD_CONTA, VL_CONTA
         FROM (
-            SELECT CD_CONTA, VL_CONTA FROM raw_bpa_clean
-             WHERE CNPJ_CIA = ? AND DT_REFER = ?
+            SELECT CNPJ_CIA, DT_REFER, CD_CONTA, VL_CONTA FROM raw_bpa_clean
             UNION ALL
-            SELECT CD_CONTA, VL_CONTA FROM raw_bpp_clean
-             WHERE CNPJ_CIA = ? AND DT_REFER = ?
-            UNION ALL
-            SELECT CD_CONTA, VL_CONTA FROM raw_dre_clean
-             WHERE CNPJ_CIA = ? AND DT_REFER = ?
+            SELECT CNPJ_CIA, DT_REFER, CD_CONTA, VL_CONTA FROM raw_bpp_clean
         )
-        WHERE CD_CONTA IN ({placeholders})
+        WHERE CD_CONTA IN ({placeholders}) {filter_clause}
+        ORDER BY CNPJ_CIA, DT_REFER
         """,
-        [cnpj, dt_refer, cnpj, dt_refer, cnpj, dt_refer],
+        params,
     ).fetchall()
 
-    comp: dict[str, float | None] = {}
-    for cd_conta, vl_conta in rows:
+    result: dict[tuple[str, str], dict[str, float | None]] = {}
+    for cnpj_r, dt_r, cd_conta, vl_conta in rows:
+        key = (cnpj_r, dt_r)
+        if key not in result:
+            result[key] = {}
         name = get_component(cd_conta)
         if name:
-            comp[name] = float(vl_conta) if vl_conta is not None else None
-    return comp
+            result[key][name] = float(vl_conta) if vl_conta is not None else None
+    return result
+
+
+def _fetch_all_dre_components(
+    conn: duckdb.DuckDBPyConnection,
+    cnpj: str | None = None,
+) -> dict[tuple[str, str], dict[str, float | None]]:
+    """Batch fetch + cálculo TTM em memória para contas DRE.
+
+    Executa uma única query (raw_dre_clean) com ``ORDEM_EXERC IN ('ÚLTIMO', 'PENÚLTIMO')``,
+    agrupa os resultados em Python e aplica a fórmula TTM por ``(cnpj, dt_refer, cd_conta)``.
+
+    Returns:
+        ``{(cnpj, dt_refer): {componente_semantico: valor_ttm}}``
+    """
+    dre_codes = [cd for cd in ACCOUNT_MAP if cd.startswith("3.")]
+    placeholders = ", ".join(f"'{cd}'" for cd in dre_codes)
+    filter_clause = "AND CNPJ_CIA = ?" if cnpj else ""
+    params: list[str] = [cnpj] if cnpj else []
+
+    rows = conn.execute(
+        f"""
+        SELECT CNPJ_CIA, DT_REFER::VARCHAR, CD_CONTA, ORDEM_EXERC,
+               VL_CONTA, source, DT_FIM_EXERC::VARCHAR
+        FROM raw_dre_clean
+        WHERE CD_CONTA IN ({placeholders})
+          AND ORDEM_EXERC IN ('ÚLTIMO', 'PENÚLTIMO')
+          {filter_clause}
+        ORDER BY CNPJ_CIA, DT_REFER, CD_CONTA
+        """,
+        params,
+    ).fetchall()
+
+    # Índice: (cnpj, dt_refer, cd_conta, ordem_exerc) → (vl_conta, source, dt_fim_exerc)
+    idx: dict[tuple[str, str, str, str], tuple[float | None, str, str]] = {}
+    # Entradas DFP por empresa: cnpj → [(dt_fim_exerc, dt_refer)]
+    dfp_entries: dict[str, list[tuple[str, str]]] = defaultdict(list)
+
+    for cnpj_r, dt_r, cd, ordem, vl, src, dt_fim in rows:
+        vl_f: float | None = float(vl) if vl is not None else None
+        idx[(cnpj_r, dt_r, cd, ordem)] = (vl_f, src or "", dt_fim or "")
+        if src == "dfp" and ordem == "ÚLTIMO":
+            dfp_entries[cnpj_r].append((dt_fim or "", dt_r))
+
+    # Todos os pares (cnpj, dt_refer) que têm pelo menos uma linha ÚLTIMO
+    all_pairs: set[tuple[str, str]] = {
+        (cnpj_r, dt_r)
+        for (cnpj_r, dt_r, _, ordem) in idx
+        if ordem == "ÚLTIMO"
+    }
+
+    result: dict[tuple[str, str], dict[str, float | None]] = {}
+
+    for cnpj_r, dt_r in all_pairs:
+        # FY anterior: MAX(DT_FIM_EXERC) < DT_REFER de linhas DFP
+        fy_dt_fim: str | None = max(
+            (df for df, _ in dfp_entries.get(cnpj_r, []) if df < dt_r),
+            default=None,
+        )
+        fy_dt_ref: str | None = None
+        if fy_dt_fim:
+            fy_dt_ref = next(
+                (dr for df, dr in dfp_entries[cnpj_r] if df == fy_dt_fim),
+                None,
+            )
+
+        comp: dict[str, float | None] = {}
+        for cd in dre_codes:
+            name = get_component(cd)
+            if not name:
+                continue
+
+            ytd_row = idx.get((cnpj_r, dt_r, cd, "ÚLTIMO"))
+            ytd_val: float | None = ytd_row[0] if ytd_row else None
+
+            penu_row = idx.get((cnpj_r, dt_r, cd, "PENÚLTIMO"))
+            penu_val: float | None = penu_row[0] if penu_row else None
+
+            fy_val: float | None = None
+            if fy_dt_ref:
+                fy_row = idx.get((cnpj_r, fy_dt_ref, cd, "ÚLTIMO"))
+                fy_val = fy_row[0] if fy_row else None
+
+            # Fallback chain (mesma lógica de _get_ttm_value)
+            if ytd_val is None:
+                comp[name] = fy_val
+            elif fy_val is None:
+                comp[name] = ytd_val
+            elif penu_val is None:
+                comp[name] = fy_val
+            else:
+                comp[name] = ytd_val + (fy_val - penu_val)
+
+        result[(cnpj_r, dt_r)] = comp
+
+    return result
 
 
 def _upsert_indicators(
@@ -292,6 +473,10 @@ def calculate_all(
 ) -> int:
     """Calcula os 15 indicadores para todas as empresas/períodos disponíveis.
 
+    Utiliza queries batch únicas (``_fetch_all_components`` + ``_fetch_all_dre_components``)
+    em vez de N round-trips por par (cnpj, dt_refer). Contas de resultado (3.xx)
+    usam TTM anualizado em vez de YTD parcial.
+
     Args:
         conn: Conexão DuckDB com tabelas ``*_clean`` já criadas.
         cnpj: Se fornecido, processa apenas essa empresa.
@@ -316,28 +501,26 @@ def calculate_all(
         logger.warning("Tabelas *_clean ausentes — rode 'normalize' primeiro")
         return 0
 
-    filter_sql = "WHERE CNPJ_CIA = ?" if cnpj else ""
-    params = [cnpj] if cnpj else []
-    clean_selects = " UNION ".join(
-        f"SELECT CNPJ_CIA, DT_REFER FROM {t} {filter_sql}"
-        for t in sorted(existing)
-    )
-    pairs = conn.execute(
-        f"SELECT DISTINCT CNPJ_CIA, DT_REFER::VARCHAR FROM ({clean_selects}) "
-        f"ORDER BY CNPJ_CIA, DT_REFER",
-        params * len(existing) if params else [],
-    ).fetchall()
+    # Batch fetch — duas queries para toda a base
+    has_balance = bool(existing & {"raw_bpa_clean", "raw_bpp_clean"})
+    balance_comps = _fetch_all_components(conn, cnpj) if has_balance else {}
+    dre_comps = _fetch_all_dre_components(conn, cnpj) if "raw_dre_clean" in existing else {}
 
-    if not pairs:
+    all_pairs = set(balance_comps.keys()) | set(dre_comps.keys())
+
+    if not all_pairs:
         logger.warning("Nenhum dado nas tabelas *_clean — rode 'normalize' primeiro")
         return 0
 
-    logger.info("Calculando indicadores para %d empresa/período(s)…", len(pairs))
+    logger.info("Calculando indicadores para %d empresa/período(s)…", len(all_pairs))
     total = 0
 
-    for cnpj_cia, dt_refer in pairs:
+    for cnpj_cia, dt_refer in sorted(all_pairs):
         try:
-            comp = _extract_components(conn, cnpj_cia, dt_refer)
+            comp = {
+                **balance_comps.get((cnpj_cia, dt_refer), {}),
+                **dre_comps.get((cnpj_cia, dt_refer), {}),
+            }
             total += _upsert_indicators(conn, cnpj_cia, dt_refer, comp)
         except Exception:
             logger.exception(
