@@ -444,13 +444,15 @@ def _fetch_all_dre_components(
     return result
 
 
-def _upsert_indicators(
-    conn: duckdb.DuckDBPyConnection,
+def _build_indicator_rows(
     cnpj_cia: str,
     dt_refer: str,
     comp: dict[str, float | None],
-) -> int:
-    """Insere/substitui os 15 indicadores para um par (cnpj_cia, dt_refer)."""
+) -> list[tuple[str, str, str, float | None]]:
+    """Calcula os 15 indicadores para um par (cnpj_cia, dt_refer) e retorna as linhas.
+
+    Não acessa o banco — apenas computa valores a partir do dict de componentes.
+    """
     rows: list[tuple[str, str, str, float | None]] = []
     for nome, fn, arg_names in _CALC_PLAN:
         if nome == "divida_liquida_pl":
@@ -459,12 +461,7 @@ def _upsert_indicators(
             args = [comp.get(a) for a in arg_names]
             valor = fn(*args)  # type: ignore[operator]
         rows.append((cnpj_cia, dt_refer, nome, valor))
-    conn.executemany(
-        "INSERT OR REPLACE INTO indicators"  # noqa: E501
-        " (cnpj_cia, dt_refer, indicador, valor) VALUES (?, ?, ?, ?)",
-        rows,
-    )
-    return len(rows)
+    return rows
 
 
 def calculate_all(
@@ -475,7 +472,9 @@ def calculate_all(
 
     Utiliza queries batch únicas (``_fetch_all_components`` + ``_fetch_all_dre_components``)
     em vez de N round-trips por par (cnpj, dt_refer). Contas de resultado (3.xx)
-    usam TTM anualizado em vez de YTD parcial.
+    usam TTM anualizado em vez de YTD parcial. O cálculo dos valores é feito em
+    memória e persistido em um único ``executemany`` dentro de uma transação
+    explícita — eliminando N commits individuais por par (cnpj, dt_refer).
 
     Args:
         conn: Conexão DuckDB com tabelas ``*_clean`` já criadas.
@@ -513,19 +512,35 @@ def calculate_all(
         return 0
 
     logger.info("Calculando indicadores para %d empresa/período(s)…", len(all_pairs))
-    total = 0
 
+    # Acumula todas as linhas em memória — INSERT único ao final
+    all_rows: list[tuple[str, str, str, float | None]] = []
     for cnpj_cia, dt_refer in sorted(all_pairs):
         try:
             comp = {
                 **balance_comps.get((cnpj_cia, dt_refer), {}),
                 **dre_comps.get((cnpj_cia, dt_refer), {}),
             }
-            total += _upsert_indicators(conn, cnpj_cia, dt_refer, comp)
+            all_rows.extend(_build_indicator_rows(cnpj_cia, dt_refer, comp))
         except Exception:
             logger.exception(
                 "Erro ao calcular indicadores para %s %s — pulando", cnpj_cia, dt_refer
             )
 
+    # Bulk insert: TRUNCATE + INSERT em transação única (evita N commits)
+    conn.execute("BEGIN")
+    try:
+        cnpj_filter = f"WHERE cnpj_cia = '{cnpj}'" if cnpj else ""
+        conn.execute(f"DELETE FROM indicators {cnpj_filter}")
+        conn.executemany(
+            "INSERT INTO indicators (cnpj_cia, dt_refer, indicador, valor) VALUES (?, ?, ?, ?)",
+            all_rows,
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+    total = len(all_rows)
     logger.info("Indicadores: %d registros gravados", total)
     return total

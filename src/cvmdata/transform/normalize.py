@@ -9,10 +9,11 @@ Cria tabelas {table}_clean com:
       PENÚLTIMO é preservado pois é necessário para cálculo TTM nos indicadores.
       DT_INI_EXERC mínimo garante o valor acumulado YTD sobre o valor trimestral
       isolado (ambos podem ter o mesmo VERSAO a partir de Q2).
-  - VL_CONTA recastado para DECIMAL(29,10)
+  - VL_CONTA recastado para DECIMAL(29,10) e convertido para Reais:
+      MIL → × 1.000  |  UNIDADE → × 1
   - CD_CVM normalizado para INTEGER (remove zeros à esquerda; NULL se não numérico)
   - Demais colunas mantidas sem conversão (DT_REFER e DT_FIM_EXERC já são DATE
-    no schema raw_*; ESCALA_MOEDA registrada mas valores não convertidos)
+    no schema raw_*)
 """
 from __future__ import annotations
 
@@ -29,7 +30,9 @@ SELECT * EXCLUDE (rn)
 FROM (
     SELECT
         * REPLACE (
-            VL_CONTA::DECIMAL(29, 10)         AS VL_CONTA,
+            VL_CONTA::DECIMAL(29, 10)
+                * CASE WHEN ESCALA_MOEDA = 'MIL' THEN 1000 ELSE 1 END
+                                                  AS VL_CONTA,
             TRY_CAST(TRIM(CD_CVM) AS INTEGER) AS CD_CVM
         ),
         ROW_NUMBER() OVER (
@@ -51,7 +54,9 @@ SELECT * EXCLUDE (rn)
 FROM (
     SELECT
         * REPLACE (
-            VL_CONTA::DECIMAL(29, 10)         AS VL_CONTA,
+            VL_CONTA::DECIMAL(29, 10)
+                * CASE WHEN ESCALA_MOEDA = 'MIL' THEN 1000 ELSE 1 END
+                                                  AS VL_CONTA,
             TRY_CAST(TRIM(CD_CVM) AS INTEGER) AS CD_CVM
         ),
         ROW_NUMBER() OVER (

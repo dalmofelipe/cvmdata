@@ -31,7 +31,7 @@ _SKIP_PATTERNS: tuple[str, ...] = (
 
 
 def _is_demo_csv(filename: str) -> bool:
-    """Retorna True se o arquivo é um CSV de demonstrativo (com scope con/ind)."""
+    """Retorna True se o arquivo é um CSV de demonstrativo (com scope _con_)."""
     fname = filename.lower()
     if not fname.endswith(".csv"):
         return False
