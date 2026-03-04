@@ -22,6 +22,7 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.12 (gerenciado por `uv`): Follow standard conventions
 
 ## Recent Changes
+- 002-optimize-indicators: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 
 - 002-p1-refactor-scope-con: Added Python 3.12 (gerenciado por `uv`) + DuckDB (OLAP local), httpx (download), Typer (CLI), pydantic-settings (config)
 

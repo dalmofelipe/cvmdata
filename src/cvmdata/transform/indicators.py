@@ -244,6 +244,12 @@ def _get_ttm_value(
 ) -> float | None:
     """Retorna o valor TTM (Trailing Twelve Months) para uma conta DRE.
 
+    WARNING: This function executes 3–4 SQL queries per call. It is a
+    utility for isolated unit testing ONLY. Never call this function
+    inside a loop over company/period pairs — use _fetch_all_dre_components
+    for batch processing. Wiring this into calculate_all would regress
+    performance to ~280,000 SQL round-trips.
+
     Fórmula: ``YTD_atual + (FY_anterior − YTD_anterior_mesmo_periodo)``
 
     Fallback chain (nunca levanta exceção):
@@ -322,17 +328,23 @@ def _fetch_all_components(
     balance_codes = [cd for cd in ACCOUNT_MAP if not cd.startswith("3.")]
     placeholders = ", ".join(f"'{cd}'" for cd in balance_codes)
     filter_clause = "AND CNPJ_CIA = ?" if cnpj else ""
-    params: list[str] = [cnpj] if cnpj else []
+    
+    # When cnpj filter is present, params must be duplicated for each UNION branch
+    if cnpj:
+        params: list[str] = [cnpj, cnpj]
+    else:
+        params = []
 
     rows = conn.execute(
         f"""
         SELECT CNPJ_CIA, DT_REFER::VARCHAR, CD_CONTA, VL_CONTA
         FROM (
             SELECT CNPJ_CIA, DT_REFER, CD_CONTA, VL_CONTA FROM raw_bpa_clean
+            WHERE CD_CONTA IN ({placeholders}) {filter_clause}
             UNION ALL
             SELECT CNPJ_CIA, DT_REFER, CD_CONTA, VL_CONTA FROM raw_bpp_clean
+            WHERE CD_CONTA IN ({placeholders}) {filter_clause}
         )
-        WHERE CD_CONTA IN ({placeholders}) {filter_clause}
         ORDER BY CNPJ_CIA, DT_REFER
         """,
         params,

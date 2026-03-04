@@ -76,6 +76,7 @@ def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
     """Retorna conexão DuckDB persistente. Cria o arquivo se não existir."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = duckdb.connect(str(db_path))
+    conn.execute("SET memory_limit = '1GB'")
     logger.debug("Conectado a %s", db_path)
     return conn
 

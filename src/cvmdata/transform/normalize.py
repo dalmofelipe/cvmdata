@@ -87,6 +87,18 @@ def normalize_table(table: str, conn: duckdb.DuckDBPyConnection) -> int:
     clean = f"{table}_clean"
     sql = _NORMALIZE_FLOW_SQL if table.endswith("dre") else _NORMALIZE_BALANCE_SQL
     conn.execute(sql.format(table=table, clean=clean))
+    
+    # Create indexes for efficient batch queries
+    if table.endswith("dre"):
+        index_cols = "CNPJ_CIA, CD_CONTA, ORDEM_EXERC"
+        conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_{clean}_lookup ON {clean} ({index_cols})"
+        )
+    else:
+        conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_{clean}_lookup ON {clean} (CNPJ_CIA, CD_CONTA)"
+        )
+    
     count: int = conn.execute(f"SELECT COUNT(*) FROM {clean}").fetchone()[0]
     logger.info("  %s → %s: %d linhas", table, clean, count)
     return count
