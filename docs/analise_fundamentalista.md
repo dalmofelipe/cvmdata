@@ -5,6 +5,61 @@ A análise fundamentalista utiliza indicadores extraídos de demonstrativos cont
 
 Os indicadores abaixo são todos **computáveis a partir dos arquivos CVM** (BPA + BPP + DRE + DFC), sem necessidade de dados externos de mercado.
 
+#### 1. Rentabilidade
+
+Avaliam a eficiência da empresa em gerar lucro a partir de seus recursos.
+
+| Indicador | Fórmula | Contas CVM |
+|---|---|---|
+| **ROE** (Return on Equity) | `Lucro Líquido / Patrimônio Líquido × 100` | `3.11` / `2.03` |
+| **ROA** (Return on Assets) | `Lucro Líquido / Ativo Total × 100` | `3.11` / `1` |
+| **Margem Bruta** | `Resultado Bruto / Receita Líquida × 100` | `3.03` / `3.01` |
+| **Margem Operacional** (EBIT) | `EBIT / Receita Líquida × 100` | `3.05` / `3.01` |
+| **Margem Líquida** | `Lucro Líquido / Receita Líquida × 100` | `3.11` / `3.01` |
+| **Giro do Ativo** | `Receita Líquida / Ativo Total` | `3.01` / `1` |
+
+> **Decomposição DuPont:** ROE = Margem Líquida × Giro do Ativo × (Ativo Total / PL)
+
+---
+
+#### 2. Liquidez
+
+Medem a capacidade da empresa de honrar suas obrigações financeiras.
+
+| Indicador | Fórmula | Contas CVM |
+|---|---|---|
+| **Liquidez Corrente** | `Ativo Circulante / Passivo Circulante` | `1.01` / `2.01` |
+| **Liquidez Seca** | `(Ativo Circulante − Estoques) / Passivo Circulante` | `(1.01 − 1.01.04)` / `2.01` |
+| **Liquidez Imediata** | `Caixa e Equivalentes / Passivo Circulante` | `1.01.01` / `2.01` |
+| **Liquidez Geral** | `(AC + Realizável LP) / (PC + Passivo Não Circ.)` | `(1.01 + 1.02.01)` / `(2.01 + 2.02)` |
+
+---
+
+#### 3. Endividamento
+
+Analisa o nível de exposição financeira e dependência de capital de terceiros.
+
+| Indicador | Fórmula | Contas CVM |
+|---|---|---|
+| **Endividamento Geral** | `(PC + PNC) / Ativo Total × 100` | `(2.01 + 2.02)` / `1` |
+| **Dívida Bruta** | `Empréstimos CP + Empréstimos LP` | `2.01.04 + 2.02.01` |
+| **Dívida Líquida** | `Dívida Bruta − Caixa − Aplicações Financeiras` | `(2.01.04 + 2.02.01) − 1.01.01 − 1.01.02` |
+| **Dívida Líquida / PL** | `Dívida Líquida / Patrimônio Líquido` | derivado / `2.03` |
+| **Cobertura de Juros** | `EBIT / Despesas Financeiras` | `3.05` / `3.06.02` |
+
+---
+
+#### 4. Indicadores fora do escopo atual
+
+Documentados em [`docs/valuation_future.md`](./valuation_future.md).
+
+| Indicador | Motivo |
+|---|---|
+| **P/L**, **P/VPA**, **Dividend Yield** | Requerem preço de ação (B3) |
+| **EBITDA**, **Dívida Líquida / EBITDA**, **Margem EBITDA** | Requerem D&A do DFC — CD_CONTA não é padronizado entre empresas |
+
+---
+
 ### Fontes de dados CVM utilizadas
 
 | Arquivo | Frequência | Escopo | Uso |
@@ -91,58 +146,3 @@ TTM = 369.561 + (X − 377.736)
 **DFC (escopo futuro — EBITDA):**
 Apenas DFP anual. Método predominante é DFC-MI (96% das empresas). Ver seção 5.
 
-
----
-
-#### 1. Rentabilidade
-
-Avaliam a eficiência da empresa em gerar lucro a partir de seus recursos.
-
-| Indicador | Fórmula | Contas CVM |
-|---|---|---|
-| **ROE** (Return on Equity) | `Lucro Líquido / Patrimônio Líquido × 100` | `3.11` / `2.03` |
-| **ROA** (Return on Assets) | `Lucro Líquido / Ativo Total × 100` | `3.11` / `1` |
-| **Margem Bruta** | `Resultado Bruto / Receita Líquida × 100` | `3.03` / `3.01` |
-| **Margem Operacional** (EBIT) | `EBIT / Receita Líquida × 100` | `3.05` / `3.01` |
-| **Margem Líquida** | `Lucro Líquido / Receita Líquida × 100` | `3.11` / `3.01` |
-| **Giro do Ativo** | `Receita Líquida / Ativo Total` | `3.01` / `1` |
-
-> **Decomposição DuPont:** ROE = Margem Líquida × Giro do Ativo × (Ativo Total / PL)
-
----
-
-#### 2. Liquidez
-
-Medem a capacidade da empresa de honrar suas obrigações financeiras.
-
-| Indicador | Fórmula | Contas CVM |
-|---|---|---|
-| **Liquidez Corrente** | `Ativo Circulante / Passivo Circulante` | `1.01` / `2.01` |
-| **Liquidez Seca** | `(Ativo Circulante − Estoques) / Passivo Circulante` | `(1.01 − 1.01.04)` / `2.01` |
-| **Liquidez Imediata** | `Caixa e Equivalentes / Passivo Circulante` | `1.01.01` / `2.01` |
-| **Liquidez Geral** | `(AC + Realizável LP) / (PC + Passivo Não Circ.)` | `(1.01 + 1.02.01)` / `(2.01 + 2.02)` |
-
----
-
-#### 3. Endividamento
-
-Analisa o nível de exposição financeira e dependência de capital de terceiros.
-
-| Indicador | Fórmula | Contas CVM |
-|---|---|---|
-| **Endividamento Geral** | `(PC + PNC) / Ativo Total × 100` | `(2.01 + 2.02)` / `1` |
-| **Dívida Bruta** | `Empréstimos CP + Empréstimos LP` | `2.01.04 + 2.02.01` |
-| **Dívida Líquida** | `Dívida Bruta − Caixa − Aplicações Financeiras` | `(2.01.04 + 2.02.01) − 1.01.01 − 1.01.02` |
-| **Dívida Líquida / PL** | `Dívida Líquida / Patrimônio Líquido` | derivado / `2.03` |
-| **Cobertura de Juros** | `EBIT / Despesas Financeiras` | `3.05` / `3.06.02` |
-
----
-
-#### 4. Indicadores fora do escopo atual
-
-Documentados em [`docs/valuation_future.md`](./valuation_future.md).
-
-| Indicador | Motivo |
-|---|---|
-| **P/L**, **P/VPA**, **Dividend Yield** | Requerem preço de ação (B3) |
-| **EBITDA**, **Dívida Líquida / EBITDA**, **Margem EBITDA** | Requerem D&A do DFC — CD_CONTA não é padronizado entre empresas |

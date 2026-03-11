@@ -26,7 +26,7 @@ def _insert_bpa(
         """
         INSERT INTO raw_bpa VALUES (
             ?, ?, ?, 'EMPRESA TEST', ?,
-            'DF Consolidado - BPA', 'REAL', 'MIL',
+            'DF Consolidado - BPA', 'REAL', 'UNIDADE',
             ?, ?,
             ?, 'Conta Teste', ?, 'S',
             'itr', 2024, 'con'
@@ -235,7 +235,7 @@ def _insert_dre(
         """
         INSERT INTO raw_dre VALUES (
             ?, ?, ?, 'EMPRESA TEST', ?,
-            'DF Consolidado - DRE', 'REAL', 'MIL',
+            'DF Consolidado - DRE', 'REAL', 'UNIDADE',
             ?, ?, ?,
             ?, 'Conta Teste', ?, 'S',
             ?, 2024, 'con'

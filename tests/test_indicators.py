@@ -604,7 +604,7 @@ def _insert_raw_dre(
         """
         INSERT INTO raw_dre VALUES (
             ?, ?, ?, 'EMPRESA TEST', ?,
-            'DF Consolidado - DRE', 'REAL', 'MIL',
+            'DF Consolidado - DRE', 'REAL', 'UNIDADE',
             ?, ?, ?,
             ?, 'Conta Teste', ?, 'S',
             ?, 2024, 'con'

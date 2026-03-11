@@ -6,6 +6,20 @@ Baixa os demonstrativos contábeis publicados na CVM (BPA, BPP, DRE), ingere no 
 
 ---
 
+## Indicadores calculados
+
+| Categoria | Indicadores |
+|---|---|
+| **Rentabilidade** | ROE, ROA, Margem Bruta, Margem Operacional, Margem Líquida, Giro do Ativo |
+| **Liquidez** | Liquidez Corrente, Liquidez Seca, Liquidez Imediata, Liquidez Geral |
+| **Endividamento** | Endividamento Geral, Dívida Bruta, Dívida Líquida, Dívida Líquida/PL, Cobertura de Juros |
+
+Fórmulas completas e mapeamento de contas CVM: [`docs/analise_fundamentalista.md`](docs/analise_fundamentalista.md).
+
+Indicadores de valuation (P/L, P/VPA, DY) dependem de preço de ação e estão documentados em [`docs/valuation_future.md`](docs/valuation_future.md).
+
+---
+
 ## Pré-requisitos
 
 | Ferramenta | Versão mínima |
@@ -21,7 +35,7 @@ Conexão com a internet é necessária apenas na etapa de download.
 ## Instalação
 
 ```bash
-git clone <repo-url> cvmdata
+git clone https://github.com/dalmofelipe/cvmdata.git
 cd cvmdata
 uv sync                  # cria .venv e instala todas as dependências
 ```
@@ -47,6 +61,15 @@ make download            # baixa ZIPs CVM para data/raw/ (ITR + DFP, 2021–2025
 make load                # ingere CSVs em DuckDB (data/db/cvmdata.duckdb)
 make normalize           # dedup + cast de tipos → tabelas *_clean
 make indicators          # calcula 15 indicadores → tabela indicators
+```
+
+No Windows:
+
+```bash
+uv run cvmdata download
+uv run cvmdata load
+uv run cvmdata normalize
+uv run cvmdata indicators
 ```
 
 ---
@@ -97,24 +120,21 @@ cvmdata indicators --cnpj "00.000.000/0001-91"  # apenas BCO Brasil
 Exibe os indicadores calculados em tabela formatada.
 
 ```bash
-cvmdata query --cnpj "00.000.000/0001-91"        # todos os períodos de uma empresa
+cvmdata query --cnpj "00.000.000/0001-91"        # todos os períodos de uma empresa Ex.: BCO BRASIL S.A.
 cvmdata query --cnpj "00.000.000/0001-91" --year 2024  # filtrar por ano
 cvmdata query                                    # top-10 empresas com mais indicadores
 ```
 
----
+### `Scripts`
 
-## Indicadores calculados
+`list_companies.py` - Listar as empresas presentes no banco de dados cvmdata.
 
-| Categoria | Indicadores |
-|---|---|
-| **Rentabilidade** | ROE, ROA, Margem Bruta, Margem Operacional, Margem Líquida, Giro do Ativo |
-| **Liquidez** | Liquidez Corrente, Liquidez Seca, Liquidez Imediata, Liquidez Geral |
-| **Endividamento** | Endividamento Geral, Dívida Bruta, Dívida Líquida, Dívida Líquida/PL, Cobertura de Juros |
+```bash
+uv run scripts/list_companies.py
+uv run scripts/list_companies.py --limit 50
+uv run scripts/list_companies.py --filter petro
+```
 
-Fórmulas completas e mapeamento de contas CVM: [`docs/analise_fundamentalista.md`](docs/analise_fundamentalista.md).
-
-Indicadores de valuation (P/L, P/VPA, DY) dependem de preço de ação e estão documentados em [`docs/valuation_future.md`](docs/valuation_future.md).
 
 ---
 
