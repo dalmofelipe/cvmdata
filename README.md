@@ -125,6 +125,42 @@ cvmdata query --cnpj "00.000.000/0001-91" --year 2024  # filtrar por ano
 cvmdata query                                    # top-10 empresas com mais indicadores
 ```
 
+### `cvmdata download-cad`
+
+Baixa os arquivos cadastrais oficiais da CVM para `data/raw/cad/`.
+
+```bash
+cvmdata download-cad               # baixa meta + CSV cadastral
+cvmdata download-cad --force       # re-baixa mesmo se já existir
+```
+
+### `cvmdata load-cad`
+
+Faz recarga total do `cad_cia_aberta.csv` na tabela `cad_cia_aberta_raw` do DuckDB.
+Valida paridade de linhas CSV × tabela (SC-001) e registra no log.
+
+```bash
+cvmdata load-cad
+```
+
+### `cvmdata classify-cad`
+
+Classifica todos os CNPJs com `SIT='ATIVO'` pelo `SETOR_ATIV` e persiste em `company_classification`.
+CNPJs mapeados recebem `confidence=high`; ambíguos/vazios/não-mapeados recebem `industrial_default` e `confidence=low`.
+
+```bash
+cvmdata classify-cad
+```
+
+### `cvmdata query-cad`
+
+Consulta classificação cadastral no DuckDB.
+
+```bash
+cvmdata query-cad                              # últimas 20 classificações
+cvmdata query-cad --cnpj "00.000.000/0001-91" # detalhe de uma empresa
+```
+
 ### `Scripts`
 
 `list_companies.py` - Listar as empresas presentes no banco de dados cvmdata.
@@ -143,14 +179,15 @@ uv run scripts/list_companies.py --filter petro
 ```
 cvmdata/
 ├── src/cvmdata/
-│   ├── cli.py               # entrypoint Typer (download/load/normalize/indicators/query)
+│   ├── cli.py               # entrypoint Typer (download/load/normalize/indicators/query/cadastro)
 │   ├── config.py            # Settings via pydantic-settings (.env)
 │   ├── ingestion/
 │   │   ├── db.py            # DDLs e get_connection()
-│   │   ├── downloader.py    # download streaming + extração ZIP
-│   │   └── loader.py        # parse CSV → INSERT DuckDB
+│   │   ├── downloader.py    # download streaming + extração ZIP + cadastro CVM
+│   │   └── loader.py        # parse CSV → INSERT DuckDB + load_cadastro
 │   └── transform/
 │       ├── account_map.py   # mapeamento CD_CONTA → componente
+│       ├── cadastro.py      # classificação setorial por CNPJ
 │       ├── indicators.py    # funções puras + orquestrador calculate_all()
 │       └── normalize.py     # dedup + cast de tipos
 ├── tests/
@@ -162,9 +199,11 @@ cvmdata/
 │   └── test_normalize.py
 ├── data/
 │   ├── raw/{itr,dfp}/{ano}/ # CSVs baixados da CVM
+│   ├── raw/cad/             # CSV cadastral da CVM (download-cad)
 │   └── db/cvmdata.duckdb    # banco de dados local
 ├── docs/
 │   ├── analise_fundamentalista.md
+│   ├── dados_cadastrais.md  # documentação do fluxo cadastral
 │   └── valuation_future.md
 ├── specs/001-cvm-pipeline/  # spec, plan e tasks do pipeline
 ├── .env.example             # variáveis de ambiente disponíveis
@@ -209,6 +248,7 @@ Cobertura atual de `transform/`: **99%** (100/100 testes passando, 2 xfailed esp
 ## Notas de implementação
 
 - **Encoding**: arquivos CVM usam `latin-1`; o loader converte automaticamente.
-- **Idempotência**: `download` pula ZIPs já existentes (use `--force` para re-baixar); `load` faz DELETE+INSERT por `(source, year, demo, consolidation)`.
+- **Idempotência**: `download` pula ZIPs já existentes (use `--force` para re-baixar); `load` faz DELETE+INSERT por `(source, year, demo, consolidation)`; `load-cad` faz recarga total via CTAS.
 - **Deduplicação**: `normalize` mantém apenas o registro com `VERSAO` mais alta para cada `(CNPJ_CIA, DT_REFER, CD_CONTA, ORDEM_EXERC)`.
 - **Mapeamento multi-setor**: contas de bancos e industriais diferem; casos xfail documentados em `tests/test_indicators.py`. Ver `account_map.py` para `# TODO: sector_profile`.
+- **Cadastro CVM**: fluxo dedicado `download-cad → load-cad → classify-cad`. Classificação usa apenas `SIT='ATIVO'` e `SETOR_ATIV`. Mapeamento setorial governado via `setor_profile_map`. Ver [`docs/dados_cadastrais.md`](docs/dados_cadastrais.md).

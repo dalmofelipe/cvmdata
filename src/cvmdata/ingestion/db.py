@@ -106,3 +106,86 @@ def init_indicators_schema(conn: duckdb.DuckDBPyConnection) -> None:
     """Cria tabela `indicators` se ainda não existir (idempotente)."""
     conn.execute(_INDICATORS_DDL)
     logger.debug("Schema indicators OK")
+
+
+# ── DDL Cadastral ──────────────────────────────────────────────────────────────
+
+_CAD_RAW_DDL = """\
+CREATE TABLE IF NOT EXISTS cad_cia_aberta_raw (
+    -- Schema de referência — na prática a tabela é criada via CTAS em load_cadastro
+    -- com auto_detect para preservar colunas desconhecidas (FR-014).
+    CNPJ_CIA      VARCHAR,
+    DENOM_CIA     VARCHAR,
+    DENOM_COMERC  VARCHAR,
+    CD_CVM        VARCHAR,
+    SIT           VARCHAR,
+    DT_INI_SIT    VARCHAR,
+    TP_MERC       VARCHAR,
+    CATEG_REG     VARCHAR,
+    SETOR_ATIV    VARCHAR,
+    DT_INC        VARCHAR,
+    loaded_at     TIMESTAMPTZ
+);"""
+
+_SETOR_PROFILE_MAP_DDL = """\
+CREATE TABLE IF NOT EXISTS setor_profile_map (
+    setor_ativ  VARCHAR PRIMARY KEY,
+    profile_id  VARCHAR NOT NULL,
+    active      BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at  TIMESTAMPTZ
+);"""
+
+_COMPANY_CLASSIFICATION_DDL = """\
+CREATE TABLE IF NOT EXISTS company_classification (
+    cnpj_cia     VARCHAR PRIMARY KEY,
+    cd_cvm       VARCHAR,
+    denom_social VARCHAR,
+    denom_comerc VARCHAR,
+    setor_ativ   VARCHAR,
+    profile_id   VARCHAR NOT NULL,
+    confidence   VARCHAR NOT NULL,
+    rule_applied VARCHAR,
+    updated_at   TIMESTAMPTZ
+);"""
+
+_CURATION_EVENTS_DDL = """\
+CREATE TABLE IF NOT EXISTS classification_curation_events (
+    cnpj_cia    VARCHAR NOT NULL,
+    event_type  VARCHAR NOT NULL,
+    details     VARCHAR,
+    created_at  TIMESTAMPTZ,
+    updated_at  TIMESTAMPTZ,
+    PRIMARY KEY (cnpj_cia, event_type)
+);"""
+
+# Mapeamentos iniciais de setor para profile (banking e arrendamento mercantil)
+_SETOR_PROFILE_SEED: list[tuple[str, str]] = [
+    ("Bancos", "banking"),
+    ("Arrendamento Mercantil", "banking"),
+    ("Intermediacao Financeira", "banking"),
+]
+
+
+def init_cadastro_schema(conn: duckdb.DuckDBPyConnection) -> None:
+    """Cria tabelas cadastrais auxiliares se ainda não existirem (idempotente).
+
+    Tabelas criadas aqui: setor_profile_map, company_classification,
+    classification_curation_events.
+    Nota: cad_cia_aberta_raw é criada via CTAS em load_cadastro (auto_detect).
+    Semeia setor_profile_map com os mapeamentos iniciais (banking).
+    """
+    conn.execute(_SETOR_PROFILE_MAP_DDL)
+    conn.execute(_COMPANY_CLASSIFICATION_DDL)
+    conn.execute(_CURATION_EVENTS_DDL)
+
+    # Semear setor_profile_map apenas onde não existe (INSERT OR IGNORE)
+    for setor, profile in _SETOR_PROFILE_SEED:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO setor_profile_map (setor_ativ, profile_id, active, updated_at)
+            VALUES (?, ?, TRUE, current_timestamp)
+            """,
+            [setor, profile],
+        )
+
+    logger.info("Schema cadastral OK (4 tabelas)")

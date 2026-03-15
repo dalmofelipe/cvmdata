@@ -219,3 +219,66 @@ def load_source_year(
     total = sum(results.values())
     logger.info("Load %s/%d concluído: %d linhas em %d tabelas", source, year, total, len(results))
     return results
+
+
+# ── Cadastro CVM ──────────────────────────────────────────────────────────────
+
+def load_cadastro(
+    conn: duckdb.DuckDBPyConnection,
+    csv_path: Path,
+) -> int:
+    """Carrega cad_cia_aberta.csv por recarga total (drop + insert).
+
+    - Preserva todas as colunas via auto_detect (schema inferido).
+    - Adiciona coluna `loaded_at` com timestamp atual.
+    - Usa transação: falha não corrompe tabela prévia.
+    - Retorna contagem de linhas inseridas.
+
+    Valida SC-001: linhas CSV == linhas inseridas.
+    """
+    from cvmdata.ingestion.db import init_cadastro_schema
+
+    init_cadastro_schema(conn)
+
+    fpath = csv_path.as_posix()
+
+    # Contar linhas do CSV antes de carregar (SC-001)
+    csv_count = conn.execute(
+        f"SELECT COUNT(*) FROM read_csv('{fpath}', delim=';', header=true, encoding='latin-1')"
+    ).fetchone()[0]
+    logger.info("CSV cadastral: %d linhas", csv_count)
+
+    # CTAS: CREATE OR REPLACE atomically replaces the table with auto-detected schema.
+    # This preserves all columns from CVM CSV (includes unknown future columns per FR-014).
+    # Wrapped in explicit transaction so a failed SELECT rolls back without leaving
+    # a partial/corrupt table state (T011 rollback guard).
+    conn.execute("BEGIN")
+    try:
+        conn.execute(f"""
+            CREATE OR REPLACE TABLE cad_cia_aberta_raw AS
+            SELECT
+                *,
+                current_timestamp AS loaded_at
+            FROM read_csv(
+                '{fpath}',
+                delim    = ';',
+                header   = true,
+                encoding = 'latin-1',
+                nullstr  = ''
+            )
+        """)
+        inserted = conn.execute("SELECT COUNT(*) FROM cad_cia_aberta_raw").fetchone()[0]
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+    # SC-001: validar paridade
+    if inserted != csv_count:
+        logger.warning(
+            "SC-001 FAIL: CSV=%d linhas, raw=%d linhas inseridas", csv_count, inserted
+        )
+    else:
+        logger.info("SC-001 OK: %d linhas — CSV == raw", inserted)
+
+    return inserted

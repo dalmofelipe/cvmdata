@@ -18,8 +18,8 @@ from rich.table import Table
 
 from cvmdata.config import settings
 from cvmdata.ingestion.db import get_connection
-from cvmdata.ingestion.downloader import download_source_year
-from cvmdata.ingestion.loader import load_source_year
+from cvmdata.ingestion.downloader import download_cadastro, download_source_year
+from cvmdata.ingestion.loader import load_cadastro, load_source_year
 from cvmdata.transform.indicators import calculate_all
 from cvmdata.transform.normalize import normalize_all
 
@@ -209,6 +209,155 @@ def query(
                 tbl.add_row(str(row[1]), row[2], valor)
             console.print(tbl)
 
+        except Exception as exc:
+            typer.echo(f"✗ Erro: {exc}", err=True)
+            raise typer.Exit(1) from exc
+
+
+# ── Cadastro CVM ──────────────────────────────────────────────────────────────
+
+@app.command("download-cad")
+def download_cad(
+    force: bool = typer.Option(False, "--force", "-f", help="Re-baixa mesmo se arquivo já existir."),  # noqa: E501
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Baixa os arquivos cadastrais CVM (meta + CSV) para data/raw/cad/."""
+    _setup_logging(verbose)
+
+    settings.cad_dir.mkdir(parents=True, exist_ok=True)
+    typer.echo("→ Cadastro CVM")
+    try:
+        meta_path, csv_path = download_cadastro(
+            settings.cad_meta_url,
+            settings.cad_csv_url,
+            settings.cad_dir,
+            force=force,
+        )
+        typer.echo(f"  ✓ meta: {meta_path.name}")
+        typer.echo(f"  ✓ csv:  {csv_path.name} ({csv_path.stat().st_size:,} bytes)")
+    except Exception as exc:
+        typer.echo(f"  ✗ Erro: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command("load-cad")
+def load_cad(
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Carrega cad_cia_aberta.csv na tabela cad_cia_aberta_raw do DuckDB."""
+    _setup_logging(verbose)
+
+    csv_path = settings.cad_dir / "cad_cia_aberta.csv"
+    if not csv_path.exists():
+        typer.echo("⚠ Arquivo cadastral não encontrado — rode 'download-cad' primeiro", err=True)
+        raise typer.Exit(1)
+
+    typer.echo("→ Carregando cadastro CVM …")
+    try:
+        with get_connection(settings.db_path) as conn:
+            inserted = load_cadastro(conn, csv_path)
+        typer.echo(f"  ✓ {inserted:,} linhas em cad_cia_aberta_raw")
+    except Exception as exc:
+        typer.echo(f"  ✗ Erro: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+
+@app.command("classify-cad")
+def classify_cad(
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Classifica CNPJs ativos por setor e persiste em company_classification."""
+    _setup_logging(verbose)
+
+    from cvmdata.transform.cadastro import classify_cadastro
+
+    typer.echo("→ Classificando cadastro CVM …")
+    try:
+        with get_connection(settings.db_path) as conn:
+            counts = classify_cadastro(conn)
+    except RuntimeError as exc:
+        typer.echo(f"⚠ {exc}", err=True)
+        raise typer.Exit(1) from exc
+    except Exception as exc:
+        typer.echo(f"✗ Erro: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    typer.echo(
+        f"  ✓ {counts['total']:,} CNPJs classificados "
+        f"({counts['high']:,} high, {counts['low']:,} low)"
+    )
+
+
+@app.command("query-cad")
+def query_cad(
+    cnpj: Optional[str] = typer.Option(
+        None, "--cnpj", help="CNPJ da empresa (ex: 12.345.678/0001-99)."
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Consulta dados cadastrais e classificação setorial."""
+    _setup_logging(verbose)
+    console = Console()
+
+    with get_connection(settings.db_path) as conn:
+        try:
+            # Com --cnpj: detalhes de classificação de uma empresa
+            if cnpj is not None:
+                rows = conn.execute(
+                    """
+                    SELECT cnpj_cia, cd_cvm, denom_social, denom_comerc,
+                           setor_ativ, profile_id, confidence, rule_applied, updated_at
+                    FROM   company_classification
+                    WHERE  cnpj_cia = ?
+                    """,
+                    [cnpj],
+                ).fetchall()
+
+                if not rows:
+                    typer.echo(
+                        f"⚠ Nenhuma classificação encontrada para CNPJ {cnpj!r} "
+                        "— rode 'classify-cad' primeiro"
+                    )
+                    raise typer.Exit(1)
+
+                r = rows[0]
+                tbl = Table(title=f"Classificação — {cnpj}", show_lines=True)
+                for col in ("CNPJ", "CD_CVM", "Razão Social", "Nome Comercial",
+                            "Setor Ativ.", "Profile", "Confidence", "Regra", "Atualizado"):
+                    tbl.add_column(col, style="cyan" if col == "CNPJ" else None)
+                tbl.add_row(*[str(v) if v is not None else "—" for v in r])
+                console.print(tbl)
+                return
+
+            # Sem --cnpj: resumo das 20 classificações mais recentes
+            rows = conn.execute(
+                """
+                SELECT cnpj_cia, denom_social, setor_ativ, profile_id, confidence, updated_at
+                FROM   company_classification
+                ORDER BY updated_at DESC
+                LIMIT  20
+                """
+            ).fetchall()
+
+            if not rows:
+                typer.echo(
+                    "⚠ Nenhuma classificação encontrada — rode 'classify-cad' primeiro"
+                )
+                raise typer.Exit(1)
+
+            tbl = Table(title="company_classification (últimas 20)", show_lines=False)
+            tbl.add_column("CNPJ", style="cyan", no_wrap=True)
+            tbl.add_column("Razão Social")
+            tbl.add_column("Setor")
+            tbl.add_column("Profile", justify="center")
+            tbl.add_column("Confidence", justify="center")
+            tbl.add_column("Atualizado", justify="center")
+            for r in rows:
+                tbl.add_row(*[str(v) if v is not None else "—" for v in r])
+            console.print(tbl)
+
+        except typer.Exit:
+            raise
         except Exception as exc:
             typer.echo(f"✗ Erro: {exc}", err=True)
             raise typer.Exit(1) from exc

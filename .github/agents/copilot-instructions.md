@@ -3,8 +3,11 @@
 Auto-generated from all feature plans. Last updated: 2026-02-22
 
 ## Active Technologies
+- Python 3.12+ + DuckDB, httpx, Typer, pydantic-settings, pytest, ruff (004-process-cadastro-cvm)
+- DuckDB local (`data/db/cvmdata.duckdb`) + arquivos CSV/meta em `data/` (004-process-cadastro-cvm)
+- DuckDB local (`data/db/cvmdata.duckdb`) + arquivos em `data/` (004-process-cadastro-cvm)
 
-- Python 3.12 (gerenciado por `uv`) + DuckDB (OLAP local), httpx (download), Typer (CLI), pydantic-settings (config) (002-p1-refactor-scope-con)
+- Python 3.12 (gerenciado por `uv`) + DuckDB (OLAP local), httpx (download), Typer (CLI), pydantic-settings (config) (003-p1-refactor-scope-con)
 
 ## Project Structure
 
@@ -22,9 +25,10 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.12 (gerenciado por `uv`): Follow standard conventions
 
 ## Recent Changes
-- 002-optimize-indicators: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+- 004-process-cadastro-cvm: Added Python 3.12+ + DuckDB, httpx, Typer, pydantic-settings, pytest, ruff
+- 004-process-cadastro-cvm: Added Python 3.12+ + DuckDB, httpx, Typer, pydantic-settings, pytest, ruff
+- 004-process-cadastro-cvm: Added Python 3.12+ + DuckDB, httpx, Typer, pydantic-settings, pytest, ruff
 
-- 002-p1-refactor-scope-con: Added Python 3.12 (gerenciado por `uv`) + DuckDB (OLAP local), httpx (download), Typer (CLI), pydantic-settings (config)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

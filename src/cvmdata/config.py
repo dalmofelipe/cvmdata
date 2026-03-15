@@ -30,6 +30,14 @@ class Settings(BaseSettings):
         "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/DFP/DADOS/dfp_cia_aberta_{year}.zip"
     )
 
+    # URLs dos arquivos cadastrais da CVM
+    cad_meta_url: str = (
+        "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/META/meta_cad_cia_aberta.txt"
+    )
+    cad_csv_url: str = (
+        "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv"
+    )
+
     @property
     def raw_dir(self) -> Path:
         return self.data_dir / "raw"
@@ -41,6 +49,10 @@ class Settings(BaseSettings):
     @property
     def dfp_dir(self) -> Path:
         return self.raw_dir / "dfp"
+
+    @property
+    def cad_dir(self) -> Path:
+        return self.raw_dir / "cad"
 
     @property
     def db_path(self) -> Path:

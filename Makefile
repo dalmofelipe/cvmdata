@@ -1,10 +1,12 @@
-.PHONY: install download load normalize indicators all test lint fmt
+.PHONY: install download load normalize indicators all \
+        download-cad load-cad classify-cad \
+        test lint fmt ci
 
 # ── Ambiente ────────────────────────────────────────────────────────────────
 install:
 	uv sync --all-extras
 
-# ── Pipeline (todos os anos padrão) ─────────────────────────────────────────
+# ── Pipeline demonstrativos (todos os anos padrão) ───────────────────────────
 download:
 	uv run cvmdata download
 
@@ -27,6 +29,18 @@ download:
 load:
 	uv run cvmdata load --year $(YEAR)
 endif
+
+# ── Pipeline cadastral ───────────────────────────────────────────────────────
+download-cad:
+	uv run cvmdata download-cad
+
+load-cad:
+	uv run cvmdata load-cad
+
+classify-cad:
+	uv run cvmdata classify-cad
+
+cadastro: download-cad load-cad classify-cad
 
 # ── Qualidade ────────────────────────────────────────────────────────────────
 test:
