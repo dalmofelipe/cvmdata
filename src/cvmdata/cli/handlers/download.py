@@ -1,18 +1,11 @@
 # Download handler implementation
 from cvmdata.cli.models import DownloadInput, Outcome
-from cvmdata.ingestion.downloader import download_source_year
 from cvmdata.config import settings
+from cvmdata.ingestion.downloader import download_source_year
 
 
 def handle(input: DownloadInput) -> Outcome[dict[str, int]]:
-    """Download ITR and DFP ZIPs from CVM.
-    
-    Args:
-        input: DownloadInput with years, force flag, verbose flag.
-    
-    Returns:
-        Outcome with file count per source_year, or error/warning.
-    """
+    """Baixa arquivos ITR e DFP da CVM por ano."""
     files_by_source_year = {}
     
     for year in input.years:
@@ -24,16 +17,19 @@ def handle(input: DownloadInput) -> Outcome[dict[str, int]]:
                 )
                 files_by_source_year[f"{source}_{year}"] = len(files)
             except FileNotFoundError:
-                return Outcome.error(f"Data for {source}/{year} not found on CVM server")
+                return Outcome.error(f"Dados de {source}/{year} não encontrados no servidor CVM")
             except Exception as exc:
-                return Outcome.error(f"Download failed: {exc}")
+                return Outcome.error(f"Falha no download: {exc}")
     
     if not files_by_source_year:
-        return Outcome.warning("No files downloaded")
+        return Outcome.warning("Nenhum arquivo encontrado para download")
     
     total = sum(files_by_source_year.values())
+    if total == 0:
+        return Outcome.warning("Nenhum CSV novo para baixar")
+
     return Outcome.success(
-        message=f"Downloaded {total} CSVs",
+        message=f"{total} CSVs prontos",
         payload=files_by_source_year
     )
 

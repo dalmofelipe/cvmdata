@@ -7,7 +7,6 @@ from rich.table import Table
 
 from cvmdata.cli.models import Outcome, QueryResult
 
-
 # ============================================================================
 # Main Rendering Function (T013)
 # ============================================================================
@@ -47,38 +46,29 @@ def render_outcome(outcome: Outcome[Any]) -> None:
 # ============================================================================
 
 def render_query_result(outcome: Outcome[list[QueryResult]]) -> None:
-    """Render query command outcome with rich.Table for summary or detail.
-    
-    Detects query type (summary vs detail) by checking for n_indicadores field.
-    
-    Args:
-        outcome: Outcome from query handler with list[QueryResult] payload.
-    
-    Raises:
-        typer.Exit: Always (with code 0 or 1 based on status).
-    """
+    """Renderiza saída do comando query em tabela Rich."""
     console = Console()
+
+    if outcome.status == "error":
+        if outcome.message:
+            typer.echo(f"✗ {outcome.message}", err=True)
+        raise typer.Exit(1)
     
     if outcome.status == "warning" or not outcome.payload:
         if outcome.message:
             typer.echo(f"⚠ {outcome.message}", err=False)
         raise typer.Exit(0)
     
-    if outcome.status == "error":
-        if outcome.message:
-            typer.echo(f"✗ {outcome.message}", err=True)
-        raise typer.Exit(1)
-    
     results = outcome.payload
     
     # Detect query type: summary (n_indicadores set) vs detail
     if results and results[0].n_indicadores is not None:
         # Summary: top companies with most indicators
-        tbl = Table(title="Top companies with most indicators", show_lines=False)
+        tbl = Table(title="Top 10 empresas com mais indicadores", show_lines=False)
         tbl.add_column("CNPJ", style="cyan", no_wrap=True)
-        tbl.add_column("Indicators", justify="right")
-        tbl.add_column("First period", justify="center")
-        tbl.add_column("Last period", justify="center")
+        tbl.add_column("Indicadores", justify="right")
+        tbl.add_column("Primeiro período", justify="center")
+        tbl.add_column("Último período", justify="center")
         for row in results:
             tbl.add_row(
                 row.cnpj_cia,
@@ -89,10 +79,10 @@ def render_query_result(outcome: Outcome[list[QueryResult]]) -> None:
     else:
         # Detail: indicators by period for specific company
         cnpj_display = results[0].cnpj_cia if results else "unknown"
-        tbl = Table(title=f"Indicators — {cnpj_display}", show_lines=False)
-        tbl.add_column("Period", style="cyan", no_wrap=True)
-        tbl.add_column("Indicator")
-        tbl.add_column("Value", justify="right")
+        tbl = Table(title=f"Indicadores — {cnpj_display}", show_lines=False)
+        tbl.add_column("dt_refer", style="cyan", no_wrap=True)
+        tbl.add_column("indicador")
+        tbl.add_column("valor", justify="right")
         for row in results:
             valor_str = f"{row.valor:.4f}" if row.valor is not None else "—"
             tbl.add_row(str(row.dt_refer), str(row.indicador), valor_str)

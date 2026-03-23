@@ -2,11 +2,11 @@
 from . import handlers
 from .cli import app
 from .models import (
-    Outcome,
     DownloadInput,
+    IndicatorsInput,
     LoadInput,
     NormalizeInput,
-    IndicatorsInput,
+    Outcome,
     QueryInput,
     QueryResult,
 )

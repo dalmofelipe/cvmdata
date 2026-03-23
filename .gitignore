@@ -4,7 +4,9 @@ data/
 
 # ambiente
 .env
+.env*
 .venv/
+venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -22,9 +24,13 @@ htmlcov/
 
 # IDEs
 .vscode/settings.json
+.vscode/
 .idea/
 *.swp
 *~
+.DS_Store
+Thumbs.db
+*.tmp
 
 # dist / build
 dist/

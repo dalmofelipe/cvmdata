@@ -5,17 +5,17 @@ from typing import Optional
 
 import typer
 
-from cvmdata.config import settings
 from cvmdata.cli import handlers
+from cvmdata.cli.logging import configure_logging
 from cvmdata.cli.models import (
     DownloadInput,
+    IndicatorsInput,
     LoadInput,
     NormalizeInput,
-    IndicatorsInput,
     QueryInput,
 )
-from cvmdata.cli.logging import setup_logging
 from cvmdata.cli.render import render_outcome, render_query_result
+from cvmdata.config import settings
 
 # ============================================================================
 # Typer App Instance (T029)
@@ -43,11 +43,11 @@ def download(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Baixa os ZIPs ITR e DFP da CVM para data/raw/."""
-    setup_logging(verbose)
+    configure_logging(verbose)
     
     # Validate year if provided
     if year is not None and not (2000 <= year <= 3000):
-        typer.echo("✗ Invalid year (must be 2000-3000)", err=True)
+        typer.echo("✗ Ano inválido (deve estar entre 2000 e 3000)", err=True)
         raise typer.Exit(1)
     
     # Prepare input and delegate to handler
@@ -72,7 +72,7 @@ def load(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Carrega os CSVs extraídos para o DuckDB (tabelas raw_*)."""
-    setup_logging(verbose)
+    configure_logging(verbose)
     
     inp = LoadInput(
         years=[year] if year else settings.years,
@@ -91,7 +91,7 @@ def normalize(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Normaliza, deduplica e consolida os dados brutos no DuckDB."""
-    setup_logging(verbose)
+    configure_logging(verbose)
     
     inp = NormalizeInput(verbose=verbose)
     outcome = handlers.normalize.handle(inp)
@@ -110,7 +110,7 @@ def indicators(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Calcula indicadores fundamentalistas e grava no DuckDB."""
-    setup_logging(verbose)
+    configure_logging(verbose)
     
     inp = IndicatorsInput(cnpj=cnpj, verbose=verbose)
     outcome = handlers.indicators.handle(inp)
@@ -131,6 +131,10 @@ def query(
     ),
 ) -> None:
     """Consulta indicadores fundamentalistas calculados."""
+    if year is not None and not (2000 <= year <= 3000):
+        typer.echo("✗ Ano inválido (deve estar entre 2000 e 3000)", err=True)
+        raise typer.Exit(1)
+
     inp = QueryInput(cnpj=cnpj, year=year)
     outcome = handlers.query.handle(inp)
     render_query_result(outcome)

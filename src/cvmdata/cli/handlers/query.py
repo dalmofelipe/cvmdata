@@ -1,18 +1,11 @@
 # Query handler implementation
-from cvmdata.cli.models import QueryInput, QueryResult, Outcome
-from cvmdata.ingestion.db import get_connection
+from cvmdata.cli.models import Outcome, QueryInput, QueryResult
 from cvmdata.config import settings
+from cvmdata.ingestion.db import get_connection
 
 
 def handle(input: QueryInput) -> Outcome[list[QueryResult]]:
-    """Query calculated indicators.
-    
-    Args:
-        input: QueryInput with optional CNPJ and year filters.
-    
-    Returns:
-        Outcome with list[QueryResult] rows, or warning/error.
-    """
+    """Consulta indicadores calculados para resumo ou detalhe."""
     with get_connection(settings.db_path) as conn:
         try:
             if input.cnpj is None:
@@ -39,14 +32,34 @@ def handle(input: QueryInput) -> Outcome[list[QueryResult]]:
                     params
                 ).fetchall()
         except Exception as exc:
-            return Outcome.error(f"Query failed: {exc}")
+            return Outcome.error(f"Falha na consulta: {exc}")
     
     if not rows:
-        cnpj_str = f" for {input.cnpj}" if input.cnpj else ""
-        return Outcome.warning(f"No indicators found{cnpj_str}")
+        if input.cnpj:
+            return Outcome.warning(f"Nenhum indicador encontrado para CNPJ {input.cnpj!r}")
+        return Outcome.warning("Nenhum indicador encontrado — rode 'indicators' primeiro")
     
-    # Convert rows to QueryResult objects
-    results = [QueryResult(*row) for row in rows]
+    results: list[QueryResult] = []
+    if input.cnpj is None:
+        for row in rows:
+            results.append(
+                QueryResult(
+                    cnpj_cia=row[0],
+                    n_indicadores=row[1],
+                    primeiro_periodo=str(row[2]) if row[2] is not None else None,
+                    ultimo_periodo=str(row[3]) if row[3] is not None else None,
+                )
+            )
+    else:
+        for row in rows:
+            results.append(
+                QueryResult(
+                    cnpj_cia=row[0],
+                    dt_refer=str(row[1]) if row[1] is not None else None,
+                    indicador=row[2],
+                    valor=row[3],
+                )
+            )
     
     return Outcome.success(payload=results)
 

@@ -1,6 +1,6 @@
 # Input and output models for CLI handlers
 from dataclasses import dataclass
-from typing import Generic, TypeVar, Literal
+from typing import Generic, Literal, TypeVar
 
 T = TypeVar("T")
 
@@ -20,7 +20,11 @@ class Outcome(Generic[T]):
     """Result category: success (completed), warning (no-data, not failure), or error (failure)."""
     
     payload: T | None = None
-    """Data returned by handler (dict for download/load/normalize, int for indicators, list for query)."""
+    """Data returned by handler.
+
+    Ex.: dict para download/load/normalize, int para indicators e
+    list para query.
+    """
     
     message: str | None = None
     """User-facing message (no technical details). Rendered with emoji prefix by render layer."""
