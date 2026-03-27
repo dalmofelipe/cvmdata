@@ -102,3 +102,66 @@ class QueryResult:
     primeiro_periodo: str | None = None  # Summary query only
     ultimo_periodo: str | None = None  # Summary query only
 
+
+# ============================================================================
+# Cadastro DTOs — Input and Output for cadastro commands
+# ============================================================================
+
+@dataclass
+class DownloadCadInput:
+    """Input for download-cad command handler."""
+    force: bool
+    verbose: bool
+
+
+@dataclass
+class LoadCadInput:
+    """Input for load-cad command handler."""
+    verbose: bool
+
+
+@dataclass
+class ClassifyCadInput:
+    """Input for classify-cad command handler."""
+    verbose: bool
+
+
+@dataclass
+class QueryCadInput:
+    """Input for query-cad command handler."""
+    cnpj: str | None
+    verbose: bool
+
+
+@dataclass
+class ClassifyCadResult:
+    """Output from classify-cad handler."""
+    total: int
+    """Total number of CNPJs classified."""
+    high: int
+    """Number of 'high' profile classifications."""
+    low: int
+    """Number of 'low' profile classifications."""
+
+
+@dataclass
+class QueryCadResult:
+    """Row from query-cad result.
+    
+    Summary mode (no cnpj filter):
+    - cnpj_cia, denom_social, setor_ativ, profile_id, confidence, updated_at populated
+    
+    Detail mode (cnpj filter):
+    - Same fields but typically filtering to one company.
+    """
+    cnpj_cia: str
+    denom_social: str | None = None
+    setor_ativ: str | None = None
+    profile_id: str | None = None
+    confidence: float | str | None = None
+    updated_at: str | None = None
+    # Additional fields for detail query
+    cd_cvm: str | None = None
+    denom_comerc: str | None = None
+    rule_applied: str | None = None
+

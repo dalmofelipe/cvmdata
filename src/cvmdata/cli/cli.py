@@ -14,7 +14,18 @@ from cvmdata.cli.models import (
     NormalizeInput,
     QueryInput,
 )
-from cvmdata.cli.render import render_outcome, render_query_result
+from cvmdata.cli.models import (
+    ClassifyCadInput,
+    DownloadCadInput,
+    DownloadInput,
+    IndicatorsInput,
+    LoadCadInput,
+    LoadInput,
+    NormalizeInput,
+    QueryCadInput,
+    QueryInput,
+)
+from cvmdata.cli.render import render_outcome, render_query_cad_result, render_query_result
 from cvmdata.config import settings
 
 # ============================================================================
@@ -138,4 +149,60 @@ def query(
     inp = QueryInput(cnpj=cnpj, year=year)
     outcome = handlers.query.handle(inp)
     render_query_result(outcome)
+
+
+# ============================================================================
+# Cadastro CVM Commands
+# ============================================================================
+
+@app.command("download-cad")
+def download_cad(
+    force: bool = typer.Option(False, "--force", "-f", help="Re-baixa mesmo se arquivo já existir."),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Baixa os arquivos cadastrais CVM (meta + CSV) para data/raw/cad/."""
+    configure_logging(verbose)
+    
+    inp = DownloadCadInput(force=force, verbose=verbose)
+    outcome = handlers.download_cad.handle(inp)
+    render_outcome(outcome)
+
+
+@app.command("load-cad")
+def load_cad(
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Carrega cad_cia_aberta.csv na tabela cad_cia_aberta_raw do DuckDB."""
+    configure_logging(verbose)
+    
+    inp = LoadCadInput(verbose=verbose)
+    outcome = handlers.load_cad.handle(inp)
+    render_outcome(outcome)
+
+
+@app.command("classify-cad")
+def classify_cad(
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Classifica CNPJs ativos por setor e persiste em company_classification."""
+    configure_logging(verbose)
+    
+    inp = ClassifyCadInput(verbose=verbose)
+    outcome = handlers.classify_cad.handle(inp)
+    render_outcome(outcome)
+
+
+@app.command("query-cad")
+def query_cad(
+    cnpj: Optional[str] = typer.Option(
+        None, "--cnpj", help="CNPJ da empresa (ex: 12.345.678/0001-99)."
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Consulta dados cadastrais e classificação setorial."""
+    configure_logging(verbose)
+    
+    inp = QueryCadInput(cnpj=cnpj, verbose=verbose)
+    outcome = handlers.query_cad.handle(inp)
+    render_query_cad_result(outcome)
 
