@@ -21,7 +21,7 @@ dev = [
 ]
 
 [project.scripts]
-cvmdata = "cvmdata.cli:app"
+cvmdata = "cvmdata.cli.cli:app"
 
 [build-system]
 requires = ["hatchling"]
