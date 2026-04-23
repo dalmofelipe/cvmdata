@@ -8,9 +8,7 @@ import pytest
 from cvmdata.ingestion.db import init_indicators_schema, init_schema
 from cvmdata.ingestion.loader import load_csv
 from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
-from cvmdata.transform.indicators import (
-    _get_ttm_value,
-    calculate_all,
+from cvmdata.transform.calc_plan import (
     cobertura_juros,
     divida_bruta,
     divida_liquida,
@@ -27,6 +25,7 @@ from cvmdata.transform.indicators import (
     roa,
     roe,
 )
+from cvmdata.transform.indicators import (_get_ttm_value, calculate_all)
 from cvmdata.transform.normalize import normalize_table
 
 # ── account_map ──────────────────────────────────────────────────────────────
