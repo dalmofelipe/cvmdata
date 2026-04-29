@@ -5,8 +5,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-
-from cvmdata.cli.models import Outcome, QueryCadResult, QueryResult
+from cvmdata.cli.models import Outcome, QueryInfoCadResult, QueryResult
 
 
 def _format_confidence(value: float | str | None) -> str:
@@ -107,10 +106,10 @@ def render_query_result(outcome: Outcome[list[QueryResult]]) -> None:
 
 
 # ============================================================================
-# Query Cadastro Rendering (Rich Table, 2 modes: summary vs detail)
+# Query Informações Cadastrais Rendering (Rich Table, 2 modes: summary vs detail)
 # ============================================================================
 
-def render_query_cad_result(outcome: Outcome[list[QueryCadResult]]) -> None:
+def render_query_info_cad_result(outcome: Outcome[list[QueryInfoCadResult]]) -> None:
     """Renderiza saída do comando query-cad com suporte a dois modos.
 
     Summary mode (no --cnpj):
@@ -182,4 +181,3 @@ def render_query_cad_result(outcome: Outcome[list[QueryCadResult]]) -> None:
 
     console.print(tbl)
     raise typer.Exit(0)
-

@@ -2,31 +2,21 @@
 from . import handlers
 from .cli import app
 from .models import (
+    ClassifyInfoCadInput,
+    ClassifyInfoCadResult,
+    DownloadInfoCadInput,
     DownloadInput,
     IndicatorsInput,
+    LoadInfoCadInput,
     LoadInput,
     NormalizeInput,
     Outcome,
+    QueryInfoCadInput,
+    QueryInfoCadResult,
     QueryInput,
     QueryResult,
 )
-from .models import (
-    ClassifyCadInput,
-    ClassifyCadResult,
-    DownloadCadInput,
-    DownloadInput,
-    IndicatorsInput,
-    LoadCadInput,
-    LoadInput,
-    NormalizeInput,
-    Outcome,
-    QueryCadInput,
-    QueryCadResult,
-    QueryInput,
-    QueryResult,
-)
-from .render import render_outcome, render_query_result
-from .render import render_outcome, render_query_cad_result, render_query_result
+from .render import render_outcome, render_query_info_cad_result, render_query_result
 
 __all__ = [
     "app",
@@ -40,19 +30,15 @@ __all__ = [
     "IndicatorsInput",
     "QueryInput",
     "QueryResult",
-    # Cadastro command inputs/outputs
-    "DownloadCadInput",
-    "LoadCadInput",
-    "ClassifyCadInput",
-    "ClassifyCadResult",
-    "QueryCadInput",
-    "QueryCadResult",
+    # Informação Cadastral command inputs/outputs
+    "DownloadInfoCadInput",
+    "LoadInfoCadInput",
+    "ClassifyInfoCadInput",
+    "ClassifyInfoCadResult",
+    "QueryInfoCadInput",
+    "QueryInfoCadResult",
     # Rendering
     "render_outcome",
-        "render_query_cad_result",
+    "render_query_info_cad_result",
     "render_query_result",
 ]
-
-
-
-

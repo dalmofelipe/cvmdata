@@ -2,10 +2,6 @@
 
 Contas verificadas nos dados CVM 2024 (BPA + BPP + DRE).
 Match exato apenas — sem inferência de prefixo.
-
-# TODO: sector_profile — bancos reportam empréstimos em contas diferentes
-# das empresas industriais.  Evidência necessária: testes com fixtures de
-# BCO Brasil (CNPJ 00.000.000/0001-91) e BRB (00.038.121/0001-28).
 """
 from __future__ import annotations
 

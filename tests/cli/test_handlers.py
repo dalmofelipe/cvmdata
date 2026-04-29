@@ -5,32 +5,25 @@ from __future__ import annotations
 import pytest
 from types import SimpleNamespace
 
-from cvmdata.cli.handlers import (
-    classify_cad,
-    download,
-    download_cad,
-    indicators,
-    load,
-    load_cad,
-    normalize,
-    query,
-    query_cad,
-)
+from cvmdata.cli.handlers.ingestion import download, indicators, load, normalize, query
+from cvmdata.cli.handlers.transform import classify_info_cad, download_info_cad, load_info_cad, query_info_cad
 from cvmdata.cli.models import (
-    ClassifyCadInput,
-    ClassifyCadResult,
-    DownloadCadInput,
+    ClassifyInfoCadInput,
+    ClassifyInfoCadResult,
+    DownloadInfoCadInput,
     DownloadInput,
     IndicatorsInput,
-    LoadCadInput,
+    LoadInfoCadInput,
     LoadInput,
     NormalizeInput,
     Outcome,
-    QueryCadInput,
-    QueryCadResult,
+    QueryInfoCadInput,
+    QueryInfoCadResult,
     QueryInput,
     QueryResult,
 )
+
+
 
 # ============================================================================
 # Models / Outcome
@@ -392,15 +385,15 @@ def test_query_handler_error(
 
 
 # ============================================================================
-# Download Cadastro Handler
+# Download Informação Cadastral Handler
 # ============================================================================
 
 
-def test_download_cad_handler_success(
+def test_download_info_cad_handler_success(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    """Retorna sucesso quando download de cadastro funciona."""
+    """Retorna sucesso quando download de informacao cadastral funciona."""
     meta_file = tmp_path / "cad_cia_aberta.meta"
     csv_file = tmp_path / "cad_cia_aberta.csv"
     meta_file.write_text("meta content")
@@ -409,9 +402,9 @@ def test_download_cad_handler_success(
     def fake_download(*args, **kwargs):
         return (meta_file, csv_file)
 
-    monkeypatch.setattr(download_cad, "download_cadastro", fake_download)
+    monkeypatch.setattr(download_info_cad, "download_info_cad", fake_download)
 
-    outcome = download_cad.handle(DownloadCadInput(force=False, verbose=False))
+    outcome = download_info_cad.handle(DownloadInfoCadInput(force=False, verbose=False))
 
     assert outcome.status == "success"
     assert outcome.payload is not None
@@ -425,49 +418,49 @@ def test_download_cad_handler_error(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_download(*args, **kwargs):
         raise FileNotFoundError("CVM server down")
 
-    monkeypatch.setattr(download_cad, "download_cadastro", fake_download)
+    monkeypatch.setattr(download_info_cad, "download_info_cad", fake_download)
 
-    outcome = download_cad.handle(DownloadCadInput(force=True, verbose=False))
+    outcome = download_info_cad.handle(DownloadInfoCadInput(force=True, verbose=False))
 
     assert outcome.status == "error"
     assert "cadastrais" in (outcome.message or "")
 
 
 # ============================================================================
-# Load Cadastro Handler
+# Load Informação Cadastral Handler
 # ============================================================================
 
 
-def test_load_cad_handler_success(
+def test_load_info_cad_handler_success(
     monkeypatch: pytest.MonkeyPatch,
     connection_context_factory,
     tmp_path,
 ) -> None:
-    """Retorna sucesso quando carregamento do cadastro funciona."""
+    """Retorna sucesso quando carregamento da informacao cadastral funciona."""
     csv_path = tmp_path / "cad_cia_aberta.csv"
     csv_path.write_text("cnpj,name\n00.000.000/0001-91,Banco X\n")
 
     def fake_get_connection(_):
         return connection_context_factory(object())
 
-    def fake_load_cadastro(_conn, _path):
+    def fake_load_info_cad(_conn, _path):
         return 1
 
     monkeypatch.setattr(
-        load_cad,
+        load_info_cad,
         "settings",
         SimpleNamespace(cad_dir=tmp_path, db_path=":memory:"),
     )
-    monkeypatch.setattr(load_cad, "get_connection", fake_get_connection)
-    monkeypatch.setattr(load_cad, "load_cadastro", fake_load_cadastro)
+    monkeypatch.setattr(load_info_cad, "get_connection", fake_get_connection)
+    monkeypatch.setattr(load_info_cad, "load_info_cad", fake_load_info_cad)
 
-    outcome = load_cad.handle(LoadCadInput(verbose=False))
+    outcome = load_info_cad.handle(LoadInfoCadInput(verbose=False))
 
     assert outcome.status == "success"
     assert outcome.payload == 1
 
 
-def test_load_cad_handler_warning_file_not_found(
+def test_load_info_cad_handler_warning_file_not_found(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
@@ -476,52 +469,52 @@ def test_load_cad_handler_warning_file_not_found(
     empty_dir.mkdir()
 
     monkeypatch.setattr(
-        load_cad,
+        load_info_cad,
         "settings",
         SimpleNamespace(cad_dir=empty_dir, db_path=":memory:"),
     )
 
-    outcome = load_cad.handle(LoadCadInput(verbose=False))
+    outcome = load_info_cad.handle(LoadInfoCadInput(verbose=False))
 
     assert outcome.status == "warning"
     assert "não encontrado" in (outcome.message or "")
 
 
-def test_load_cad_handler_error(
+def test_load_info_cad_handler_error(
     monkeypatch: pytest.MonkeyPatch,
     connection_context_factory,
     tmp_path,
 ) -> None:
-    """Retorna erro quando load_cadastro falha."""
+    """Retorna erro quando load_info_cad falha."""
     csv_path = tmp_path / "cad_cia_aberta.csv"
     csv_path.write_text("cnpj,name\n00.000.000/0001-91,Banco X\n")
 
     def fake_get_connection(_):
         return connection_context_factory(object())
 
-    def fake_load_cadastro(_conn, _path):
+    def fake_load_info_cad(_conn, _path):
         raise RuntimeError("insert failed")
 
     monkeypatch.setattr(
-        load_cad,
+        load_info_cad,
         "settings",
         SimpleNamespace(cad_dir=tmp_path, db_path=":memory:"),
     )
-    monkeypatch.setattr(load_cad, "get_connection", fake_get_connection)
-    monkeypatch.setattr(load_cad, "load_cadastro", fake_load_cadastro)
+    monkeypatch.setattr(load_info_cad, "get_connection", fake_get_connection)
+    monkeypatch.setattr(load_info_cad, "load_info_cad", fake_load_info_cad)
 
-    outcome = load_cad.handle(LoadCadInput(verbose=False))
+    outcome = load_info_cad.handle(LoadInfoCadInput(verbose=False))
 
     assert outcome.status == "error"
     assert "Falha" in (outcome.message or "")
 
 
 # ============================================================================
-# Classify Cadastro Handler
+# Classify Informação Cadastral Handler
 # ============================================================================
 
 
-def test_classify_cad_handler_success(
+def test_classify_info_cad_handler_success(
     monkeypatch: pytest.MonkeyPatch,
     connection_context_factory,
 ) -> None:
@@ -533,19 +526,19 @@ def test_classify_cad_handler_success(
     def fake_classify(_conn):
         return {"total": 100, "high": 60, "low": 40}
 
-    monkeypatch.setattr(classify_cad, "get_connection", fake_get_connection)
-    monkeypatch.setattr(classify_cad, "classify_cadastro", fake_classify)
+    monkeypatch.setattr(classify_info_cad, "get_connection", fake_get_connection)
+    monkeypatch.setattr(classify_info_cad, "classify_info_cad", fake_classify)
 
-    outcome = classify_cad.handle(ClassifyCadInput(verbose=False))
+    outcome = classify_info_cad.handle(ClassifyInfoCadInput(verbose=False))
 
     assert outcome.status == "success"
-    assert isinstance(outcome.payload, ClassifyCadResult)
+    assert isinstance(outcome.payload, ClassifyInfoCadResult)
     assert outcome.payload.total == 100
     assert outcome.payload.high == 60
     assert outcome.payload.low == 40
 
 
-def test_classify_cad_handler_warning_not_loaded(
+def test_classify_info_cad_handler_warning_not_loaded(
     monkeypatch: pytest.MonkeyPatch,
     connection_context_factory,
 ) -> None:
@@ -557,15 +550,15 @@ def test_classify_cad_handler_warning_not_loaded(
     def fake_classify(_conn):
         raise RuntimeError("table cad_cia_aberta_raw not found")
 
-    monkeypatch.setattr(classify_cad, "get_connection", fake_get_connection)
-    monkeypatch.setattr(classify_cad, "classify_cadastro", fake_classify)
+    monkeypatch.setattr(classify_info_cad, "get_connection", fake_get_connection)
+    monkeypatch.setattr(classify_info_cad, "classify_info_cad", fake_classify)
 
-    outcome = classify_cad.handle(ClassifyCadInput(verbose=False))
+    outcome = classify_info_cad.handle(ClassifyInfoCadInput(verbose=False))
 
     assert outcome.status == "warning"
 
 
-def test_classify_cad_handler_error(
+def test_classify_info_cad_handler_error(
     monkeypatch: pytest.MonkeyPatch,
     connection_context_factory,
 ) -> None:
@@ -577,21 +570,21 @@ def test_classify_cad_handler_error(
     def fake_classify(_conn):
         raise ValueError("unexpected error")
 
-    monkeypatch.setattr(classify_cad, "get_connection", fake_get_connection)
-    monkeypatch.setattr(classify_cad, "classify_cadastro", fake_classify)
+    monkeypatch.setattr(classify_info_cad, "get_connection", fake_get_connection)
+    monkeypatch.setattr(classify_info_cad, "classify_info_cad", fake_classify)
 
-    outcome = classify_cad.handle(ClassifyCadInput(verbose=False))
+    outcome = classify_info_cad.handle(ClassifyInfoCadInput(verbose=False))
 
     assert outcome.status == "error"
     assert "Falha" in (outcome.message or "")
 
 
 # ============================================================================
-# Query Cadastro Handler
+# Query Informação Cadastral Handler
 # ============================================================================
 
 
-def test_query_cad_handler_summary_success(
+def test_query_info_cad_handler_summary_success(
     monkeypatch: pytest.MonkeyPatch,
     connection_context_factory,
 ) -> None:
@@ -611,18 +604,18 @@ def test_query_cad_handler_summary_success(
     def fake_get_connection(_):
         return connection_context_factory(MockConn())
 
-    monkeypatch.setattr(query_cad, "get_connection", fake_get_connection)
+    monkeypatch.setattr(query_info_cad, "get_connection", fake_get_connection)
 
-    outcome = query_cad.handle(QueryCadInput(cnpj=None, verbose=False))
+    outcome = query_info_cad.handle(QueryInfoCadInput(cnpj=None, verbose=False))
 
     assert outcome.status == "success"
     assert outcome.payload is not None
     assert len(outcome.payload) == 2
-    assert all(isinstance(r, QueryCadResult) for r in outcome.payload)
+    assert all(isinstance(r, QueryInfoCadResult) for r in outcome.payload)
     assert outcome.payload[0].cnpj_cia == "00.000.000/0001-91"
 
 
-def test_query_cad_handler_detail_success(
+def test_query_info_cad_handler_detail_success(
     monkeypatch: pytest.MonkeyPatch,
     connection_context_factory,
 ) -> None:
@@ -651,9 +644,9 @@ def test_query_cad_handler_detail_success(
     def fake_get_connection(_):
         return connection_context_factory(MockConn())
 
-    monkeypatch.setattr(query_cad, "get_connection", fake_get_connection)
+    monkeypatch.setattr(query_info_cad, "get_connection", fake_get_connection)
 
-    outcome = query_cad.handle(QueryCadInput(cnpj="00.000.000/0001-91", verbose=False))
+    outcome = query_info_cad.handle(QueryInfoCadInput(cnpj="00.000.000/0001-91", verbose=False))
 
     assert outcome.status == "success"
     assert outcome.payload is not None
@@ -662,7 +655,7 @@ def test_query_cad_handler_detail_success(
     assert outcome.payload[0].denom_comerc == "Banco X Comercial"
 
 
-def test_query_cad_handler_warning_not_found(
+def test_query_info_cad_handler_warning_not_found(
     monkeypatch: pytest.MonkeyPatch,
     connection_context_factory,
 ) -> None:
@@ -678,15 +671,15 @@ def test_query_cad_handler_warning_not_found(
     def fake_get_connection(_):
         return connection_context_factory(MockConn())
 
-    monkeypatch.setattr(query_cad, "get_connection", fake_get_connection)
+    monkeypatch.setattr(query_info_cad, "get_connection", fake_get_connection)
 
-    outcome = query_cad.handle(QueryCadInput(cnpj="99.999.999/0001-99", verbose=False))
+    outcome = query_info_cad.handle(QueryInfoCadInput(cnpj="99.999.999/0001-99", verbose=False))
 
     assert outcome.status == "warning"
     assert "encontrada" in (outcome.message or "")
 
 
-def test_query_cad_handler_error(
+def test_query_info_cad_handler_error(
     monkeypatch: pytest.MonkeyPatch,
     connection_context_factory,
 ) -> None:
@@ -699,9 +692,9 @@ def test_query_cad_handler_error(
     def fake_get_connection(_):
         return connection_context_factory(BrokenConn())
 
-    monkeypatch.setattr(query_cad, "get_connection", fake_get_connection)
+    monkeypatch.setattr(query_info_cad, "get_connection", fake_get_connection)
 
-    outcome = query_cad.handle(QueryCadInput(cnpj=None, verbose=False))
+    outcome = query_info_cad.handle(QueryInfoCadInput(cnpj=None, verbose=False))
 
     assert outcome.status == "error"
     assert "Falha" in (outcome.message or "")

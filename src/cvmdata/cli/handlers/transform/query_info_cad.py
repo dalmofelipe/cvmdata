@@ -1,10 +1,10 @@
 # Query cadastro CVM handler
-from cvmdata.cli.models import Outcome, QueryCadInput, QueryCadResult
+from cvmdata.cli.models import Outcome, QueryInfoCadInput, QueryInfoCadResult
 from cvmdata.config import settings
 from cvmdata.ingestion.db import get_connection
 
 
-def handle(input: QueryCadInput) -> Outcome[list[QueryCadResult]]:
+def handle(input: QueryInfoCadInput) -> Outcome[list[QueryInfoCadResult]]:
     """Consulta dados cadastrais e classificação setorial.
     
     Two modes:
@@ -44,13 +44,13 @@ def handle(input: QueryCadInput) -> Outcome[list[QueryCadResult]]:
         return Outcome.warning("Nenhuma classificação encontrada — rode 'classify-cad' primeiro")
     
     # Convert rows to typed QueryCadResult objects
-    results: list[QueryCadResult] = []
+    results: list[QueryInfoCadResult] = []
     
     if input.cnpj is None:
         # Summary mode: 6 columns
         for row in rows:
             results.append(
-                QueryCadResult(
+                QueryInfoCadResult(
                     cnpj_cia=row[0],
                     denom_social=row[1],
                     setor_ativ=row[2],
@@ -63,7 +63,7 @@ def handle(input: QueryCadInput) -> Outcome[list[QueryCadResult]]:
         # Detail mode: 9 columns
         for row in rows:
             results.append(
-                QueryCadResult(
+                QueryInfoCadResult(
                     cnpj_cia=row[0],
                     cd_cvm=row[1],
                     denom_social=row[2],

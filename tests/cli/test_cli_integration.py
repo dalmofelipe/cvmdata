@@ -5,7 +5,7 @@ from __future__ import annotations
 from typer.testing import CliRunner
 
 from cvmdata.cli import app, handlers
-from cvmdata.cli.models import Outcome, QueryCadResult, QueryResult
+from cvmdata.cli.models import Outcome, QueryInfoCadResult, QueryResult
 
 runner = CliRunner()
 
@@ -19,10 +19,10 @@ def test_app_help_lists_all_commands() -> None:
     assert "normalize" in result.stdout
     assert "indicators" in result.stdout
     assert "query" in result.stdout
-    assert "download-cad" in result.stdout
-    assert "load-cad" in result.stdout
-    assert "classify-cad" in result.stdout
-    assert "query-cad" in result.stdout
+    assert "download-info-cad" in result.stdout
+    assert "load-info-cad" in result.stdout
+    assert "classify-info-cad" in result.stdout
+    assert "query-info-cad" in result.stdout
 
 
 def test_download_command_invalid_year() -> None:
@@ -133,38 +133,38 @@ def test_query_command_error(monkeypatch) -> None:
     assert "✗" in result.stderr
 
 
-def test_download_cad_command_delegates_to_handler(monkeypatch) -> None:
-    """Comando download-cad deve delegar ao handler e sair com 0 em sucesso."""
-    _patch_handle(monkeypatch, handlers.download_cad, Outcome.success(message="ok"))
+def test_download_info_cad_command_delegates_to_handler(monkeypatch) -> None:
+    """Comando download-info-cad deve delegar ao handler e sair com 0 em sucesso."""
+    _patch_handle(monkeypatch, handlers.download_info_cad, Outcome.success(message="ok"))
 
-    result = runner.invoke(app, ["download-cad", "--force"])
+    result = runner.invoke(app, ["download-info-cad", "--force"])
     assert result.exit_code == 0
     assert "✓" in result.stdout
 
 
-def test_load_cad_command_warning(monkeypatch) -> None:
-    """Comando load-cad com warning não deve falhar processo."""
-    _patch_handle(monkeypatch, handlers.load_cad, Outcome.warning(message="sem arquivo"))
+def test_load_info_cad_command_warning(monkeypatch) -> None:
+    """Comando load-info-cad com warning não deve falhar processo."""
+    _patch_handle(monkeypatch, handlers.load_info_cad, Outcome.warning(message="sem arquivo"))
 
-    result = runner.invoke(app, ["load-cad"])
+    result = runner.invoke(app, ["load-info-cad"])
     assert result.exit_code == 0
     assert "⚠" in result.stdout
 
 
-def test_classify_cad_command_error(monkeypatch) -> None:
-    """Comando classify-cad deve sair com 1 em erro."""
-    _patch_handle(monkeypatch, handlers.classify_cad, Outcome.error(message="falha"))
+def test_classify_info_cad_command_error(monkeypatch) -> None:
+    """Comando classify-info-cad deve sair com 1 em erro."""
+    _patch_handle(monkeypatch, handlers.classify_info_cad, Outcome.error(message="falha"))
 
-    result = runner.invoke(app, ["classify-cad"])
+    result = runner.invoke(app, ["classify-info-cad"])
     assert result.exit_code == 1
     assert "✗" in result.stderr
 
 
-def test_query_cad_command_summary_table(monkeypatch) -> None:
-    """Query-cad sem CNPJ deve renderizar tabela de resumo."""
+def test_query_info_cad_command_summary_table(monkeypatch) -> None:
+    """Query-info-cad sem CNPJ deve renderizar tabela de resumo."""
     outcome = Outcome.success(
         payload=[
-            QueryCadResult(
+            QueryInfoCadResult(
                 cnpj_cia="00.000.000/0001-91",
                 denom_social="Banco X",
                 setor_ativ="Financial",
@@ -174,18 +174,18 @@ def test_query_cad_command_summary_table(monkeypatch) -> None:
             )
         ]
     )
-    _patch_handle(monkeypatch, handlers.query_cad, outcome)
+    _patch_handle(monkeypatch, handlers.query_info_cad, outcome)
 
-    result = runner.invoke(app, ["query-cad"])
+    result = runner.invoke(app, ["query-info-cad"])
     assert result.exit_code == 0
     assert "company_classification" in result.stdout
 
 
-def test_query_cad_command_detail_table(monkeypatch) -> None:
-    """Query-cad com CNPJ deve renderizar tabela de detalhe."""
+def test_query_info_cad_command_detail_table(monkeypatch) -> None:
+    """Query-info-cad com CNPJ deve renderizar tabela de detalhe."""
     outcome = Outcome.success(
         payload=[
-            QueryCadResult(
+            QueryInfoCadResult(
                 cnpj_cia="00.000.000/0001-91",
                 cd_cvm="1234",
                 denom_social="Banco X",
@@ -198,8 +198,8 @@ def test_query_cad_command_detail_table(monkeypatch) -> None:
             )
         ]
     )
-    _patch_handle(monkeypatch, handlers.query_cad, outcome)
+    _patch_handle(monkeypatch, handlers.query_info_cad, outcome)
 
-    result = runner.invoke(app, ["query-cad", "--cnpj", "00.000.000/0001-91"])
+    result = runner.invoke(app, ["query-info-cad", "--cnpj", "00.000.000/0001-91"])
     assert result.exit_code == 0
     assert "Classificação" in result.stdout

@@ -1,7 +1,7 @@
 """Classificação cadastral de empresas CVM.
 
 Fluxo:
-  classify_cadastro(conn) -> dict com contagens de resultados
+  classify_info_cad(conn) -> dict com contagens de resultados
 
 Etapas internas:
   1. Ler linhas SIT='ATIVO' de cad_cia_aberta_raw
@@ -27,6 +27,7 @@ FALLBACK_PROFILE = "industrial_default"
 EVENT_AMBIGUOUS = "ambiguous_setor"
 EVENT_EMPTY = "empty_setor"
 EVENT_UNMAPPED = "unmapped_setor"
+
 
 # ── SQL helpers ───────────────────────────────────────────────────────────────
 
@@ -55,7 +56,7 @@ sectors AS (
     SELECT
         CNPJ_CIA AS cnpj_cia,
         COUNT(DISTINCT SETOR_ATIV) AS n_setores_distintos,
-        MAX(CASE WHEN SETOR_ATIV IS NOT NULL AND TRIM(SETOR_ATIV) != '' THEN SETOR_ATIV END)
+        MAX(CASE WHEN SETOR_ATIV IS NOT NULL AND TRIM(SETOR_ATIV) != '' THEN SETOR_ATIV END) 
             AS setor_unico
     FROM cad_cia_aberta_raw
     WHERE SIT = 'ATIVO'
@@ -80,23 +81,23 @@ _SQL_PROFILE_LOOKUP = """
 SELECT profile_id
 FROM setor_profile_map
 WHERE setor_ativ = ?
-  AND active = TRUE
+    AND active = TRUE
 LIMIT 1
 """
 
 # Upsert em company_classification (INSERT OR REPLACE)
 _SQL_UPSERT_CLASSIFICATION = """
-INSERT OR REPLACE INTO company_classification
-    (cnpj_cia, cd_cvm, denom_social, denom_comerc, setor_ativ,
-     profile_id, confidence, rule_applied, updated_at)
+INSERT OR REPLACE INTO company_classification(
+    cnpj_cia, cd_cvm, denom_social, denom_comerc, setor_ativ, profile_id, confidence, 
+    rule_applied, updated_at
+)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 # Upsert idempotente em classification_curation_events
 # Usa ON CONFLICT para atualizar details/updated_at sem duplicar
 _SQL_UPSERT_CURATION_EVENT = """
-INSERT INTO classification_curation_events
-    (cnpj_cia, event_type, details, created_at, updated_at)
+INSERT INTO classification_curation_events(cnpj_cia, event_type, details, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?)
 ON CONFLICT (cnpj_cia, event_type)
 DO UPDATE SET
@@ -115,7 +116,7 @@ def _load_profile_map(conn: duckdb.DuckDBPyConnection) -> dict[str, str]:
     return {row[0]: row[1] for row in rows}
 
 
-def classify_cadastro(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
+def classify_info_cad(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
     """Classifica CNPJs ativos e persiste resultados.
 
     Returns:

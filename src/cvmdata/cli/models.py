@@ -4,6 +4,7 @@ from typing import Generic, Literal, TypeVar
 
 T = TypeVar("T")
 
+
 # ============================================================================
 # Outcome[T] — Structured Command Execution Result (T010)
 # ============================================================================
@@ -104,38 +105,38 @@ class QueryResult:
 
 
 # ============================================================================
-# Cadastro DTOs — Input and Output for cadastro commands
+# Informações Cadastrais DTOs — Input and Output for informacoes cadastrais commands
 # ============================================================================
 
 @dataclass
-class DownloadCadInput:
-    """Input for download-cad command handler."""
+class DownloadInfoCadInput:
+    """Input for download-info-cad command handler."""
     force: bool
     verbose: bool
 
 
 @dataclass
-class LoadCadInput:
+class LoadInfoCadInput:
     """Input for load-cad command handler."""
     verbose: bool
 
 
 @dataclass
-class ClassifyCadInput:
-    """Input for classify-cad command handler."""
+class ClassifyInfoCadInput:
+    """Input for classify-info-cad command handler."""
     verbose: bool
 
 
 @dataclass
-class QueryCadInput:
-    """Input for query-cad command handler."""
+class QueryInfoCadInput:
+    """Input for query-info-cad command handler."""
     cnpj: str | None
     verbose: bool
 
 
 @dataclass
-class ClassifyCadResult:
-    """Output from classify-cad handler."""
+class ClassifyInfoCadResult:
+    """Output from classify-info-cad handler."""
     total: int
     """Total number of CNPJs classified."""
     high: int
@@ -145,8 +146,8 @@ class ClassifyCadResult:
 
 
 @dataclass
-class QueryCadResult:
-    """Row from query-cad result.
+class QueryInfoCadResult:
+    """Row from query-info-cad result.
     
     Summary mode (no cnpj filter):
     - cnpj_cia, denom_social, setor_ativ, profile_id, confidence, updated_at populated
@@ -164,4 +165,3 @@ class QueryCadResult:
     cd_cvm: str | None = None
     denom_comerc: str | None = None
     rule_applied: str | None = None
-

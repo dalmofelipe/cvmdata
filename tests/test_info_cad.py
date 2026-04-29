@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from cvmdata.ingestion.db import init_cadastro_schema
-from cvmdata.ingestion.loader import load_cadastro
-from cvmdata.transform.cadastro import (
+from cvmdata.ingestion.db import init_info_cad_schema
+from cvmdata.ingestion.loader import load_info_cad
+from cvmdata.transform.info_cad import (
     EVENT_AMBIGUOUS,
     EVENT_EMPTY,
     EVENT_UNMAPPED,
     FALLBACK_PROFILE,
-    classify_cadastro,
+    classify_info_cad,
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ def _setup_classify_schema(conn):
             loaded_at    TIMESTAMPTZ
         )
     """)
-    init_cadastro_schema(conn)
+    init_info_cad_schema(conn)
 
 
 def _insert_raw(conn, rows: list[dict]):
@@ -95,7 +95,7 @@ def test_load_cadastro_returns_row_count(tmp_path, db):
         {"CNPJ_CIA": "22.222.222/0001-22", "SIT": "CANCELADA","SETOR_ATIV": "Alimentos"},
         {"CNPJ_CIA": "33.333.333/0001-33", "SIT": "ATIVO",    "SETOR_ATIV": ""},
     ])
-    inserted = load_cadastro(db, csv_path)
+    inserted = load_info_cad(db, csv_path)
     assert inserted == 3
 
 
@@ -104,7 +104,7 @@ def test_load_cadastro_table_contains_all_rows(tmp_path, db):
         {"CNPJ_CIA": "11.111.111/0001-11"},
         {"CNPJ_CIA": "22.222.222/0001-22"},
     ])
-    load_cadastro(db, csv_path)
+    load_info_cad(db, csv_path)
     count = db.execute("SELECT COUNT(*) FROM cad_cia_aberta_raw").fetchone()[0]
     assert count == 2
 
@@ -116,15 +116,15 @@ def test_load_cadastro_idempotent(tmp_path, db):
         {"CNPJ_CIA": "22.222.222/0001-22"},
     ]
     csv_path = _make_cad_csv(tmp_path / "cad.csv", rows)
-    load_cadastro(db, csv_path)
-    load_cadastro(db, csv_path)
+    load_info_cad(db, csv_path)
+    load_info_cad(db, csv_path)
     count = db.execute("SELECT COUNT(*) FROM cad_cia_aberta_raw").fetchone()[0]
     assert count == 2
 
 
 def test_load_cadastro_has_loaded_at_column(tmp_path, db):
     csv_path = _make_cad_csv(tmp_path / "cad.csv", [{"CNPJ_CIA": "11.111.111/0001-11"}])
-    load_cadastro(db, csv_path)
+    load_info_cad(db, csv_path)
         # Evita leitura direta de TIMESTAMPTZ (requer pytz); verifica presença via COUNT
     count = db.execute(
         "SELECT COUNT(*) FROM cad_cia_aberta_raw WHERE loaded_at IS NOT NULL"
@@ -138,7 +138,7 @@ def test_load_cadastro_preserves_cancelled_rows(tmp_path, db):
         {"CNPJ_CIA": "11.111.111/0001-11", "SIT": "ATIVO"},
         {"CNPJ_CIA": "22.222.222/0001-22", "SIT": "CANCELADA"},
     ])
-    load_cadastro(db, csv_path)
+    load_info_cad(db, csv_path)
     cancelled = db.execute(
         "SELECT COUNT(*) FROM cad_cia_aberta_raw WHERE SIT = 'CANCELADA'"
     ).fetchone()[0]
@@ -148,9 +148,9 @@ def test_load_cadastro_preserves_cancelled_rows(tmp_path, db):
 # ── classify_cadastro — pré-condição ─────────────────────────────────────────
 
 def test_classify_raises_without_raw_table(db):
-    init_cadastro_schema(db)
+    init_info_cad_schema(db)
     with pytest.raises(RuntimeError, match="cad_cia_aberta_raw"):
-        classify_cadastro(db)
+        classify_info_cad(db)
 
 
 # ── classify_cadastro — setor mapeado (high) ──────────────────────────────────
@@ -159,7 +159,7 @@ def test_classify_banking_high_confidence(db):
     _setup_classify_schema(db)
     _insert_raw(db, [{"CNPJ_CIA": "11.000.000/0001-11", "SIT": "ATIVO", "SETOR_ATIV": "Bancos"}])
 
-    counts = classify_cadastro(db)
+    counts = classify_info_cad(db)
 
     assert counts["high"] == 1
     assert counts["low"] == 0
@@ -172,7 +172,7 @@ def test_classify_arrendamento_mercantil_banking(db):
     _setup_classify_schema(db)
     _insert_raw(db, [{"CNPJ_CIA": "22.000.000/0001-22", "SIT": "ATIVO",
                       "SETOR_ATIV": "Arrendamento Mercantil"}])
-    classify_cadastro(db)
+    classify_info_cad(db)
     row = db.execute("SELECT profile_id, confidence FROM company_classification").fetchone()
     assert row[0] == "banking"
     assert row[1] == "high"
@@ -182,7 +182,7 @@ def test_classify_intermediacao_financeira_banking(db):
     _setup_classify_schema(db)
     _insert_raw(db, [{"CNPJ_CIA": "23.000.000/0001-23", "SIT": "ATIVO",
                       "SETOR_ATIV": "Intermediacao Financeira"}])
-    classify_cadastro(db)
+    classify_info_cad(db)
     row = db.execute("SELECT profile_id, confidence FROM company_classification").fetchone()
     assert row[0] == "banking"
     assert row[1] == "high"
@@ -195,7 +195,7 @@ def test_classify_unmapped_setor_low_confidence(db):
     _insert_raw(db, [{"CNPJ_CIA": "33.000.000/0001-33", "SIT": "ATIVO",
                       "SETOR_ATIV": "Alimentos"}])
 
-    counts = classify_cadastro(db)
+    counts = classify_info_cad(db)
 
     assert counts["low"] == 1
     row = db.execute(
@@ -210,7 +210,7 @@ def test_classify_unmapped_creates_curation_event(db):
     _setup_classify_schema(db)
     _insert_raw(db, [{"CNPJ_CIA": "33.000.000/0001-33", "SIT": "ATIVO",
                       "SETOR_ATIV": "Alimentos"}])
-    classify_cadastro(db)
+    classify_info_cad(db)
 
     event = db.execute(
         "SELECT event_type FROM classification_curation_events"
@@ -226,7 +226,7 @@ def test_classify_empty_setor_low_confidence(db):
     _setup_classify_schema(db)
     _insert_raw(db, [{"CNPJ_CIA": "44.000.000/0001-44", "SIT": "ATIVO", "SETOR_ATIV": ""}])
 
-    counts = classify_cadastro(db)
+    counts = classify_info_cad(db)
 
     assert counts["low"] == 1
     row = db.execute("SELECT profile_id, confidence FROM company_classification").fetchone()
@@ -237,7 +237,7 @@ def test_classify_empty_setor_low_confidence(db):
 def test_classify_empty_setor_creates_curation_event(db):
     _setup_classify_schema(db)
     _insert_raw(db, [{"CNPJ_CIA": "44.000.000/0001-44", "SIT": "ATIVO", "SETOR_ATIV": ""}])
-    classify_cadastro(db)
+    classify_info_cad(db)
 
     event = db.execute(
         "SELECT event_type FROM classification_curation_events"
@@ -257,7 +257,7 @@ def test_classify_ambiguous_setor_low_confidence(db):
         {"CNPJ_CIA": "55.000.000/0001-55", "SIT": "ATIVO", "SETOR_ATIV": "Alimentos"},
     ])
 
-    counts = classify_cadastro(db)
+    counts = classify_info_cad(db)
 
     assert counts["low"] == 1
     row = db.execute(
@@ -274,7 +274,7 @@ def test_classify_ambiguous_creates_curation_event(db):
         {"CNPJ_CIA": "55.000.000/0001-55", "SIT": "ATIVO", "SETOR_ATIV": "Bancos"},
         {"CNPJ_CIA": "55.000.000/0001-55", "SIT": "ATIVO", "SETOR_ATIV": "Alimentos"},
     ])
-    classify_cadastro(db)
+    classify_info_cad(db)
 
     event = db.execute(
         "SELECT event_type FROM classification_curation_events"
@@ -292,7 +292,7 @@ def test_classify_cancelled_only_not_classified(db):
     _insert_raw(db, [{"CNPJ_CIA": "66.000.000/0001-66", "SIT": "CANCELADA",
                       "SETOR_ATIV": "Bancos"}])
 
-    counts = classify_cadastro(db)
+    counts = classify_info_cad(db)
 
     assert counts["total"] == 0
     assert db.execute("SELECT COUNT(*) FROM company_classification").fetchone()[0] == 0
@@ -310,7 +310,7 @@ def test_classify_different_tp_merc_same_setor_is_high(db):
          "TP_MERC": "BALCAO ORGANIZADO",  "DT_INI_SIT": "2021-01-01"},
     ])
 
-    counts = classify_cadastro(db)
+    counts = classify_info_cad(db)
 
     assert counts["high"] == 1
     assert counts["low"] == 0
@@ -331,7 +331,7 @@ def test_classify_picks_most_recent_dt_ini_sit_for_descriptive_fields(db):
         {"CNPJ_CIA": "88.000.000/0001-88", "SIT": "ATIVO", "SETOR_ATIV": "Bancos",
             "DENOM_SOCIAL": "BANCO ATUAL",  "CD_CVM": "100", "DT_INI_SIT": "2023-01-01"},
     ])
-    classify_cadastro(db)
+    classify_info_cad(db)
 
     row = db.execute(
         "SELECT denom_social FROM company_classification WHERE cnpj_cia = '88.000.000/0001-88'"
@@ -349,8 +349,8 @@ def test_classify_idempotent(db):
         {"CNPJ_CIA": "22.222.222/0001-22", "SIT": "ATIVO", "SETOR_ATIV": "Alimentos"},
     ])
 
-    c1 = classify_cadastro(db)
-    c2 = classify_cadastro(db)
+    c1 = classify_info_cad(db)
+    c2 = classify_info_cad(db)
 
     assert c1 == c2
     assert db.execute("SELECT COUNT(*) FROM company_classification").fetchone()[0] == 2
@@ -362,8 +362,8 @@ def test_classify_curation_events_not_duplicated_on_rerun(db):
     _insert_raw(db, [{"CNPJ_CIA": "33.333.333/0001-33", "SIT": "ATIVO",
                       "SETOR_ATIV": "Alimentos"}])
 
-    classify_cadastro(db)
-    classify_cadastro(db)
+    classify_info_cad(db)
+    classify_info_cad(db)
 
     count = db.execute(
         "SELECT COUNT(*) FROM classification_curation_events"
@@ -383,7 +383,7 @@ def test_classify_returns_correct_counts(db):
         {"CNPJ_CIA": "44.444.444/0001-44", "SIT": "CANCELADA","SETOR_ATIV": "Bancos"},
     ])
 
-    counts = classify_cadastro(db)
+    counts = classify_info_cad(db)
 
     assert counts["total"] == 3   # apenas os 3 ativos
     assert counts["high"] == 1    # Bancos → banking

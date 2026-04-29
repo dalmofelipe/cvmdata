@@ -1,11 +1,11 @@
 # Load cadastro CVM handler
-from cvmdata.cli.models import LoadCadInput, Outcome
+from cvmdata.cli.models import LoadInfoCadInput, Outcome
 from cvmdata.config import settings
 from cvmdata.ingestion.db import get_connection
-from cvmdata.ingestion.loader import load_cadastro
+from cvmdata.ingestion.loader import load_info_cad
 
 
-def handle(input: LoadCadInput) -> Outcome[int]:
+def handle(input: LoadInfoCadInput) -> Outcome[int]:
     """Carrega cad_cia_aberta.csv para o DuckDB.
     
     Returns the number of rows inserted.
@@ -19,7 +19,7 @@ def handle(input: LoadCadInput) -> Outcome[int]:
     
     try:
         with get_connection(settings.db_path) as conn:
-            inserted = load_cadastro(conn, csv_path)
+            inserted = load_info_cad(conn, csv_path)
         
         message = f"{inserted:,} linhas em cad_cia_aberta_raw"
         return Outcome.success(message=message, payload=inserted)

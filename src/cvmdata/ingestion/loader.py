@@ -221,9 +221,9 @@ def load_source_year(
     return results
 
 
-# ── Cadastro CVM ──────────────────────────────────────────────────────────────
+# ── Informação Cadastral CVM ──────────────────────────────────────────────────────────────
 
-def load_cadastro(
+def load_info_cad(
     conn: duckdb.DuckDBPyConnection,
     csv_path: Path,
 ) -> int:
@@ -236,9 +236,9 @@ def load_cadastro(
 
     Valida SC-001: linhas CSV == linhas inseridas.
     """
-    from cvmdata.ingestion.db import init_cadastro_schema
+    from cvmdata.ingestion.db import init_info_cad_schema
 
-    init_cadastro_schema(conn)
+    init_info_cad_schema(conn)
 
     fpath = csv_path.as_posix()
 

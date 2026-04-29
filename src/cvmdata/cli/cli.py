@@ -8,25 +8,19 @@ import typer
 from cvmdata.cli import handlers
 from cvmdata.cli.logging import configure_logging
 from cvmdata.cli.models import (
+    ClassifyInfoCadInput,
+    DownloadInfoCadInput,
     DownloadInput,
     IndicatorsInput,
+    LoadInfoCadInput,
     LoadInput,
     NormalizeInput,
+    QueryInfoCadInput,
     QueryInput,
 )
-from cvmdata.cli.models import (
-    ClassifyCadInput,
-    DownloadCadInput,
-    DownloadInput,
-    IndicatorsInput,
-    LoadCadInput,
-    LoadInput,
-    NormalizeInput,
-    QueryCadInput,
-    QueryInput,
-)
-from cvmdata.cli.render import render_outcome, render_query_cad_result, render_query_result
+from cvmdata.cli.render import render_outcome, render_query_info_cad_result, render_query_result
 from cvmdata.config import settings
+
 
 # ============================================================================
 # Typer App Instance (T029)
@@ -152,48 +146,48 @@ def query(
 
 
 # ============================================================================
-# Cadastro CVM Commands
+# Informações Cadastrais CVM Commands
 # ============================================================================
 
-@app.command("download-cad")
-def download_cad(
+@app.command("download-info-cad")
+def download_info_cad(
     force: bool = typer.Option(False, "--force", "-f", help="Re-baixa mesmo se arquivo já existir."),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Baixa os arquivos cadastrais CVM (meta + CSV) para data/raw/cad/."""
     configure_logging(verbose)
     
-    inp = DownloadCadInput(force=force, verbose=verbose)
-    outcome = handlers.download_cad.handle(inp)
+    inp = DownloadInfoCadInput(force=force, verbose=verbose)
+    outcome = handlers.download_info_cad.handle(inp)
     render_outcome(outcome)
 
 
-@app.command("load-cad")
-def load_cad(
+@app.command("load-info-cad")
+def load_info_cad(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Carrega cad_cia_aberta.csv na tabela cad_cia_aberta_raw do DuckDB."""
     configure_logging(verbose)
     
-    inp = LoadCadInput(verbose=verbose)
-    outcome = handlers.load_cad.handle(inp)
+    inp = LoadInfoCadInput(verbose=verbose)
+    outcome = handlers.load_info_cad.handle(inp)
     render_outcome(outcome)
 
 
-@app.command("classify-cad")
-def classify_cad(
+@app.command("classify-info-cad")
+def classify_info_cad(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Classifica CNPJs ativos por setor e persiste em company_classification."""
     configure_logging(verbose)
     
-    inp = ClassifyCadInput(verbose=verbose)
-    outcome = handlers.classify_cad.handle(inp)
+    inp = ClassifyInfoCadInput(verbose=verbose)
+    outcome = handlers.classify_info_cad.handle(inp)
     render_outcome(outcome)
 
 
-@app.command("query-cad")
-def query_cad(
+@app.command("query-info-cad")
+def query_info_cad(
     cnpj: Optional[str] = typer.Option(
         None, "--cnpj", help="CNPJ da empresa (ex: 12.345.678/0001-99)."
     ),
@@ -202,7 +196,6 @@ def query_cad(
     """Consulta dados cadastrais e classificação setorial."""
     configure_logging(verbose)
     
-    inp = QueryCadInput(cnpj=cnpj, verbose=verbose)
-    outcome = handlers.query_cad.handle(inp)
-    render_query_cad_result(outcome)
-
+    inp = QueryInfoCadInput(cnpj=cnpj, verbose=verbose)
+    outcome = handlers.query_info_cad.handle(inp)
+    render_query_info_cad_result(outcome)

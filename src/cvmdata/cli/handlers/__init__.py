@@ -1,5 +1,7 @@
 # Handlers subpackage initialization
-from . import classify_cad, download, download_cad, indicators, load, load_cad, normalize, query, query_cad
+from .transform import classify_info_cad, download_info_cad, load_info_cad, query_info_cad
+
+from .ingestion import download, indicators, load, normalize, query
 
 __all__ = [
     # Data pipeline
@@ -8,10 +10,10 @@ __all__ = [
     "normalize",
     "indicators",
     "query",
-    # Cadastro
-    "download_cad",
-    "load_cad",
-    "classify_cad",
-    "query_cad",
+    # Informação cadastral
+    "download_info_cad",
+    "load_info_cad",
+    "classify_info_cad",
+    "query_info_cad",
 ]
 
