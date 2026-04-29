@@ -8,6 +8,7 @@ Fluxo de Informação Cadastral:
   download_info_cad() baixa meta_cad_cia_aberta.txt + cad_cia_aberta.csv
   para data/raw/cad/.
 """
+
 from __future__ import annotations
 
 import logging

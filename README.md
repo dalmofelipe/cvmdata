@@ -76,6 +76,13 @@ O processamento dos dados, geralmente leva entre **3 a 6 min**. Esse tempo varia
 
 Para personalizar o pipeline, leia o documento [`docs/pipeline.md`](docs/pipeline.md).
 
+Para executar diretamente via CLI:
+
+```bash
+cvmdata pipeline run
+cvmdata pipeline run --years 2021:2025
+```
+
 
 ## Consultando Indicadores
 
@@ -83,18 +90,11 @@ Para personalizar o pipeline, leia o documento [`docs/pipeline.md`](docs/pipelin
 
 Atualmente, as buscas são feita com base no CNPJ da empresa.
 
-Para buscas por informações cadastrais de empresas, use o comando `info-cad`:
+Para buscas por informações cadastrais de empresas, use `query-info-cad`:
 
 ```bash
-cvmdata info-cad
-
-cvmdata info-cad --cnpj "33.000.167/0001-01"
-
-cvmdata info-cad --name "petro"
-
-cvmdata info-cad --ticker "PETR4"
-
-cvmdata info-cad --cvmcode "9512"
+cvmdata query-info-cad
+cvmdata query-info-cad --cnpj "33.000.167/0001-01"
 ```
 
 ## Indicadores

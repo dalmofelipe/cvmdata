@@ -23,22 +23,22 @@ def handle(input: QueryInput) -> Outcome[list[QueryResult]]:
                 if input.year is not None:
                     year_clause = " AND YEAR(dt_refer) = ?"
                     params.append(input.year)
-                
+
                 rows = conn.execute(
                     f"""SELECT cnpj_cia, dt_refer, indicador, valor
                        FROM indicators
                        WHERE cnpj_cia = ?{year_clause}
                        ORDER BY dt_refer, indicador""",
-                    params
+                    params,
                 ).fetchall()
         except Exception as exc:
             return Outcome.error(f"Falha na consulta: {exc}")
-    
+
     if not rows:
         if input.cnpj:
             return Outcome.warning(f"Nenhum indicador encontrado para CNPJ {input.cnpj!r}")
         return Outcome.warning("Nenhum indicador encontrado — rode 'indicators' primeiro")
-    
+
     results: list[QueryResult] = []
     if input.cnpj is None:
         for row in rows:
@@ -60,6 +60,5 @@ def handle(input: QueryInput) -> Outcome[list[QueryResult]]:
                     valor=row[3],
                 )
             )
-    
-    return Outcome.success(payload=results)
 
+    return Outcome.success(payload=results)

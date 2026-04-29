@@ -1,4 +1,5 @@
 """Testes unitários do loader (Phase 1)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,8 +12,21 @@ from cvmdata.ingestion.loader import load_csv, load_source_year, parse_csv_filen
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 # Códigos reais do ACCOUNT_MAP usados nos fixtures
-_BPA_CODES = ["1", "1.01", "1.01.01", "1.01.02", "1.01.04", "1.02", "1.02.01",
-              "2", "2.01", "2.01.04", "2.02", "2.02.01", "2.03"]
+_BPA_CODES = [
+    "1",
+    "1.01",
+    "1.01.01",
+    "1.01.02",
+    "1.01.04",
+    "1.02",
+    "1.02.01",
+    "2",
+    "2.01",
+    "2.01.04",
+    "2.02",
+    "2.02.01",
+    "2.03",
+]
 _DRE_CODES = ["3.01", "3.03", "3.05", "3.06.02", "3.11"]
 
 
@@ -48,6 +62,7 @@ def _make_flow_csv(path: Path, rows: int = 3) -> Path:
 
 # ── Testes: parse_csv_filename ───────────────────────────────────────────────
 
+
 @pytest.mark.parametrize(
     "filename, expected",
     [
@@ -65,14 +80,14 @@ def test_parse_csv_filename_valid(tmp_path, filename, expected):
     "filename",
     [
         "itr_cia_aberta_composicao_capital_2024.csv",  # sem scope
-        "itr_cia_aberta_parecer_2024.csv",             # sem scope
-        "itr_cia_aberta_2024.csv",                     # índice
-        "outro_arquivo.csv",                           # padrão diferente
-        "dfp_cia_aberta_BPP_ind_2021.csv",             # individual — ignorado
-        "dfp_cia_aberta_DFC_MD_con_2021.csv",          # fora de INDICATOR_DEMOS
-        "dfp_cia_aberta_DFC_MD_ind_2021.csv",          # individual + fora de INDICATOR_DEMOS
-        "itr_cia_aberta_DMPL_con_2023.csv",            # fora de INDICATOR_DEMOS
-        "itr_cia_aberta_DRA_con_2024.csv",             # fora de INDICATOR_DEMOS
+        "itr_cia_aberta_parecer_2024.csv",  # sem scope
+        "itr_cia_aberta_2024.csv",  # índice
+        "outro_arquivo.csv",  # padrão diferente
+        "dfp_cia_aberta_BPP_ind_2021.csv",  # individual — ignorado
+        "dfp_cia_aberta_DFC_MD_con_2021.csv",  # fora de INDICATOR_DEMOS
+        "dfp_cia_aberta_DFC_MD_ind_2021.csv",  # individual + fora de INDICATOR_DEMOS
+        "itr_cia_aberta_DMPL_con_2023.csv",  # fora de INDICATOR_DEMOS
+        "itr_cia_aberta_DRA_con_2024.csv",  # fora de INDICATOR_DEMOS
     ],
 )
 def test_parse_csv_filename_invalid(tmp_path, filename):
@@ -81,6 +96,7 @@ def test_parse_csv_filename_invalid(tmp_path, filename):
 
 
 # ── Testes: load_csv ─────────────────────────────────────────────────────────
+
 
 def test_load_csv_inserts_rows(tmp_path, db):
     """load_csv deve inserir linhas corretamente na tabela raw_bpa."""
@@ -111,6 +127,7 @@ def test_load_csv_idempotent(tmp_path, db):
 
 
 # ── Testes: load_source_year ─────────────────────────────────────────────────
+
 
 def test_load_source_year_returns_empty_when_no_dir(tmp_path, db):
     """Sem diretório de CSVs deve retornar dict vazio (não erro)."""

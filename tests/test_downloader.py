@@ -1,4 +1,5 @@
 """Testes unitários do downloader (Phase 1)."""
+
 from __future__ import annotations
 
 import pytest

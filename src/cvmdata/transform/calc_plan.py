@@ -1,4 +1,5 @@
 """Funções puras de cálculo de indicadores fundamentalistas e plano de cálculo."""
+
 from __future__ import annotations
 
 from cvmdata.transform.account_map import ACCOUNT_MAP
@@ -8,6 +9,7 @@ DRE_ACCOUNTS: frozenset[str] = frozenset(v for k, v in ACCOUNT_MAP.items() if k.
 
 
 # ── Rentabilidade ─────────────────────────────────────────────────────────────
+
 
 def roe(lucro_liquido: float | None, patrimonio_liquido: float | None) -> float | None:
     """Lucro Líquido / Patrimônio Líquido × 100  |  3.11 / 2.03"""
@@ -65,6 +67,7 @@ def giro_ativo(receita_liquida: float | None, ativo_total: float | None) -> floa
 
 # ── Liquidez ──────────────────────────────────────────────────────────────────
 
+
 def liquidez_corrente(
     ativo_circulante: float | None, passivo_circulante: float | None
 ) -> float | None:
@@ -120,6 +123,7 @@ def liquidez_geral(
 
 # ── Endividamento ─────────────────────────────────────────────────────────────
 
+
 def endividamento_geral(
     passivo_circulante: float | None,
     passivo_nao_circulante: float | None,
@@ -133,9 +137,7 @@ def endividamento_geral(
     return (passivo_circulante + passivo_nao_circulante) / ativo_total * 100  # type: ignore[operator]
 
 
-def divida_bruta(
-    emprestimos_cp: float | None, emprestimos_lp: float | None
-) -> float | None:
+def divida_bruta(emprestimos_cp: float | None, emprestimos_lp: float | None) -> float | None:
     """Emprést. CP + LP  |  2.01.04 + 2.02.01"""
     if emprestimos_cp is None or emprestimos_lp is None:
         return None
@@ -158,9 +160,7 @@ def divida_liquida(
     return db - caixa_equivalentes - aplicacoes_financeiras  # type: ignore[operator]
 
 
-def divida_liquida_pl(
-    divida_liq: float | None, patrimonio_liquido: float | None
-) -> float | None:
+def divida_liquida_pl(divida_liq: float | None, patrimonio_liquido: float | None) -> float | None:
     """Dívida Líquida / PL  |  derivado / 2.03"""
     if divida_liq is None or patrimonio_liquido is None:
         return None
@@ -169,9 +169,7 @@ def divida_liquida_pl(
     return divida_liq / patrimonio_liquido
 
 
-def cobertura_juros(
-    ebit: float | None, despesas_financeiras: float | None
-) -> float | None:
+def cobertura_juros(ebit: float | None, despesas_financeiras: float | None) -> float | None:
     """EBIT / Despesas Financeiras  |  3.05 / 3.06.02"""
     if ebit is None or despesas_financeiras is None:
         return None
@@ -181,6 +179,7 @@ def cobertura_juros(
 
 
 # ── Orquestrador ─────────────────────────────────────────────────────────────
+
 
 def calc_divida_liquida_pl(comp: dict[str, float | None]) -> float | None:
     """Calcula divida_liquida_pl derivando divida_liquida a partir do dict."""
@@ -196,19 +195,45 @@ def calc_divida_liquida_pl(comp: dict[str, float | None]) -> float | None:
 # (nome, função, [nomes dos componentes])
 # divida_liquida_pl usa fn=None — tratado via calc_divida_liquida_pl
 CALC_PLAN: list[tuple[str, object, list[str]]] = [
-    ("roe",                roe,                ["lucro_liquido", "patrimonio_liquido"]),
-    ("roa",                roa,                ["lucro_liquido", "ativo_total"]),
-    ("margem_bruta",       margem_bruta,       ["resultado_bruto", "receita_liquida"]),
+    ("roe", roe, ["lucro_liquido", "patrimonio_liquido"]),
+    ("roa", roa, ["lucro_liquido", "ativo_total"]),
+    ("margem_bruta", margem_bruta, ["resultado_bruto", "receita_liquida"]),
     ("margem_operacional", margem_operacional, ["ebit", "receita_liquida"]),
-    ("margem_liquida",     margem_liquida,     ["lucro_liquido", "receita_liquida"]),
-    ("giro_ativo",         giro_ativo,         ["receita_liquida", "ativo_total"]),
-    ("liquidez_corrente",  liquidez_corrente,  ["ativo_circulante", "passivo_circulante"]),
-    ("liquidez_seca",      liquidez_seca,      ["ativo_circulante", "estoques", "passivo_circulante"]),
-    ("liquidez_imediata",  liquidez_imediata,  ["caixa_equivalentes", "passivo_circulante"]),
-    ("liquidez_geral",     liquidez_geral,     ["ativo_circulante", "realizavel_longo_prazo", "passivo_circulante", "passivo_nao_circulante"]),
-    ("endividamento_geral",endividamento_geral,["passivo_circulante", "passivo_nao_circulante", "ativo_total"]),
-    ("divida_bruta",       divida_bruta,       ["emprestimos_cp", "emprestimos_lp"]),
-    ("divida_liquida",     divida_liquida,     ["emprestimos_cp", "emprestimos_lp", "caixa_equivalentes", "aplicacoes_financeiras"]),
-    ("divida_liquida_pl",  None,               []),
-    ("cobertura_juros",    cobertura_juros,    ["ebit", "despesas_financeiras"]),
+    ("margem_liquida", margem_liquida, ["lucro_liquido", "receita_liquida"]),
+    ("giro_ativo", giro_ativo, ["receita_liquida", "ativo_total"]),
+    ("liquidez_corrente", liquidez_corrente, ["ativo_circulante", "passivo_circulante"]),
+    (
+        "liquidez_seca",
+        liquidez_seca,
+        ["ativo_circulante", "estoques", "passivo_circulante"],
+    ),
+    ("liquidez_imediata", liquidez_imediata, ["caixa_equivalentes", "passivo_circulante"]),
+    (
+        "liquidez_geral",
+        liquidez_geral,
+        [
+            "ativo_circulante",
+            "realizavel_longo_prazo",
+            "passivo_circulante",
+            "passivo_nao_circulante",
+        ],
+    ),
+    (
+        "endividamento_geral",
+        endividamento_geral,
+        ["passivo_circulante", "passivo_nao_circulante", "ativo_total"],
+    ),
+    ("divida_bruta", divida_bruta, ["emprestimos_cp", "emprestimos_lp"]),
+    (
+        "divida_liquida",
+        divida_liquida,
+        [
+            "emprestimos_cp",
+            "emprestimos_lp",
+            "caixa_equivalentes",
+            "aplicacoes_financeiras",
+        ],
+    ),
+    ("divida_liquida_pl", None, []),
+    ("cobertura_juros", cobertura_juros, ["ebit", "despesas_financeiras"]),
 ]

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from typer.testing import CliRunner
 
 from cvmdata.cli import app, handlers
 from cvmdata.cli.models import Outcome, QueryInfoCadResult, QueryResult
+from cvmdata.pipeline.models import PipelineReport, StepReport
 
 runner = CliRunner()
 
@@ -14,22 +17,9 @@ def test_app_help_lists_all_commands() -> None:
     """Ajuda principal deve listar todos os comandos esperados."""
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "download" in result.stdout
-    assert "load" in result.stdout
-    assert "normalize" in result.stdout
-    assert "indicators" in result.stdout
     assert "query" in result.stdout
-    assert "download-info-cad" in result.stdout
-    assert "load-info-cad" in result.stdout
-    assert "classify-info-cad" in result.stdout
     assert "query-info-cad" in result.stdout
-
-
-def test_download_command_invalid_year() -> None:
-    """Download deve rejeitar ano fora do intervalo permitido."""
-    result = runner.invoke(app, ["download", "--year", "1999"])
-    assert result.exit_code == 1
-    assert "Ano inválido" in (result.stdout + result.stderr)
+    assert "pipeline" in result.stdout
 
 
 def _patch_handle(monkeypatch, module_obj, outcome: Outcome) -> None:
@@ -39,38 +29,6 @@ def _patch_handle(monkeypatch, module_obj, outcome: Outcome) -> None:
         return outcome
 
     monkeypatch.setattr(module_obj, "handle", fake_handle)
-
-
-def test_download_command_delegates_to_handler_success(monkeypatch) -> None:
-    """Comando download deve delegar para handler e sair com código 0 em sucesso."""
-    _patch_handle(monkeypatch, handlers.download, Outcome.success(message="ok"))
-    result = runner.invoke(app, ["download", "--year", "2024"])
-    assert result.exit_code == 0
-    assert "✓" in result.stdout
-
-
-def test_load_command_delegates_to_handler_warning(monkeypatch) -> None:
-    """Comando load deve retornar warning sem falhar o processo."""
-    _patch_handle(monkeypatch, handlers.load, Outcome.warning(message="sem dados"))
-    result = runner.invoke(app, ["load", "--year", "2024"])
-    assert result.exit_code == 0
-    assert "⚠" in result.stdout
-
-
-def test_normalize_command_delegates_to_handler_error(monkeypatch) -> None:
-    """Comando normalize deve sair com código 1 em erro."""
-    _patch_handle(monkeypatch, handlers.normalize, Outcome.error(message="falha"))
-    result = runner.invoke(app, ["normalize"])
-    assert result.exit_code == 1
-    assert "✗" in result.stderr
-
-
-def test_indicators_command_delegates_to_handler(monkeypatch) -> None:
-    """Comando indicators deve delegar com filtro opcional de CNPJ."""
-    _patch_handle(monkeypatch, handlers.indicators, Outcome.success(message="ok", payload=10))
-    result = runner.invoke(app, ["indicators", "--cnpj", "00.000.000/0001-91"])
-    assert result.exit_code == 0
-    assert "✓" in result.stdout
 
 
 def test_query_command_summary_table(monkeypatch) -> None:
@@ -133,33 +91,6 @@ def test_query_command_error(monkeypatch) -> None:
     assert "✗" in result.stderr
 
 
-def test_download_info_cad_command_delegates_to_handler(monkeypatch) -> None:
-    """Comando download-info-cad deve delegar ao handler e sair com 0 em sucesso."""
-    _patch_handle(monkeypatch, handlers.download_info_cad, Outcome.success(message="ok"))
-
-    result = runner.invoke(app, ["download-info-cad", "--force"])
-    assert result.exit_code == 0
-    assert "✓" in result.stdout
-
-
-def test_load_info_cad_command_warning(monkeypatch) -> None:
-    """Comando load-info-cad com warning não deve falhar processo."""
-    _patch_handle(monkeypatch, handlers.load_info_cad, Outcome.warning(message="sem arquivo"))
-
-    result = runner.invoke(app, ["load-info-cad"])
-    assert result.exit_code == 0
-    assert "⚠" in result.stdout
-
-
-def test_classify_info_cad_command_error(monkeypatch) -> None:
-    """Comando classify-info-cad deve sair com 1 em erro."""
-    _patch_handle(monkeypatch, handlers.classify_info_cad, Outcome.error(message="falha"))
-
-    result = runner.invoke(app, ["classify-info-cad"])
-    assert result.exit_code == 1
-    assert "✗" in result.stderr
-
-
 def test_query_info_cad_command_summary_table(monkeypatch) -> None:
     """Query-info-cad sem CNPJ deve renderizar tabela de resumo."""
     outcome = Outcome.success(
@@ -203,3 +134,52 @@ def test_query_info_cad_command_detail_table(monkeypatch) -> None:
     result = runner.invoke(app, ["query-info-cad", "--cnpj", "00.000.000/0001-91"])
     assert result.exit_code == 0
     assert "Classificação" in result.stdout
+
+
+def test_pipeline_run_invalid_years() -> None:
+    result = runner.invoke(app, ["pipeline", "run", "--years", "1999"])
+    assert result.exit_code == 1
+    assert "Formato inválido" in (result.stdout + result.stderr)
+
+
+def test_pipeline_run_delegates_to_orchestrator(monkeypatch) -> None:
+    from cvmdata.cli import cli as cli_module
+
+    fake_report = PipelineReport(
+        name="full",
+        status="success",
+        steps=[
+            StepReport(
+                name="download_financial",
+                status="success",
+                message="ok",
+                started_at=datetime.now(timezone.utc),
+                finished_at=datetime.now(timezone.utc),
+            )
+        ],
+        started_at=datetime.now(timezone.utc),
+        finished_at=datetime.now(timezone.utc),
+    )
+
+    def fake_run_full(*, years, force_download=False, cnpj=None, **kwargs):
+        assert years == [2024]
+        assert force_download is True
+        assert cnpj == "00.000.000/0001-91"
+        return fake_report
+
+    monkeypatch.setattr(cli_module, "run_full", fake_run_full)
+
+    result = runner.invoke(
+        app,
+        [
+            "pipeline",
+            "run",
+            "--years",
+            "2024",
+            "--force-download",
+            "--cnpj",
+            "00.000.000/0001-91",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Pipeline" in result.stdout

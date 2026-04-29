@@ -6,7 +6,7 @@ from cvmdata.ingestion.db import get_connection
 
 def handle(input: QueryInfoCadInput) -> Outcome[list[QueryInfoCadResult]]:
     """Consulta dados cadastrais e classificação setorial.
-    
+
     Two modes:
     - No cnpj filter: summary of last 20 classifications
     - With cnpj filter: detail for specific company (incl. all fields)
@@ -34,18 +34,18 @@ def handle(input: QueryInfoCadInput) -> Outcome[list[QueryInfoCadResult]]:
                     """,
                     [input.cnpj],
                 ).fetchall()
-        
+
         except Exception as exc:
             return Outcome.error(f"Falha na consulta de cadastro: {exc}")
-    
+
     if not rows:
         if input.cnpj:
             return Outcome.warning(f"Nenhuma classificação encontrada para CNPJ {input.cnpj!r}")
         return Outcome.warning("Nenhuma classificação encontrada — rode 'classify-cad' primeiro")
-    
+
     # Convert rows to typed QueryCadResult objects
     results: list[QueryInfoCadResult] = []
-    
+
     if input.cnpj is None:
         # Summary mode: 6 columns
         for row in rows:
@@ -75,5 +75,5 @@ def handle(input: QueryInfoCadInput) -> Outcome[list[QueryInfoCadResult]]:
                     updated_at=str(row[8]) if row[8] is not None else None,
                 )
             )
-    
+
     return Outcome.success(payload=results)

@@ -21,21 +21,23 @@ def _format_confidence(value: float | str | None) -> str:
     # Keep non-numeric labels as-is (e.g., "high", "low")
     return str(value)
 
+
 # ============================================================================
 # Main Rendering Function (T013)
 # ============================================================================
 
+
 def render_outcome(outcome: Outcome[Any]) -> None:
     """Render outcome message and set process exit code.
-    
+
     Maps outcome status to user-facing output and exit code:
     - success: ✓ prefix, stdout, exit 0
     - warning: ⚠ prefix, stdout, exit 0 (benign, not failure)
     - error: ✗ prefix, stderr, exit 1
-    
+
     Args:
         outcome: Outcome object from handler.
-    
+
     Raises:
         typer.Exit: Always (with code 0 or 1 based on status).
     """
@@ -43,12 +45,12 @@ def render_outcome(outcome: Outcome[Any]) -> None:
         if outcome.message:
             typer.echo(f"✓ {outcome.message}")
         raise typer.Exit(0)
-    
+
     elif outcome.status == "warning":
         if outcome.message:
             typer.echo(f"⚠ {outcome.message}", err=False)
         raise typer.Exit(0)
-    
+
     elif outcome.status == "error":
         if outcome.message:
             typer.echo(f"✗ {outcome.message}", err=True)
@@ -59,6 +61,7 @@ def render_outcome(outcome: Outcome[Any]) -> None:
 # Query-Specific Rendering (Rich Table)
 # ============================================================================
 
+
 def render_query_result(outcome: Outcome[list[QueryResult]]) -> None:
     """Renderiza saída do comando query em tabela Rich."""
     console = Console()
@@ -67,14 +70,14 @@ def render_query_result(outcome: Outcome[list[QueryResult]]) -> None:
         if outcome.message:
             typer.echo(f"✗ {outcome.message}", err=True)
         raise typer.Exit(1)
-    
+
     if outcome.status == "warning" or not outcome.payload:
         if outcome.message:
             typer.echo(f"⚠ {outcome.message}", err=False)
         raise typer.Exit(0)
-    
+
     results = outcome.payload
-    
+
     # Detect query type: summary (n_indicadores set) vs detail
     if results and results[0].n_indicadores is not None:
         # Summary: top companies with most indicators
@@ -100,7 +103,7 @@ def render_query_result(outcome: Outcome[list[QueryResult]]) -> None:
         for row in results:
             valor_str = f"{row.valor:.4f}" if row.valor is not None else "—"
             tbl.add_row(str(row.dt_refer), str(row.indicador), valor_str)
-    
+
     console.print(tbl)
     raise typer.Exit(0)
 
@@ -108,6 +111,7 @@ def render_query_result(outcome: Outcome[list[QueryResult]]) -> None:
 # ============================================================================
 # Query Informações Cadastrais Rendering (Rich Table, 2 modes: summary vs detail)
 # ============================================================================
+
 
 def render_query_info_cad_result(outcome: Outcome[list[QueryInfoCadResult]]) -> None:
     """Renderiza saída do comando query-cad com suporte a dois modos.

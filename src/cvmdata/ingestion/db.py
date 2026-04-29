@@ -7,6 +7,7 @@ Demonstrativos em escopo (INDICATOR_DEMOS = BPA, BPP, DRE):
 [ADR 2026-02-20]: DFC_MD, DFC_MI, DMPL, DRA, DVA descartados — nenhuma
 conta desses demonstrativos é necessária para os 7 indicadores planejados.
 """
+
 from __future__ import annotations
 
 import logging

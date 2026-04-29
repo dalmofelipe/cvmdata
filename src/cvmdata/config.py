@@ -2,6 +2,7 @@
 
 Carrega variáveis do arquivo .env (ou ambiente) com prefixo CVM_.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -31,12 +32,8 @@ class Settings(BaseSettings):
     )
 
     # URLs dos arquivos cadastrais da CVM
-    cad_meta_url: str = (
-        "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/META/meta_cad_cia_aberta.txt"
-    )
-    cad_csv_url: str = (
-        "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv"
-    )
+    cad_meta_url: str = "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/META/meta_cad_cia_aberta.txt"
+    cad_csv_url: str = "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv"
 
     @property
     def raw_dir(self) -> Path:

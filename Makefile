@@ -1,41 +1,27 @@
-.PHONY: install download load normalize classify indicators all \
-        test lint fmt ci
+.PHONY: install pipeline all \
+	test lint fmt ci
 
 # ── Ambiente ────────────────────────────────────────────────────────────────
 install:
-	uv sync --all-extras
+	uv sync --all-extras --all-groups
 
 
-# ── Pipeline demonstrativos (todos os anos padrão) ───────────────────────────
-download:
-	uv run cvmdata download
-	uv run cvmdata download-info-cad
+# ── Pipeline (full por padrão) ───────────────────────────────────────────────
+pipeline:
+	uv run cvmdata pipeline run
 
-load:
-	uv run cvmdata load
-	uv run cvmdata load-info-cad
-
-normalize:
-	uv run cvmdata normalize
-
-classify:
-	uv run cvmdata classify-info-cad
-
-indicators:
-	uv run cvmdata indicators
-
-all: download load normalize classify indicators
+all: pipeline
 
 
 # ── Qualidade ────────────────────────────────────────────────────────────────
 test:
-	uv run pytest -v
+	uv run --extra dev --group dev pytest -v
 
 lint:
-	uv run ruff check src/ tests/
+	uv run --extra dev ruff check src/ tests/
 
 fmt:
-	uv run ruff format src/ tests/
+	uv run --extra dev ruff format src/ tests/
 
 
 # ── Atalho "tudo + qualidade" ────────────────────────────────────────────────

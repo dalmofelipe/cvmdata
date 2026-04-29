@@ -13,6 +13,7 @@ de metadata: source, year, scope.
 Idempotência: rows existentes para (source, year, scope) são
 deletadas antes de cada INSERT.
 """
+
 from __future__ import annotations
 
 import logging
@@ -223,6 +224,7 @@ def load_source_year(
 
 # ── Informação Cadastral CVM ──────────────────────────────────────────────────────────────
 
+
 def load_info_cad(
     conn: duckdb.DuckDBPyConnection,
     csv_path: Path,
@@ -275,9 +277,7 @@ def load_info_cad(
 
     # SC-001: validar paridade
     if inserted != csv_count:
-        logger.warning(
-            "SC-001 FAIL: CSV=%d linhas, raw=%d linhas inseridas", csv_count, inserted
-        )
+        logger.warning("SC-001 FAIL: CSV=%d linhas, raw=%d linhas inseridas", csv_count, inserted)
     else:
         logger.info("SC-001 OK: %d linhas — CSV == raw", inserted)
 

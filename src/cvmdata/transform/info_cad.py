@@ -11,6 +11,7 @@ Etapas internas:
   5. Persistir company_classification (INSERT OR REPLACE)
   6. Registrar eventos de curadoria para casos confidence=low (upsert idempotente)
 """
+
 from __future__ import annotations
 
 import logging
@@ -108,6 +109,7 @@ DO UPDATE SET
 
 # ── Lógica principal ──────────────────────────────────────────────────────────
 
+
 def _load_profile_map(conn: duckdb.DuckDBPyConnection) -> dict[str, str]:
     """Carrega mapa setor_ativ -> profile_id ativo em memória."""
     rows = conn.execute(
@@ -125,9 +127,12 @@ def classify_info_cad(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
     now = datetime.now(timezone.utc).isoformat()
 
     # Verificar se tabelas existem
-    tables = {r[0] for r in conn.execute(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-    ).fetchall()}
+    tables = {
+        r[0]
+        for r in conn.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+        ).fetchall()
+    }
     if "cad_cia_aberta_raw" not in tables:
         raise RuntimeError("Tabela cad_cia_aberta_raw não encontrada — rode 'load-cad' primeiro")
 
@@ -178,10 +183,19 @@ def classify_info_cad(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
             event_type = None
             details = None
 
-        classification_rows.append((
-            cnpj_cia, cd_cvm, denom_social, denom_comerc,
-            setor_str or None, profile_id, confidence, rule, now,
-        ))
+        classification_rows.append(
+            (
+                cnpj_cia,
+                cd_cvm,
+                denom_social,
+                denom_comerc,
+                setor_str or None,
+                profile_id,
+                confidence,
+                rule,
+                now,
+            )
+        )
 
         if event_type is not None:
             curation_rows.append((cnpj_cia, event_type, details, now, now))
@@ -203,6 +217,8 @@ def classify_info_cad(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
 
     logger.info(
         "Classificação concluída: %d total (%d high, %d low)",
-        counts["total"], counts["high"], counts["low"],
+        counts["total"],
+        counts["high"],
+        counts["low"],
     )
     return counts
