@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typer.testing import CliRunner
 
 from cvmdata.cli import app, handlers
-from cvmdata.cli.models import IndicatorsResult, InfoCadResult, Outcome
+from cvmdata.cli.models import IndicatorsResult, InfoCadResult, Outcome, Paged
 from cvmdata.pipeline.models import PipelineReport, StepReport
 
 runner = CliRunner()
@@ -81,22 +81,26 @@ def test_indicators_command_error(monkeypatch) -> None:
 def test_info_cad_command_summary_table(monkeypatch) -> None:
     """Info-cad sem CNPJ deve renderizar tabela de resumo."""
     outcome = Outcome.success(
-        payload=[
-            InfoCadResult(
-                cnpj_cia="00.000.000/0001-91",
-                denom_social="Banco X",
-                setor_ativ="Financial",
-                profile_id="high",
-                confidence=0.95,
-                updated_at="2024-01-01",
-            )
-        ]
+        payload=Paged(
+            items=[
+                InfoCadResult(
+                    cnpj_cia="00.000.000/0001-91",
+                    denom_social="Banco X",
+                    setor_ativ="Financial",
+                    profile_id="high",
+                    confidence=0.95,
+                    updated_at="2024-01-01",
+                )
+            ],
+            page=1,
+            page_size=20,
+        )
     )
     _patch_handle(monkeypatch, handlers.info_cad, outcome)
 
     result = runner.invoke(app, ["info-cad"])
     assert result.exit_code == 0
-    assert "company_classification" in result.stdout
+    assert "company_classification (últimas 20) — página 1" in result.stdout
 
 
 def test_info_cad_command_detail_table(monkeypatch) -> None:
@@ -121,6 +125,57 @@ def test_info_cad_command_detail_table(monkeypatch) -> None:
     result = runner.invoke(app, ["info-cad", "--cnpj", "00.000.000/0001-91"])
     assert result.exit_code == 0
     assert "Classificação" in result.stdout
+
+
+def test_info_cad_command_invalid_page() -> None:
+    result = runner.invoke(app, ["info-cad", "--page", "0"])
+    assert result.exit_code == 1
+    assert "Página inválida" in (result.stdout + result.stderr)
+
+
+def test_info_cad_command_invalid_page_size() -> None:
+    result = runner.invoke(app, ["info-cad", "--page-size", "0"])
+    assert result.exit_code == 1
+    assert "entre 20 e 1000" in (result.stdout + result.stderr)
+
+
+def test_info_cad_command_page_size_below_minimum() -> None:
+    result = runner.invoke(app, ["info-cad", "--page-size", "19"])
+    assert result.exit_code == 1
+    assert "entre 20 e 1000" in (result.stdout + result.stderr)
+
+
+def test_info_cad_command_page_size_above_cap() -> None:
+    result = runner.invoke(app, ["info-cad", "--page-size", "1001"])
+    assert result.exit_code == 1
+    assert "entre 20 e 1000" in (result.stdout + result.stderr)
+
+
+def test_info_cad_command_passes_page_to_handler(monkeypatch) -> None:
+    def fake_handle(inp):
+        assert getattr(inp, "page", None) == 2
+        return Outcome.success(
+            payload=Paged(
+                items=[
+                    InfoCadResult(
+                        cnpj_cia="00.000.000/0001-91",
+                        denom_social="Banco X",
+                        setor_ativ="Financial",
+                        profile_id="high",
+                        confidence=0.95,
+                        updated_at="2024-01-01",
+                    )
+                ],
+                page=inp.page,
+                page_size=20,
+            ),
+        )
+
+    monkeypatch.setattr(handlers, "info_cad", fake_handle)
+
+    result = runner.invoke(app, ["info-cad", "--page", "2"])
+    assert result.exit_code == 0
+    assert "página 2" in result.stdout
 
 
 def test_pipeline_run_invalid_years() -> None:

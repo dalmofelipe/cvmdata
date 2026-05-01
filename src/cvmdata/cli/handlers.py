@@ -1,9 +1,11 @@
+from cvmdata.cli.constants import INFO_CAD_PAGE_SIZE_MAX, INFO_CAD_PAGE_SIZE_MIN
 from cvmdata.cli.models import (
     IndicatorsInput,
     IndicatorsResult,
     InfoCadInput,
     InfoCadResult,
     Outcome,
+    Paged,
 )
 from cvmdata.config import settings
 from cvmdata.ingestion import db
@@ -54,14 +56,26 @@ def info_cad(input: InfoCadInput) -> Outcome[list[InfoCadResult]]:
     with db.get_connection(settings.db_path) as conn:
         try:
             if input.cnpj is None:
-                # Summary: last 20 classifications
+                if input.page_size < INFO_CAD_PAGE_SIZE_MIN or \
+                        input.page_size > INFO_CAD_PAGE_SIZE_MAX:
+                    return Outcome.error(
+                        "Falha na consulta de cadastro: tamanho de página inválido "
+                        f"(deve estar entre {INFO_CAD_PAGE_SIZE_MIN} e {INFO_CAD_PAGE_SIZE_MAX})"
+                    )
+
+                # Summary: last N classifications (paged)
+                limit = input.page_size
+                page = getattr(input, "page", 1) or 1
+                offset = (page - 1) * limit
+
                 rows = conn.execute(
                     """
                     SELECT cnpj_cia, denom_social, setor_ativ, profile_id, confidence, updated_at
                     FROM   company_classification
-                    ORDER BY updated_at DESC
-                    LIMIT  20
-                    """
+                    ORDER BY updated_at DESC NULLS LAST, cnpj_cia ASC
+                    LIMIT  ? OFFSET ?
+                    """,
+                    [limit, offset],
                 ).fetchall()
             else:
                 # Detail: full record for specific CNPJ
@@ -81,7 +95,10 @@ def info_cad(input: InfoCadInput) -> Outcome[list[InfoCadResult]]:
     if not rows:
         if input.cnpj:
             return Outcome.warning(f"Nenhuma classificação encontrada para CNPJ {input.cnpj!r}")
-        return Outcome.warning("Nenhuma classificação encontrada — rode 'classify-cad' primeiro")
+        page = getattr(input, "page", 1) or 1
+        return Outcome.warning(
+            f"Nenhuma classificação encontrada (página {page}) — rode 'classify-cad' primeiro"
+        )
 
     results: list[InfoCadResult] = []
 
@@ -114,5 +131,9 @@ def info_cad(input: InfoCadInput) -> Outcome[list[InfoCadResult]]:
                     updated_at=str(row[8]) if row[8] is not None else None,
                 )
             )
+
+    if input.cnpj is None:
+        page = getattr(input, "page", 1) or 1
+        return Outcome.success(payload=Paged(items=results, page=page, page_size=limit))
 
     return Outcome.success(payload=results)

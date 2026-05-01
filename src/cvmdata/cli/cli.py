@@ -11,6 +11,13 @@ from typing import Optional
 import typer
 
 from cvmdata.cli import handlers, logging, models, render
+from cvmdata.cli.constants import (
+    INDICATORS_YEAR_MAX,
+    INDICATORS_YEAR_MIN,
+    INFO_CAD_PAGE_SIZE_DEFAULT,
+    INFO_CAD_PAGE_SIZE_MAX,
+    INFO_CAD_PAGE_SIZE_MIN,
+)
 from cvmdata.config import settings
 from cvmdata.pipeline import PipelineExecutionError, YearsParseError, parse_years, run_full
 from cvmdata.pipeline import models as pipeline_models
@@ -83,8 +90,11 @@ def indicators(
     year: Optional[int] = typer.Option(None, "--year", "-y", help="Filtrar por ano (ex: 2024)."),
 ) -> None:
     """Consulta indicadores fundamentalistas calculados (por CNPJ)."""
-    if year is not None and not (2000 <= year <= 3000):
-        typer.echo("✗ Ano inválido (deve estar entre 2000 e 3000)", err=True)
+    if year is not None and not (INDICATORS_YEAR_MIN <= year <= INDICATORS_YEAR_MAX):
+        typer.echo(
+            f"✗ Ano inválido (deve estar entre {INDICATORS_YEAR_MIN} e {INDICATORS_YEAR_MAX})",
+            err=True,
+        )
         raise typer.Exit(1)
 
     inp = models.IndicatorsInput(cnpj=cnpj, year=year)
@@ -98,10 +108,31 @@ def info_cad(
     cnpj: Optional[str] = typer.Option(
         None, "--cnpj", help="CNPJ da empresa (ex: 12.345.678/0001-99)."
     ),
+    page: int = typer.Option(
+        1, "--page", help="Página do resumo (>= 1)."
+    ),
+    page_size: int = typer.Option(
+        INFO_CAD_PAGE_SIZE_DEFAULT,
+        "--page-size",
+        help="Tamanho da página do resumo (entre 20 e 1000).",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Consulta dados cadastrais e classificação setorial."""
     logging.configure_logging(verbose)
-    inp = models.InfoCadInput(cnpj=cnpj, verbose=verbose)
+
+    if page < 1:
+        typer.echo("✗ Página inválida (deve ser >= 1)", err=True)
+        raise typer.Exit(1)
+
+    if page_size < INFO_CAD_PAGE_SIZE_MIN or page_size > INFO_CAD_PAGE_SIZE_MAX:
+        typer.echo(
+            "✗ Tamanho de página inválido "
+            f"(deve estar entre {INFO_CAD_PAGE_SIZE_MIN} e {INFO_CAD_PAGE_SIZE_MAX})",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    inp = models.InfoCadInput(cnpj=cnpj, verbose=verbose, page=page, page_size=page_size)
     outcome = handlers.info_cad(inp)
     render.render_info_cad_result(outcome)

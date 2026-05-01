@@ -5,7 +5,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from cvmdata.cli.models import IndicatorsResult, InfoCadResult, Outcome
+from cvmdata.cli.models import IndicatorsResult, InfoCadResult, Outcome, Paged
 
 
 def _format_confidence(value: float | str | None) -> str:
@@ -96,7 +96,7 @@ def render_indicators_result(outcome: Outcome[list[IndicatorsResult]]) -> None:
 # ============================================================================
 
 
-def render_info_cad_result(outcome: Outcome[list[InfoCadResult]]) -> None:
+def render_info_cad_result(outcome: Outcome[list[InfoCadResult] | Paged[InfoCadResult]]) -> None:
     """Renderiza saída do comando info-cad com suporte a dois modos (summary/detail)."""
     console = Console()
 
@@ -110,7 +110,18 @@ def render_info_cad_result(outcome: Outcome[list[InfoCadResult]]) -> None:
             typer.echo(f"⚠ {outcome.message}", err=False)
         raise typer.Exit(0)
 
-    results = outcome.payload
+    payload = outcome.payload
+
+    if isinstance(payload, Paged):
+        results = payload.items
+        page = payload.page
+        page_size = payload.page_size
+        is_paged_summary = True
+    else:
+        results = payload
+        page = None
+        page_size = None
+        is_paged_summary = False
 
     # Detect mode: detail if cd_cvm is populated
     if results and results[0].cd_cvm is not None:
@@ -140,8 +151,12 @@ def render_info_cad_result(outcome: Outcome[list[InfoCadResult]]) -> None:
                 row.updated_at or "—",
             )
     else:
-        # Summary mode: last 20 classifications
-        tbl = Table(title="company_classification (últimas 20)", show_lines=False)
+        # Summary mode: paged classifications
+        title = "company_classification"
+        if is_paged_summary and page is not None and page_size is not None:
+            title = f"{title} (últimas {page_size}) — página {page}"
+
+        tbl = Table(title=title, show_lines=False)
         tbl.add_column("CNPJ", style="cyan", no_wrap=True)
         tbl.add_column("Razão Social")
         tbl.add_column("Setor")

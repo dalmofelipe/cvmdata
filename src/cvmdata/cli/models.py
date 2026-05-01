@@ -2,7 +2,18 @@
 from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
 
+from cvmdata.cli.constants import INFO_CAD_PAGE_DEFAULT, INFO_CAD_PAGE_SIZE_DEFAULT
+
 T = TypeVar("T")
+
+
+@dataclass
+class Paged(Generic[T]):
+    """Paged result wrapper for query commands."""
+
+    items: list[T]
+    page: int
+    page_size: int
 
 
 # ============================================================================
@@ -90,6 +101,8 @@ class InfoCadInput:
 
     cnpj: str | None = None
     verbose: bool = False
+    page: int = INFO_CAD_PAGE_DEFAULT
+    page_size: int = INFO_CAD_PAGE_SIZE_DEFAULT
 
 
 # ============================================================================
