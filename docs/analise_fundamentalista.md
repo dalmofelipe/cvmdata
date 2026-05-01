@@ -3,7 +3,7 @@
 
 A análise fundamentalista utiliza indicadores extraídos de demonstrativos contábeis (Balanço Patrimonial, DRE, DFC) para avaliar a saúde e o valor real de uma empresa.
 
-Os indicadores abaixo são todos **computáveis a partir dos arquivos CVM** (BPA + BPP + DRE + DFC), sem necessidade de dados externos de mercado.
+Os indicadores abaixo são todos **computáveis a partir dos arquivos CVM** (BPA + BPP + DRE + DFC).
 
 #### 1. Rentabilidade
 

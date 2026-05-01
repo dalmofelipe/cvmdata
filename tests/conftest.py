@@ -1,4 +1,5 @@
 """Fixtures compartilhadas para todos os testes."""
+
 from __future__ import annotations
 
 import duckdb

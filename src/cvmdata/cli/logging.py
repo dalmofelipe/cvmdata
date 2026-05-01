@@ -17,4 +17,3 @@ def configure_logging(verbose: bool = False) -> None:
 def setup_logging(verbose: bool = False) -> None:
     """Alias retrocompatível para configure_logging."""
     configure_logging(verbose)
-

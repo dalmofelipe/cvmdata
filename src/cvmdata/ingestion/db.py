@@ -7,6 +7,7 @@ Demonstrativos em escopo (INDICATOR_DEMOS = BPA, BPP, DRE):
 [ADR 2026-02-20]: DFC_MD, DFC_MI, DMPL, DRA, DVA descartados — nenhuma
 conta desses demonstrativos é necessária para os 7 indicadores planejados.
 """
+
 from __future__ import annotations
 
 import logging
@@ -112,7 +113,7 @@ def init_indicators_schema(conn: duckdb.DuckDBPyConnection) -> None:
 
 _CAD_RAW_DDL = """\
 CREATE TABLE IF NOT EXISTS cad_cia_aberta_raw (
-    -- Schema de referência — na prática a tabela é criada via CTAS em load_cadastro
+    -- Schema de referência — na prática a tabela é criada via CTAS em load_info_cad
     -- com auto_detect para preservar colunas desconhecidas (FR-014).
     CNPJ_CIA      VARCHAR,
     DENOM_CIA     VARCHAR,
@@ -166,12 +167,12 @@ _SETOR_PROFILE_SEED: list[tuple[str, str]] = [
 ]
 
 
-def init_cadastro_schema(conn: duckdb.DuckDBPyConnection) -> None:
+def init_info_cad_schema(conn: duckdb.DuckDBPyConnection) -> None:
     """Cria tabelas cadastrais auxiliares se ainda não existirem (idempotente).
 
     Tabelas criadas aqui: setor_profile_map, company_classification,
     classification_curation_events.
-    Nota: cad_cia_aberta_raw é criada via CTAS em load_cadastro (auto_detect).
+    Nota: cad_cia_aberta_raw é criada via CTAS em load_info_cad (auto_detect).
     Semeia setor_profile_map com os mapeamentos iniciais (banking).
     """
     conn.execute(_SETOR_PROFILE_MAP_DDL)

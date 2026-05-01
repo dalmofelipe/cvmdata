@@ -1,208 +1,135 @@
-# Typer app and command wiring
+"""Typer CLI wiring.
+
+A CLI expõe apenas comandos de consulta e um único comando de orquestração do
+pipeline completo.
+"""
+
 from __future__ import annotations
 
 from typing import Optional
 
 import typer
 
-from cvmdata.cli import handlers
-from cvmdata.cli.logging import configure_logging
-from cvmdata.cli.models import (
-    DownloadInput,
-    IndicatorsInput,
-    LoadInput,
-    NormalizeInput,
-    QueryInput,
+from cvmdata.cli import handlers, logging, models, render
+from cvmdata.cli.constants import INFO_CAD_PAGE_SIZE_DEFAULT
+from cvmdata.cli.validation import (
+    ValidationError,
+    validate_indicators_year,
+    validate_info_cad_page,
+    validate_info_cad_page_size,
 )
-from cvmdata.cli.models import (
-    ClassifyCadInput,
-    DownloadCadInput,
-    DownloadInput,
-    IndicatorsInput,
-    LoadCadInput,
-    LoadInput,
-    NormalizeInput,
-    QueryCadInput,
-    QueryInput,
-)
-from cvmdata.cli.render import render_outcome, render_query_cad_result, render_query_result
 from cvmdata.config import settings
-
-# ============================================================================
-# Typer App Instance (T029)
-# ============================================================================
+from cvmdata.pipeline import PipelineExecutionError, YearsParseError, parse_years, run_full
+from cvmdata.pipeline import models as pipeline_models
 
 app = typer.Typer(
     name="cvmdata",
-    help="Pipeline de dados CVM para análise fundamentalista.",
     no_args_is_help=True,
 )
 
+pipeline_app = typer.Typer(
+    help="Executa o pipeline completo (financeiro + cadastral).",
+    no_args_is_help=True,
+)
 
-# ============================================================================
-# Download Command (T030)
-# ============================================================================
+app.add_typer(pipeline_app, name="pipeline")
 
-@app.command()
-def download(
-    year: Optional[int] = typer.Option(
-        None, "--year", "-y", help="Ano específico (ex: 2024)."
+
+def _render_pipeline_report(report: pipeline_models.PipelineReport) -> None:
+    typer.echo(f"Pipeline '{report.name}': {report.status}")
+    for step in report.steps:
+        msg = f" — {step.message}" if step.message else ""
+        typer.echo(f"- {step.name}: {step.status}{msg}")
+
+
+@pipeline_app.command("run")
+def pipeline_run(
+    years: Optional[str] = typer.Option(
+        None,
+        "--years",
+        help="Ano, lista ou intervalo (ex: 2024 | 2021,2022,2024 | 2021:2025).",
     ),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Re-baixa mesmo se ZIP já existir."
+    force_download: bool = typer.Option(
+        False,
+        "--force-download",
+        help="Re-baixa mesmo se ZIP/arquivos já existirem.",
+    ),
+    cnpj: Optional[str] = typer.Option(
+        None,
+        "--cnpj",
+        help="Filtra o cálculo de indicadores por CNPJ (opcional).",
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
-    """Baixa os ZIPs ITR e DFP da CVM para data/raw/."""
-    configure_logging(verbose)
-    
-    # Validate year if provided
-    if year is not None and not (2000 <= year <= 3000):
-        typer.echo("✗ Ano inválido (deve estar entre 2000 e 3000)", err=True)
+    """Executa o pipeline full (financeiro + cadastral)."""
+    logging.configure_logging(verbose)
+
+    try:
+        years_list = parse_years(years) if years else list(settings.years)
+        report = run_full(years=years_list, force_download=force_download, cnpj=cnpj)
+        _render_pipeline_report(report)
+        raise typer.Exit(0)
+    except YearsParseError as exc:
+        typer.echo(f"✗ {exc}", err=True)
         raise typer.Exit(1)
-    
-    # Prepare input and delegate to handler
-    inp = DownloadInput(
-        years=[year] if year else settings.years,
-        force=force,
-        verbose=verbose,
-    )
-    outcome = handlers.download.handle(inp)
-    render_outcome(outcome)
+    except PipelineExecutionError as exc:
+        if exc.report is not None:
+            _render_pipeline_report(exc.report)
+        typer.echo(f"✗ {exc}", err=True)
+        raise typer.Exit(1)
 
 
 # ============================================================================
-# Load Command (T031)
+# Indicators (consulta)
 # ============================================================================
 
-@app.command()
-def load(
-    year: Optional[int] = typer.Option(
-        None, "--year", "-y", help="Ano específico (ex: 2024)."
-    ),
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
-) -> None:
-    """Carrega os CSVs extraídos para o DuckDB (tabelas raw_*)."""
-    configure_logging(verbose)
-    
-    inp = LoadInput(
-        years=[year] if year else settings.years,
-        verbose=verbose,
-    )
-    outcome = handlers.load.handle(inp)
-    render_outcome(outcome)
 
-
-# ============================================================================
-# Normalize Command (T032)
-# ============================================================================
-
-@app.command()
-def normalize(
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
-) -> None:
-    """Normaliza, deduplica e consolida os dados brutos no DuckDB."""
-    configure_logging(verbose)
-    
-    inp = NormalizeInput(verbose=verbose)
-    outcome = handlers.normalize.handle(inp)
-    render_outcome(outcome)
-
-
-# ============================================================================
-# Indicators Command (T033)
-# ============================================================================
-
-@app.command()
+@app.command("indicators")
 def indicators(
-    cnpj: Optional[str] = typer.Option(
-        None, "--cnpj", help="Filtrar por CNPJ (ex: 00.000.000/0001-00)."
-    ),
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
+    cnpj: str = typer.Option(..., "--cnpj", help="CNPJ da empresa (ex: 00.000.000/0001-00)."),
+    year: Optional[int] = typer.Option(None, "--year", "-y", help="Filtrar por ano (ex: 2024)."),
 ) -> None:
-    """Calcula indicadores fundamentalistas e grava no DuckDB."""
-    configure_logging(verbose)
-    
-    inp = IndicatorsInput(cnpj=cnpj, verbose=verbose)
-    outcome = handlers.indicators.handle(inp)
-    render_outcome(outcome)
-
-
-# ============================================================================
-# Query Command (T034)
-# ============================================================================
-
-@app.command()
-def query(
-    cnpj: Optional[str] = typer.Option(
-        None, "--cnpj", help="CNPJ da empresa (ex: 00.000.000/0001-00)."
-    ),
-    year: Optional[int] = typer.Option(
-        None, "--year", "-y", help="Filtrar por ano (ex: 2024)."
-    ),
-) -> None:
-    """Consulta indicadores fundamentalistas calculados."""
-    if year is not None and not (2000 <= year <= 3000):
-        typer.echo("✗ Ano inválido (deve estar entre 2000 e 3000)", err=True)
+    """Consulta indicadores fundamentalistas calculados (por CNPJ)."""
+    try:
+        validate_indicators_year(year)
+    except ValidationError as exc:
+        typer.echo(f"✗ {exc}", err=True)
         raise typer.Exit(1)
 
-    inp = QueryInput(cnpj=cnpj, year=year)
-    outcome = handlers.query.handle(inp)
-    render_query_result(outcome)
+    inp = models.IndicatorsInput(cnpj=cnpj, year=year)
+    outcome = handlers.indicators(inp)
+    render.render_indicators_result(outcome)
 
 
 # ============================================================================
-# Cadastro CVM Commands
+# Informações Cadastrais (consulta)
 # ============================================================================
 
-@app.command("download-cad")
-def download_cad(
-    force: bool = typer.Option(False, "--force", "-f", help="Re-baixa mesmo se arquivo já existir."),
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
-) -> None:
-    """Baixa os arquivos cadastrais CVM (meta + CSV) para data/raw/cad/."""
-    configure_logging(verbose)
-    
-    inp = DownloadCadInput(force=force, verbose=verbose)
-    outcome = handlers.download_cad.handle(inp)
-    render_outcome(outcome)
 
-
-@app.command("load-cad")
-def load_cad(
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
-) -> None:
-    """Carrega cad_cia_aberta.csv na tabela cad_cia_aberta_raw do DuckDB."""
-    configure_logging(verbose)
-    
-    inp = LoadCadInput(verbose=verbose)
-    outcome = handlers.load_cad.handle(inp)
-    render_outcome(outcome)
-
-
-@app.command("classify-cad")
-def classify_cad(
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
-) -> None:
-    """Classifica CNPJs ativos por setor e persiste em company_classification."""
-    configure_logging(verbose)
-    
-    inp = ClassifyCadInput(verbose=verbose)
-    outcome = handlers.classify_cad.handle(inp)
-    render_outcome(outcome)
-
-
-@app.command("query-cad")
-def query_cad(
+@app.command("info-cad")
+def info_cad(
     cnpj: Optional[str] = typer.Option(
         None, "--cnpj", help="CNPJ da empresa (ex: 12.345.678/0001-99)."
+    ),
+    page: int = typer.Option(1, "--page", help="Página do resumo (>= 1)."),
+    page_size: int = typer.Option(
+        INFO_CAD_PAGE_SIZE_DEFAULT,
+        "--page-size",
+        help="Tamanho da página do resumo (entre 20 e 1000).",
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Consulta dados cadastrais e classificação setorial."""
-    configure_logging(verbose)
-    
-    inp = QueryCadInput(cnpj=cnpj, verbose=verbose)
-    outcome = handlers.query_cad.handle(inp)
-    render_query_cad_result(outcome)
+    logging.configure_logging(verbose)
 
+    try:
+        validate_info_cad_page(page)
+        if cnpj is None:
+            validate_info_cad_page_size(page_size)
+    except ValidationError as exc:
+        typer.echo(f"✗ {exc}", err=True)
+        raise typer.Exit(1)
+
+    inp = models.InfoCadInput(cnpj=cnpj, verbose=verbose, page=page, page_size=page_size)
+    outcome = handlers.info_cad(inp)
+    render.render_info_cad_result(outcome)

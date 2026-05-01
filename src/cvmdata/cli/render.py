@@ -5,8 +5,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-
-from cvmdata.cli.models import Outcome, QueryCadResult, QueryResult
+from cvmdata.cli.models import IndicatorsResult, InfoCadResult, Outcome, Paged
 
 
 def _format_confidence(value: float | str | None) -> str:
@@ -22,21 +21,23 @@ def _format_confidence(value: float | str | None) -> str:
     # Keep non-numeric labels as-is (e.g., "high", "low")
     return str(value)
 
+
 # ============================================================================
 # Main Rendering Function (T013)
 # ============================================================================
 
+
 def render_outcome(outcome: Outcome[Any]) -> None:
     """Render outcome message and set process exit code.
-    
+
     Maps outcome status to user-facing output and exit code:
     - success: ✓ prefix, stdout, exit 0
     - warning: ⚠ prefix, stdout, exit 0 (benign, not failure)
     - error: ✗ prefix, stderr, exit 1
-    
+
     Args:
         outcome: Outcome object from handler.
-    
+
     Raises:
         typer.Exit: Always (with code 0 or 1 based on status).
     """
@@ -44,12 +45,12 @@ def render_outcome(outcome: Outcome[Any]) -> None:
         if outcome.message:
             typer.echo(f"✓ {outcome.message}")
         raise typer.Exit(0)
-    
+
     elif outcome.status == "warning":
         if outcome.message:
             typer.echo(f"⚠ {outcome.message}", err=False)
         raise typer.Exit(0)
-    
+
     elif outcome.status == "error":
         if outcome.message:
             typer.echo(f"✗ {outcome.message}", err=True)
@@ -60,65 +61,43 @@ def render_outcome(outcome: Outcome[Any]) -> None:
 # Query-Specific Rendering (Rich Table)
 # ============================================================================
 
-def render_query_result(outcome: Outcome[list[QueryResult]]) -> None:
-    """Renderiza saída do comando query em tabela Rich."""
+
+def render_indicators_result(outcome: Outcome[list[IndicatorsResult]]) -> None:
+    """Renderiza saída do comando indicators em tabela Rich."""
     console = Console()
 
     if outcome.status == "error":
         if outcome.message:
             typer.echo(f"✗ {outcome.message}", err=True)
         raise typer.Exit(1)
-    
+
     if outcome.status == "warning" or not outcome.payload:
         if outcome.message:
             typer.echo(f"⚠ {outcome.message}", err=False)
         raise typer.Exit(0)
-    
+
     results = outcome.payload
-    
-    # Detect query type: summary (n_indicadores set) vs detail
-    if results and results[0].n_indicadores is not None:
-        # Summary: top companies with most indicators
-        tbl = Table(title="Top 10 empresas com mais indicadores", show_lines=False)
-        tbl.add_column("CNPJ", style="cyan", no_wrap=True)
-        tbl.add_column("Indicadores", justify="right")
-        tbl.add_column("Primeiro período", justify="center")
-        tbl.add_column("Último período", justify="center")
-        for row in results:
-            tbl.add_row(
-                row.cnpj_cia,
-                str(row.n_indicadores),
-                str(row.primeiro_periodo),
-                str(row.ultimo_periodo),
-            )
-    else:
-        # Detail: indicators by period for specific company
-        cnpj_display = results[0].cnpj_cia if results else "unknown"
-        tbl = Table(title=f"Indicadores — {cnpj_display}", show_lines=False)
-        tbl.add_column("dt_refer", style="cyan", no_wrap=True)
-        tbl.add_column("indicador")
-        tbl.add_column("valor", justify="right")
-        for row in results:
-            valor_str = f"{row.valor:.4f}" if row.valor is not None else "—"
-            tbl.add_row(str(row.dt_refer), str(row.indicador), valor_str)
-    
+
+    cnpj_display = results[0].cnpj_cia if results else "unknown"
+    tbl = Table(title=f"Indicadores — {cnpj_display}", show_lines=False)
+    tbl.add_column("dt_refer", style="cyan", no_wrap=True)
+    tbl.add_column("indicador")
+    tbl.add_column("valor", justify="right")
+    for row in results:
+        valor_str = f"{row.valor:.4f}" if row.valor is not None else "—"
+        tbl.add_row(str(row.dt_refer), str(row.indicador), valor_str)
+
     console.print(tbl)
     raise typer.Exit(0)
 
 
 # ============================================================================
-# Query Cadastro Rendering (Rich Table, 2 modes: summary vs detail)
+# Query Informações Cadastrais Rendering (Rich Table, 2 modes: summary vs detail)
 # ============================================================================
 
-def render_query_cad_result(outcome: Outcome[list[QueryCadResult]]) -> None:
-    """Renderiza saída do comando query-cad com suporte a dois modos.
 
-    Summary mode (no --cnpj):
-    - Últimas 20 classificações com CNPJ, Razão Social, Setor, Profile, Confidence, Atualizado
-
-    Detail mode (com --cnpj):
-    - Detalhe completo com todas as colunas de company_classification
-    """
+def render_info_cad_result(outcome: Outcome[list[InfoCadResult] | Paged[InfoCadResult]]) -> None:
+    """Renderiza saída do comando info-cad com suporte a dois modos (summary/detail)."""
     console = Console()
 
     if outcome.status == "error":
@@ -131,7 +110,18 @@ def render_query_cad_result(outcome: Outcome[list[QueryCadResult]]) -> None:
             typer.echo(f"⚠ {outcome.message}", err=False)
         raise typer.Exit(0)
 
-    results = outcome.payload
+    payload = outcome.payload
+
+    if isinstance(payload, Paged):
+        results = payload.items
+        page = payload.page
+        page_size = payload.page_size
+        is_paged_summary = True
+    else:
+        results = payload
+        page = None
+        page_size = None
+        is_paged_summary = False
 
     # Detect mode: detail if cd_cvm is populated
     if results and results[0].cd_cvm is not None:
@@ -161,8 +151,12 @@ def render_query_cad_result(outcome: Outcome[list[QueryCadResult]]) -> None:
                 row.updated_at or "—",
             )
     else:
-        # Summary mode: last 20 classifications
-        tbl = Table(title="company_classification (últimas 20)", show_lines=False)
+        # Summary mode: paged classifications
+        title = "company_classification"
+        if is_paged_summary and page is not None and page_size is not None:
+            title = f"{title} (últimas {page_size}) — página {page}"
+
+        tbl = Table(title=title, show_lines=False)
         tbl.add_column("CNPJ", style="cyan", no_wrap=True)
         tbl.add_column("Razão Social")
         tbl.add_column("Setor")
@@ -182,4 +176,3 @@ def render_query_cad_result(outcome: Outcome[list[QueryCadResult]]) -> None:
 
     console.print(tbl)
     raise typer.Exit(0)
-

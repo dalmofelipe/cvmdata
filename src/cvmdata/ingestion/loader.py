@@ -13,6 +13,7 @@ de metadata: source, year, scope.
 Idempotência: rows existentes para (source, year, scope) são
 deletadas antes de cada INSERT.
 """
+
 from __future__ import annotations
 
 import logging
@@ -221,9 +222,10 @@ def load_source_year(
     return results
 
 
-# ── Cadastro CVM ──────────────────────────────────────────────────────────────
+# ── Informação Cadastral CVM ──────────────────────────────────────────────────────────────
 
-def load_cadastro(
+
+def load_info_cad(
     conn: duckdb.DuckDBPyConnection,
     csv_path: Path,
 ) -> int:
@@ -236,9 +238,9 @@ def load_cadastro(
 
     Valida SC-001: linhas CSV == linhas inseridas.
     """
-    from cvmdata.ingestion.db import init_cadastro_schema
+    from cvmdata.ingestion.db import init_info_cad_schema
 
-    init_cadastro_schema(conn)
+    init_info_cad_schema(conn)
 
     fpath = csv_path.as_posix()
 
@@ -275,9 +277,7 @@ def load_cadastro(
 
     # SC-001: validar paridade
     if inserted != csv_count:
-        logger.warning(
-            "SC-001 FAIL: CSV=%d linhas, raw=%d linhas inseridas", csv_count, inserted
-        )
+        logger.warning("SC-001 FAIL: CSV=%d linhas, raw=%d linhas inseridas", csv_count, inserted)
     else:
         logger.info("SC-001 OK: %d linhas — CSV == raw", inserted)
 

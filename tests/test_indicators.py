@@ -1,4 +1,5 @@
 """Testes das funções puras e do orquestrador de indicadores (T027-T031)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -25,7 +26,7 @@ from cvmdata.transform.calc_plan import (
     roa,
     roe,
 )
-from cvmdata.transform.indicators import (_get_ttm_value, calculate_all)
+from cvmdata.transform.indicators import _get_ttm_value, calculate_all
 from cvmdata.transform.normalize import normalize_table
 
 # ── account_map ──────────────────────────────────────────────────────────────
@@ -43,10 +44,24 @@ def test_get_component_unknown_returns_none():
 
 def test_account_map_has_expected_keys():
     expected = {
-        "1", "1.01", "1.01.01", "1.01.02", "1.01.04",
-        "1.02", "1.02.01",
-        "2", "2.01", "2.01.04", "2.02", "2.02.01", "2.03",
-        "3.01", "3.03", "3.05", "3.06.02", "3.11",
+        "1",
+        "1.01",
+        "1.01.01",
+        "1.01.02",
+        "1.01.04",
+        "1.02",
+        "1.02.01",
+        "2",
+        "2.01",
+        "2.01.04",
+        "2.02",
+        "2.02.01",
+        "2.03",
+        "3.01",
+        "3.03",
+        "3.05",
+        "3.06.02",
+        "3.11",
     }
     assert expected.issubset(set(ACCOUNT_MAP.keys()))
 
@@ -125,21 +140,24 @@ def test_cobertura_juros_happy():
 # ── Denominador zero → None ───────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("fn,args", [
-    (roe,               (100, 0)),
-    (roa,               (100, 0)),
-    (margem_bruta,      (300, 0)),
-    (margem_operacional,(200, 0)),
-    (margem_liquida,    (150, 0)),
-    (giro_ativo,        (1000, 0)),
-    (liquidez_corrente, (200, 0)),
-    (liquidez_seca,     (200, 50, 0)),
-    (liquidez_imediata, (80, 0)),
-    (liquidez_geral,    (200, 50, 0, 0)),
-    (endividamento_geral,(100, 200, 0)),
-    (divida_liquida_pl, (500, 0)),
-    (cobertura_juros,   (200, 0)),
-])
+@pytest.mark.parametrize(
+    "fn,args",
+    [
+        (roe, (100, 0)),
+        (roa, (100, 0)),
+        (margem_bruta, (300, 0)),
+        (margem_operacional, (200, 0)),
+        (margem_liquida, (150, 0)),
+        (giro_ativo, (1000, 0)),
+        (liquidez_corrente, (200, 0)),
+        (liquidez_seca, (200, 50, 0)),
+        (liquidez_imediata, (80, 0)),
+        (liquidez_geral, (200, 50, 0, 0)),
+        (endividamento_geral, (100, 200, 0)),
+        (divida_liquida_pl, (500, 0)),
+        (cobertura_juros, (200, 0)),
+    ],
+)
 def test_zero_denominator_returns_none(fn, args):
     assert fn(*args) is None
 
@@ -147,25 +165,28 @@ def test_zero_denominator_returns_none(fn, args):
 # ── Argumento None → None ─────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("fn,args", [
-    (roe,               (None, 500)),
-    (roe,               (100, None)),
-    (roa,               (None, 2000)),
-    (margem_bruta,      (None, 1000)),
-    (margem_operacional,(None, 1000)),
-    (margem_liquida,    (None, 1000)),
-    (giro_ativo,        (None, 2000)),
-    (liquidez_corrente, (None, 100)),
-    (liquidez_seca,     (None, 50, 100)),
-    (liquidez_seca,     (200, None, 100)),
-    (liquidez_imediata, (None, 100)),
-    (liquidez_geral,    (None, 50, 100, 150)),
-    (endividamento_geral,(None, 200, 1000)),
-    (divida_bruta,      (None, 400)),
-    (divida_liquida,    (None, 400, 80, 120)),
-    (divida_liquida_pl, (None, 1000)),
-    (cobertura_juros,   (None, 50)),
-])
+@pytest.mark.parametrize(
+    "fn,args",
+    [
+        (roe, (None, 500)),
+        (roe, (100, None)),
+        (roa, (None, 2000)),
+        (margem_bruta, (None, 1000)),
+        (margem_operacional, (None, 1000)),
+        (margem_liquida, (None, 1000)),
+        (giro_ativo, (None, 2000)),
+        (liquidez_corrente, (None, 100)),
+        (liquidez_seca, (None, 50, 100)),
+        (liquidez_seca, (200, None, 100)),
+        (liquidez_imediata, (None, 100)),
+        (liquidez_geral, (None, 50, 100, 150)),
+        (endividamento_geral, (None, 200, 1000)),
+        (divida_bruta, (None, 400)),
+        (divida_liquida, (None, 400, 80, 120)),
+        (divida_liquida_pl, (None, 1000)),
+        (cobertura_juros, (None, 50)),
+    ],
+)
 def test_none_argument_returns_none(fn, args):
     assert fn(*args) is None
 
@@ -173,6 +194,7 @@ def test_none_argument_returns_none(fn, args):
 # ── Integração: calculate_all ─────────────────────────────────────────────────
 
 # Helpers para criar CSVs mínimos in-memory
+
 
 def _bpa_csv(tmp_path, filename: str, rows: list[tuple[str, str, str, float]]) -> object:
     """Cria CSV de BPA/BPP com as linhas (cd_conta, ds_conta, dt_refer, vl_conta)."""
@@ -214,28 +236,28 @@ def _dre_csv(tmp_path, filename: str, rows: list[tuple[str, str, str, float]]) -
 DT = "2024-03-31"
 
 BPA_ROWS = [
-    ("1",       "Ativo Total",          DT, 10000.0),
-    ("1.01",    "Ativo Circulante",     DT, 4000.0),
-    ("1.01.01", "Caixa",                DT, 500.0),
-    ("1.01.02", "Aplicações",           DT, 300.0),
-    ("1.01.04", "Estoques",             DT, 200.0),
-    ("1.02",    "Ativo Não Circ.",      DT, 6000.0),
-    ("1.02.01", "Realizável LP",        DT, 800.0),
+    ("1", "Ativo Total", DT, 10000.0),
+    ("1.01", "Ativo Circulante", DT, 4000.0),
+    ("1.01.01", "Caixa", DT, 500.0),
+    ("1.01.02", "Aplicações", DT, 300.0),
+    ("1.01.04", "Estoques", DT, 200.0),
+    ("1.02", "Ativo Não Circ.", DT, 6000.0),
+    ("1.02.01", "Realizável LP", DT, 800.0),
 ]
 BPP_ROWS = [
-    ("2",       "Passivo Total",        DT, 6000.0),
-    ("2.01",    "Passivo Circulante",   DT, 2000.0),
-    ("2.01.04", "Empréstimos CP",       DT, 600.0),
-    ("2.02",    "Passivo Não Circ.",    DT, 3000.0),
-    ("2.02.01", "Empréstimos LP",       DT, 1200.0),
-    ("2.03",    "Patrimônio Líquido",   DT, 1000.0),
+    ("2", "Passivo Total", DT, 6000.0),
+    ("2.01", "Passivo Circulante", DT, 2000.0),
+    ("2.01.04", "Empréstimos CP", DT, 600.0),
+    ("2.02", "Passivo Não Circ.", DT, 3000.0),
+    ("2.02.01", "Empréstimos LP", DT, 1200.0),
+    ("2.03", "Patrimônio Líquido", DT, 1000.0),
 ]
 DRE_ROWS = [
-    ("3.01",    "Receita Líquida",      DT, 5000.0),
-    ("3.03",    "Resultado Bruto",      DT, 2000.0),
-    ("3.05",    "EBIT",                 DT, 800.0),
+    ("3.01", "Receita Líquida", DT, 5000.0),
+    ("3.03", "Resultado Bruto", DT, 2000.0),
+    ("3.05", "EBIT", DT, 800.0),
     ("3.06.02", "Despesas Financeiras", DT, 200.0),
-    ("3.11",    "Lucro Líquido",        DT, 500.0),
+    ("3.11", "Lucro Líquido", DT, 500.0),
 ]
 
 
@@ -243,12 +265,30 @@ def test_calculate_all_inserts_15_indicators(tmp_path, db):
     """calculate_all deve gravar exatamente 15 indicadores por empresa/período."""
     init_schema(db)
 
-    load_csv(db, _bpa_csv(tmp_path, "itr_cia_aberta_BPA_con_2024.csv", BPA_ROWS),
-             "BPA", "itr", 2024, "con")
-    load_csv(db, _bpa_csv(tmp_path, "itr_cia_aberta_BPP_con_2024.csv", BPP_ROWS),
-             "BPP", "itr", 2024, "con")
-    load_csv(db, _dre_csv(tmp_path, "itr_cia_aberta_DRE_con_2024.csv", DRE_ROWS),
-             "DRE", "itr", 2024, "con")
+    load_csv(
+        db,
+        _bpa_csv(tmp_path, "itr_cia_aberta_BPA_con_2024.csv", BPA_ROWS),
+        "BPA",
+        "itr",
+        2024,
+        "con",
+    )
+    load_csv(
+        db,
+        _bpa_csv(tmp_path, "itr_cia_aberta_BPP_con_2024.csv", BPP_ROWS),
+        "BPP",
+        "itr",
+        2024,
+        "con",
+    )
+    load_csv(
+        db,
+        _dre_csv(tmp_path, "itr_cia_aberta_DRE_con_2024.csv", DRE_ROWS),
+        "DRE",
+        "itr",
+        2024,
+        "con",
+    )
 
     normalize_table("raw_bpa", db)
     normalize_table("raw_bpp", db)
@@ -264,21 +304,37 @@ def test_calculate_all_inserts_15_indicators(tmp_path, db):
 def test_calculate_all_roe_plausible(tmp_path, db):
     """ROE = 500/1000*100 = 50.0 com os dados de fixture."""
     init_schema(db)
-    load_csv(db, _bpa_csv(tmp_path, "itr_cia_aberta_BPA_con_2024.csv", BPA_ROWS),
-             "BPA", "itr", 2024, "con")
-    load_csv(db, _bpa_csv(tmp_path, "itr_cia_aberta_BPP_con_2024.csv", BPP_ROWS),
-             "BPP", "itr", 2024, "con")
-    load_csv(db, _dre_csv(tmp_path, "itr_cia_aberta_DRE_con_2024.csv", DRE_ROWS),
-             "DRE", "itr", 2024, "con")
+    load_csv(
+        db,
+        _bpa_csv(tmp_path, "itr_cia_aberta_BPA_con_2024.csv", BPA_ROWS),
+        "BPA",
+        "itr",
+        2024,
+        "con",
+    )
+    load_csv(
+        db,
+        _bpa_csv(tmp_path, "itr_cia_aberta_BPP_con_2024.csv", BPP_ROWS),
+        "BPP",
+        "itr",
+        2024,
+        "con",
+    )
+    load_csv(
+        db,
+        _dre_csv(tmp_path, "itr_cia_aberta_DRE_con_2024.csv", DRE_ROWS),
+        "DRE",
+        "itr",
+        2024,
+        "con",
+    )
 
     normalize_table("raw_bpa", db)
     normalize_table("raw_bpp", db)
     normalize_table("raw_dre", db)
     calculate_all(db)
 
-    row = db.execute(
-        "SELECT valor FROM indicators WHERE indicador = 'roe'"
-    ).fetchone()
+    row = db.execute("SELECT valor FROM indicators WHERE indicador = 'roe'").fetchone()
     assert row is not None
     assert row[0] == pytest.approx(50.0)
 
@@ -286,12 +342,30 @@ def test_calculate_all_roe_plausible(tmp_path, db):
 def test_calculate_all_cnpj_filter(tmp_path, db):
     """calculate_all com --cnpj deve processar apenas a empresa solicitada."""
     init_schema(db)
-    load_csv(db, _bpa_csv(tmp_path, "itr_cia_aberta_BPA_con_2024.csv", BPA_ROWS),
-             "BPA", "itr", 2024, "con")
-    load_csv(db, _bpa_csv(tmp_path, "itr_cia_aberta_BPP_con_2024.csv", BPP_ROWS),
-             "BPP", "itr", 2024, "con")
-    load_csv(db, _dre_csv(tmp_path, "itr_cia_aberta_DRE_con_2024.csv", DRE_ROWS),
-             "DRE", "itr", 2024, "con")
+    load_csv(
+        db,
+        _bpa_csv(tmp_path, "itr_cia_aberta_BPA_con_2024.csv", BPA_ROWS),
+        "BPA",
+        "itr",
+        2024,
+        "con",
+    )
+    load_csv(
+        db,
+        _bpa_csv(tmp_path, "itr_cia_aberta_BPP_con_2024.csv", BPP_ROWS),
+        "BPP",
+        "itr",
+        2024,
+        "con",
+    )
+    load_csv(
+        db,
+        _dre_csv(tmp_path, "itr_cia_aberta_DRE_con_2024.csv", DRE_ROWS),
+        "DRE",
+        "itr",
+        2024,
+        "con",
+    )
     normalize_table("raw_bpa", db)
     normalize_table("raw_bpp", db)
     normalize_table("raw_dre", db)
@@ -310,12 +384,30 @@ def test_calculate_all_cnpj_filter(tmp_path, db):
 def test_calculate_all_idempotent(tmp_path, db):
     """Rodar calculate_all duas vezes não duplica registros em indicators."""
     init_schema(db)
-    load_csv(db, _bpa_csv(tmp_path, "itr_cia_aberta_BPA_con_2024.csv", BPA_ROWS),
-             "BPA", "itr", 2024, "con")
-    load_csv(db, _bpa_csv(tmp_path, "itr_cia_aberta_BPP_con_2024.csv", BPP_ROWS),
-             "BPP", "itr", 2024, "con")
-    load_csv(db, _dre_csv(tmp_path, "itr_cia_aberta_DRE_con_2024.csv", DRE_ROWS),
-             "DRE", "itr", 2024, "con")
+    load_csv(
+        db,
+        _bpa_csv(tmp_path, "itr_cia_aberta_BPA_con_2024.csv", BPA_ROWS),
+        "BPA",
+        "itr",
+        2024,
+        "con",
+    )
+    load_csv(
+        db,
+        _bpa_csv(tmp_path, "itr_cia_aberta_BPP_con_2024.csv", BPP_ROWS),
+        "BPP",
+        "itr",
+        2024,
+        "con",
+    )
+    load_csv(
+        db,
+        _dre_csv(tmp_path, "itr_cia_aberta_DRE_con_2024.csv", DRE_ROWS),
+        "DRE",
+        "itr",
+        2024,
+        "con",
+    )
     normalize_table("raw_bpa", db)
     normalize_table("raw_bpp", db)
     normalize_table("raw_dre", db)
@@ -372,9 +464,7 @@ def test_bank_integration_roe_not_none(db):
         FIXTURES_DIR / "sample_bank_bpp.csv",
         FIXTURES_DIR / "sample_bank_dre.csv",
     )
-    row = db.execute(
-        "SELECT valor FROM indicators WHERE indicador = 'roe'"
-    ).fetchone()
+    row = db.execute("SELECT valor FROM indicators WHERE indicador = 'roe'").fetchone()
     assert row is not None
     assert row[0] is not None
 
@@ -402,9 +492,7 @@ def test_industrial_roe_not_none(db):
         FIXTURES_DIR / "sample_industrial_bpp.csv",
         FIXTURES_DIR / "sample_industrial_dre.csv",
     )
-    row = db.execute(
-        "SELECT valor FROM indicators WHERE indicador = 'roe'"
-    ).fetchone()
+    row = db.execute("SELECT valor FROM indicators WHERE indicador = 'roe'").fetchone()
     assert row is not None and row[0] is not None
 
 
@@ -416,9 +504,7 @@ def test_industrial_no_none_indicators(db):
         FIXTURES_DIR / "sample_industrial_bpp.csv",
         FIXTURES_DIR / "sample_industrial_dre.csv",
     )
-    none_count = db.execute(
-        "SELECT COUNT(*) FROM indicators WHERE valor IS NULL"
-    ).fetchone()[0]
+    none_count = db.execute("SELECT COUNT(*) FROM indicators WHERE valor IS NULL").fetchone()[0]
     assert none_count == 0
 
 
@@ -437,9 +523,7 @@ def test_bank_sector_liquidez_seca_not_none(db):
         FIXTURES_DIR / "sample_bank_bpp.csv",
         FIXTURES_DIR / "sample_bank_dre.csv",
     )
-    row = db.execute(
-        "SELECT valor FROM indicators WHERE indicador = 'liquidez_seca'"
-    ).fetchone()
+    row = db.execute("SELECT valor FROM indicators WHERE indicador = 'liquidez_seca'").fetchone()
     # xfail: banco não tem 1.01.04 → estoques = None → liquidez_seca = None
     assert row is not None and row[0] is not None
 
@@ -460,9 +544,7 @@ def test_bank_sector_divida_bruta_not_none(db):
         FIXTURES_DIR / "sample_bank_bpp.csv",
         FIXTURES_DIR / "sample_bank_dre.csv",
     )
-    row = db.execute(
-        "SELECT valor FROM indicators WHERE indicador = 'divida_bruta'"
-    ).fetchone()
+    row = db.execute("SELECT valor FROM indicators WHERE indicador = 'divida_bruta'").fetchone()
     # xfail: banco não tem 2.01.04 → emprestimos_cp = None → divida_bruta = None
     assert row is not None and row[0] is not None
 
@@ -499,16 +581,19 @@ def _insert_indicators(db, rows: list[tuple]) -> None:
 def test_query_returns_records_for_cnpj(db):
     """Query com CNPJ retorna os registros conhecidos da tabela indicators."""
     init_indicators_schema(db)
-    _insert_indicators(db, [
-        ("11.111.111/0001-11", "2024-03-31", "roe", 20.0),
-        ("11.111.111/0001-11", "2024-03-31", "roa", 10.0),
-        ("22.222.222/0002-22", "2024-03-31", "roe", 5.0),
-    ])
+    _insert_indicators(
+        db,
+        [
+            ("11.111.111/0001-11", "2024-03-31", "roe", 20.0),
+            ("11.111.111/0001-11", "2024-03-31", "roa", 10.0),
+            ("22.222.222/0002-22", "2024-03-31", "roe", 5.0),
+        ],
+    )
 
     rows = db.execute(_QUERY_SQL, ["11.111.111/0001-11"]).fetchall()
 
     assert len(rows) == 2
-    assert rows[0][2] == "roa"   # ORDER BY indicador → roa antes de roe
+    assert rows[0][2] == "roa"  # ORDER BY indicador → roa antes de roe
     assert rows[1][2] == "roe"
     assert rows[0][3] == pytest.approx(10.0)
     assert rows[1][3] == pytest.approx(20.0)
@@ -517,11 +602,14 @@ def test_query_returns_records_for_cnpj(db):
 def test_query_ordered_by_dt_refer(db):
     """Registros de múltiplos períodos devem estar ordenados por dt_refer ASC."""
     init_indicators_schema(db)
-    _insert_indicators(db, [
-        ("33.333.333/0003-33", "2024-09-30", "roe", 18.0),
-        ("33.333.333/0003-33", "2024-03-31", "roe", 15.0),
-        ("33.333.333/0003-33", "2024-06-30", "roe", 17.0),
-    ])
+    _insert_indicators(
+        db,
+        [
+            ("33.333.333/0003-33", "2024-09-30", "roe", 18.0),
+            ("33.333.333/0003-33", "2024-03-31", "roe", 15.0),
+            ("33.333.333/0003-33", "2024-06-30", "roe", 17.0),
+        ],
+    )
 
     rows = db.execute(_QUERY_SQL, ["33.333.333/0003-33"]).fetchall()
 
@@ -540,11 +628,14 @@ def test_query_unknown_cnpj_returns_empty(db):
 def test_query_summary_top10(db):
     """Sem filtro de CNPJ, resumo lista até 10 empresas ordenadas por n_indicadores DESC."""
     init_indicators_schema(db)
-    _insert_indicators(db, [
-        ("44.444.444/0001-44", "2024-03-31", "roe", 1.0),
-        ("44.444.444/0001-44", "2024-03-31", "roa", 2.0),
-        ("55.555.555/0001-55", "2024-03-31", "roe", 3.0),
-    ])
+    _insert_indicators(
+        db,
+        [
+            ("44.444.444/0001-44", "2024-03-31", "roe", 1.0),
+            ("44.444.444/0001-44", "2024-03-31", "roa", 2.0),
+            ("55.555.555/0001-55", "2024-03-31", "roe", 3.0),
+        ],
+    )
 
     rows = db.execute(_SUMMARY_SQL).fetchall()
 
@@ -559,11 +650,14 @@ def test_query_summary_top10(db):
 def test_query_year_filter(db):
     """Filtro --year restringe resultados ao ano solicitado."""
     init_indicators_schema(db)
-    _insert_indicators(db, [
-        ("66.666.666/0001-66", "2023-12-31", "roe", 10.0),
-        ("66.666.666/0001-66", "2024-03-31", "roe", 12.0),
-        ("66.666.666/0001-66", "2024-06-30", "roe", 14.0),
-    ])
+    _insert_indicators(
+        db,
+        [
+            ("66.666.666/0001-66", "2023-12-31", "roe", 10.0),
+            ("66.666.666/0001-66", "2024-03-31", "roe", 12.0),
+            ("66.666.666/0001-66", "2024-06-30", "roe", 14.0),
+        ],
+    )
 
     rows = db.execute(
         """
@@ -609,9 +703,18 @@ def _insert_raw_dre(
             ?, 2024, 'con'
         )
         """,
-        [cnpj, dt_refer, versao, cd_cvm,
-         ordem_exerc, dt_ini_exerc, dt_fim_exerc,
-         cd_conta, vl_conta, source],
+        [
+            cnpj,
+            dt_refer,
+            versao,
+            cd_cvm,
+            ordem_exerc,
+            dt_ini_exerc,
+            dt_fim_exerc,
+            cd_conta,
+            vl_conta,
+            source,
+        ],
     )
 
 
@@ -622,16 +725,35 @@ def test_ttm_full(db):
     """T015 — YTD=369, FY=494, YTD_ant=377 → TTM = 369 + (494-377) = 486."""
     init_schema(db)
     # ITR Q3/2024 — ÚLTIMO (YTD janeiro-setembro)
-    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="ÚLTIMO",
-                    dt_ini_exerc="2024-01-01", dt_fim_exerc="2024-09-30", vl_conta=369.0)
+    _insert_raw_dre(
+        db,
+        dt_refer="2024-09-30",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2024-01-01",
+        dt_fim_exerc="2024-09-30",
+        vl_conta=369.0,
+    )
     # ITR Q3/2024 — PENÚLTIMO (YTD ano anterior, mesmo período)
-    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="PENÚLTIMO",
-                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2024-09-30", vl_conta=377.0)
+    _insert_raw_dre(
+        db,
+        dt_refer="2024-09-30",
+        ordem_exerc="PENÚLTIMO",
+        dt_ini_exerc="2023-01-01",
+        dt_fim_exerc="2024-09-30",
+        vl_conta=377.0,
+    )
     # DFP FY2023 — ÚLTIMO (ano completo)
-    _insert_raw_dre(db, dt_refer="2023-12-31", ordem_exerc="ÚLTIMO",
-                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2023-12-31",
-                    vl_conta=494.0, source="dfp")
+    _insert_raw_dre(
+        db,
+        dt_refer="2023-12-31",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2023-01-01",
+        dt_fim_exerc="2023-12-31",
+        vl_conta=494.0,
+        source="dfp",
+    )
     from cvmdata.transform.normalize import normalize_table
+
     normalize_table("raw_dre", db)
 
     result = _get_ttm_value(db, _TTM_CNPJ, "2024-09-30", "3.01")
@@ -645,12 +767,25 @@ def test_ttm_full(db):
 def test_ttm_fallback_no_penultimo(db):
     """T016 — Sem PENÚLTIMO → retorna FY direto (494)."""
     init_schema(db)
-    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="ÚLTIMO",
-                    dt_ini_exerc="2024-01-01", dt_fim_exerc="2024-09-30", vl_conta=369.0)
-    _insert_raw_dre(db, dt_refer="2023-12-31", ordem_exerc="ÚLTIMO",
-                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2023-12-31",
-                    vl_conta=494.0, source="dfp")
+    _insert_raw_dre(
+        db,
+        dt_refer="2024-09-30",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2024-01-01",
+        dt_fim_exerc="2024-09-30",
+        vl_conta=369.0,
+    )
+    _insert_raw_dre(
+        db,
+        dt_refer="2023-12-31",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2023-01-01",
+        dt_fim_exerc="2023-12-31",
+        vl_conta=494.0,
+        source="dfp",
+    )
     from cvmdata.transform.normalize import normalize_table
+
     normalize_table("raw_dre", db)
 
     result = _get_ttm_value(db, _TTM_CNPJ, "2024-09-30", "3.01")
@@ -664,12 +799,25 @@ def test_ttm_fallback_no_penultimo(db):
 def test_ttm_fallback_no_dfp(db):
     """T017 — Sem DFP anterior → retorna YTD parcial (369)."""
     init_schema(db)
-    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="ÚLTIMO",
-                    dt_ini_exerc="2024-01-01", dt_fim_exerc="2024-09-30", vl_conta=369.0)
-    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="PENÚLTIMO",
-                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2024-09-30", vl_conta=377.0)
+    _insert_raw_dre(
+        db,
+        dt_refer="2024-09-30",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2024-01-01",
+        dt_fim_exerc="2024-09-30",
+        vl_conta=369.0,
+    )
+    _insert_raw_dre(
+        db,
+        dt_refer="2024-09-30",
+        ordem_exerc="PENÚLTIMO",
+        dt_ini_exerc="2023-01-01",
+        dt_fim_exerc="2024-09-30",
+        vl_conta=377.0,
+    )
     # Sem DFP
     from cvmdata.transform.normalize import normalize_table
+
     normalize_table("raw_dre", db)
 
     result = _get_ttm_value(db, _TTM_CNPJ, "2024-09-30", "3.01")
@@ -683,10 +831,17 @@ def test_ttm_fallback_no_dfp(db):
 def test_ttm_fallback_no_itr(db):
     """T018 — Sem ITR (só DFP FY2023) → retorna FY direto (494) para dt_refer inexistente."""
     init_schema(db)
-    _insert_raw_dre(db, dt_refer="2023-12-31", ordem_exerc="ÚLTIMO",
-                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2023-12-31",
-                    vl_conta=494.0, source="dfp")
+    _insert_raw_dre(
+        db,
+        dt_refer="2023-12-31",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2023-01-01",
+        dt_fim_exerc="2023-12-31",
+        vl_conta=494.0,
+        source="dfp",
+    )
     from cvmdata.transform.normalize import normalize_table
+
     normalize_table("raw_dre", db)
 
     # Consulta para dt_refer que não tem ITR
@@ -702,16 +857,35 @@ def test_ttm_non_december_fiscal_year(db):
     """T019 — Empresa com fiscal year abril-março: DFP em março localizado corretamente."""
     init_schema(db)
     # DFP FY2024 terminando em março (ano fiscal abril-março)
-    _insert_raw_dre(db, dt_refer="2024-03-31", ordem_exerc="ÚLTIMO",
-                    dt_ini_exerc="2023-04-01", dt_fim_exerc="2024-03-31",
-                    vl_conta=300.0, source="dfp")
+    _insert_raw_dre(
+        db,
+        dt_refer="2024-03-31",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2023-04-01",
+        dt_fim_exerc="2024-03-31",
+        vl_conta=300.0,
+        source="dfp",
+    )
     # ITR Q1 (abril-junho 2024) — ÚLTIMO (YTD desde abril)
-    _insert_raw_dre(db, dt_refer="2024-06-30", ordem_exerc="ÚLTIMO",
-                    dt_ini_exerc="2024-04-01", dt_fim_exerc="2024-06-30", vl_conta=80.0)
+    _insert_raw_dre(
+        db,
+        dt_refer="2024-06-30",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2024-04-01",
+        dt_fim_exerc="2024-06-30",
+        vl_conta=80.0,
+    )
     # ITR Q1 — PENÚLTIMO (YTD mesmo período ano anterior)
-    _insert_raw_dre(db, dt_refer="2024-06-30", ordem_exerc="PENÚLTIMO",
-                    dt_ini_exerc="2023-04-01", dt_fim_exerc="2024-06-30", vl_conta=70.0)
+    _insert_raw_dre(
+        db,
+        dt_refer="2024-06-30",
+        ordem_exerc="PENÚLTIMO",
+        dt_ini_exerc="2023-04-01",
+        dt_fim_exerc="2024-06-30",
+        vl_conta=70.0,
+    )
     from cvmdata.transform.normalize import normalize_table
+
     normalize_table("raw_dre", db)
 
     result = _get_ttm_value(db, _TTM_CNPJ, "2024-06-30", "3.01")
@@ -722,24 +896,52 @@ def test_ttm_non_december_fiscal_year(db):
 
 # ── T019b: Dois DFPs — seleciona o FY correto ───────────────────────────────
 
+
 def test_ttm_two_dfps_selects_correct_fy(db):
     """T019b — Dois DFPs (FY2022 e FY2023) → seleciona FY2023 para ITR Q3/2024."""
     init_schema(db)
     # DFP FY2022
-    _insert_raw_dre(db, dt_refer="2022-12-31", ordem_exerc="ÚLTIMO",
-                    dt_ini_exerc="2022-01-01", dt_fim_exerc="2022-12-31",
-                    vl_conta=400.0, source="dfp", versao=1)
+    _insert_raw_dre(
+        db,
+        dt_refer="2022-12-31",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2022-01-01",
+        dt_fim_exerc="2022-12-31",
+        vl_conta=400.0,
+        source="dfp",
+        versao=1,
+    )
     # DFP FY2023
-    _insert_raw_dre(db, dt_refer="2023-12-31", ordem_exerc="ÚLTIMO",
-                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2023-12-31",
-                    vl_conta=494.0, source="dfp", versao=1)
+    _insert_raw_dre(
+        db,
+        dt_refer="2023-12-31",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2023-01-01",
+        dt_fim_exerc="2023-12-31",
+        vl_conta=494.0,
+        source="dfp",
+        versao=1,
+    )
     # ITR Q3/2024 — ÚLTIMO
-    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="ÚLTIMO",
-                    dt_ini_exerc="2024-01-01", dt_fim_exerc="2024-09-30", vl_conta=369.0)
+    _insert_raw_dre(
+        db,
+        dt_refer="2024-09-30",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2024-01-01",
+        dt_fim_exerc="2024-09-30",
+        vl_conta=369.0,
+    )
     # ITR Q3/2024 — PENÚLTIMO
-    _insert_raw_dre(db, dt_refer="2024-09-30", ordem_exerc="PENÚLTIMO",
-                    dt_ini_exerc="2023-01-01", dt_fim_exerc="2024-09-30", vl_conta=377.0)
+    _insert_raw_dre(
+        db,
+        dt_refer="2024-09-30",
+        ordem_exerc="PENÚLTIMO",
+        dt_ini_exerc="2023-01-01",
+        dt_fim_exerc="2024-09-30",
+        vl_conta=377.0,
+    )
     from cvmdata.transform.normalize import normalize_table
+
     normalize_table("raw_dre", db)
 
     result = _get_ttm_value(db, _TTM_CNPJ, "2024-09-30", "3.01")
@@ -764,38 +966,57 @@ def test_calculate_all_regression_batch(tmp_path, db):
     # Carregar BPA, BPP e DRE via CSV (mesmo padrão dos testes existentes)
     DT = "2024-03-31"
     BPA_ROWS = [
-        ("1",       "Ativo Total",        DT, 10000.0),
-        ("1.01",    "Ativo Circulante",   DT, 4000.0),
-        ("1.01.01", "Caixa",              DT, 500.0),
-        ("1.01.02", "Aplicações",         DT, 300.0),
-        ("1.01.04", "Estoques",           DT, 200.0),
-        ("1.02",    "Ativo Não Circ.",    DT, 6000.0),
-        ("1.02.01", "Realizável LP",      DT, 800.0),
+        ("1", "Ativo Total", DT, 10000.0),
+        ("1.01", "Ativo Circulante", DT, 4000.0),
+        ("1.01.01", "Caixa", DT, 500.0),
+        ("1.01.02", "Aplicações", DT, 300.0),
+        ("1.01.04", "Estoques", DT, 200.0),
+        ("1.02", "Ativo Não Circ.", DT, 6000.0),
+        ("1.02.01", "Realizável LP", DT, 800.0),
     ]
     BPP_ROWS = [
-        ("2",       "Passivo Total",      DT, 6000.0),
-        ("2.01",    "Passivo Circ.",      DT, 2000.0),
-        ("2.01.04", "Empréstimos CP",     DT, 600.0),
-        ("2.02",    "Passivo Não Circ.",  DT, 3000.0),
-        ("2.02.01", "Empréstimos LP",     DT, 1200.0),
-        ("2.03",    "Patrimônio Líq.",    DT, 1000.0),
+        ("2", "Passivo Total", DT, 6000.0),
+        ("2.01", "Passivo Circ.", DT, 2000.0),
+        ("2.01.04", "Empréstimos CP", DT, 600.0),
+        ("2.02", "Passivo Não Circ.", DT, 3000.0),
+        ("2.02.01", "Empréstimos LP", DT, 1200.0),
+        ("2.03", "Patrimônio Líq.", DT, 1000.0),
     ]
     DRE_ROWS = [
-        ("3.01",    "Receita Líquida",    DT, 5000.0),
-        ("3.03",    "Resultado Bruto",    DT, 2000.0),
-        ("3.05",    "EBIT",               DT, 800.0),
-        ("3.06.02", "Desp. Financeiras",  DT, 200.0),
-        ("3.11",    "Lucro Líquido",      DT, 500.0),
+        ("3.01", "Receita Líquida", DT, 5000.0),
+        ("3.03", "Resultado Bruto", DT, 2000.0),
+        ("3.05", "EBIT", DT, 800.0),
+        ("3.06.02", "Desp. Financeiras", DT, 200.0),
+        ("3.11", "Lucro Líquido", DT, 500.0),
     ]
 
-    load_csv(db, _bpa_csv(tmp_path, "itr_cia_aberta_BPA_con_2024.csv", BPA_ROWS),
-             "BPA", "itr", 2024, "con")
-    load_csv(db, _bpa_csv(tmp_path, "itr_cia_aberta_BPP_con_2024.csv", BPP_ROWS),
-             "BPP", "itr", 2024, "con")
-    load_csv(db, _dre_csv(tmp_path, "itr_cia_aberta_DRE_con_2024.csv", DRE_ROWS),
-             "DRE", "itr", 2024, "con")
+    load_csv(
+        db,
+        _bpa_csv(tmp_path, "itr_cia_aberta_BPA_con_2024.csv", BPA_ROWS),
+        "BPA",
+        "itr",
+        2024,
+        "con",
+    )
+    load_csv(
+        db,
+        _bpa_csv(tmp_path, "itr_cia_aberta_BPP_con_2024.csv", BPP_ROWS),
+        "BPP",
+        "itr",
+        2024,
+        "con",
+    )
+    load_csv(
+        db,
+        _dre_csv(tmp_path, "itr_cia_aberta_DRE_con_2024.csv", DRE_ROWS),
+        "DRE",
+        "itr",
+        2024,
+        "con",
+    )
 
     from cvmdata.transform.normalize import normalize_table
+
     normalize_table("raw_bpa", db)
     normalize_table("raw_bpp", db)
     normalize_table("raw_dre", db)
@@ -804,14 +1025,13 @@ def test_calculate_all_regression_batch(tmp_path, db):
 
     assert total == 15
     # Sem DFP → fallback YTD; margem_liquida = 500/5000*100 = 10.0
-    row = db.execute(
-        "SELECT valor FROM indicators WHERE indicador = 'margem_liquida'"
-    ).fetchone()
+    row = db.execute("SELECT valor FROM indicators WHERE indicador = 'margem_liquida'").fetchone()
     assert row is not None
     assert row[0] == pytest.approx(10.0)
     # ROE = 500/1000*100 = 50.0
     roe_row = db.execute("SELECT valor FROM indicators WHERE indicador = 'roe'").fetchone()
     assert roe_row[0] == pytest.approx(50.0)
+
 
 # ── T027: Integration test: batch TTM correctness via calculate_all ──────────
 
@@ -833,19 +1053,35 @@ def test_calculate_all_ttm_correctness(db):
 
     # Setup balance tables with minimal data for calculation
     _insert_raw_dre(
-        db, dt_refer="2024-09-30", ordem_exerc="ÚLTIMO",
-        dt_ini_exerc="2024-01-01", dt_fim_exerc="2024-09-30",
-        cd_conta="3.01", vl_conta=369.0, cnpj=_TTM_CNPJ
+        db,
+        dt_refer="2024-09-30",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2024-01-01",
+        dt_fim_exerc="2024-09-30",
+        cd_conta="3.01",
+        vl_conta=369.0,
+        cnpj=_TTM_CNPJ,
     )
     _insert_raw_dre(
-        db, dt_refer="2024-09-30", ordem_exerc="PENÚLTIMO",
-        dt_ini_exerc="2023-01-01", dt_fim_exerc="2024-09-30",
-        cd_conta="3.01", vl_conta=377.0, cnpj=_TTM_CNPJ
+        db,
+        dt_refer="2024-09-30",
+        ordem_exerc="PENÚLTIMO",
+        dt_ini_exerc="2023-01-01",
+        dt_fim_exerc="2024-09-30",
+        cd_conta="3.01",
+        vl_conta=377.0,
+        cnpj=_TTM_CNPJ,
     )
     _insert_raw_dre(
-        db, dt_refer="2023-12-31", ordem_exerc="ÚLTIMO",
-        dt_ini_exerc="2023-01-01", dt_fim_exerc="2023-12-31",
-        cd_conta="3.01", vl_conta=494.0, source="dfp", cnpj=_TTM_CNPJ
+        db,
+        dt_refer="2023-12-31",
+        ordem_exerc="ÚLTIMO",
+        dt_ini_exerc="2023-01-01",
+        dt_fim_exerc="2023-12-31",
+        cd_conta="3.01",
+        vl_conta=494.0,
+        source="dfp",
+        cnpj=_TTM_CNPJ,
     )
 
     # Insert minimal balance data for other required indicators

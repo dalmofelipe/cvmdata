@@ -8,6 +8,7 @@ Todas as funções puras:
 
 Contas CVM de referência documentadas nos comentários inline.
 """
+
 from __future__ import annotations
 
 import logging
@@ -17,17 +18,16 @@ import duckdb
 
 from cvmdata.ingestion.db import init_indicators_schema
 from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
+from cvmdata.transform.calc_plan import CALC_PLAN, calc_divida_liquida_pl
 
 logger = logging.getLogger(__name__)
-
-from cvmdata.transform.calc_plan import CALC_PLAN, calc_divida_liquida_pl
 
 
 def _get_ttm_value(
     conn: duckdb.DuckDBPyConnection,
     cnpj: str,
     dt_refer: str,
-    cd_conta: str
+    cd_conta: str,
 ) -> float | None:
     """Retorna o valor TTM (Trailing Twelve Months) para uma conta DRE.
 
@@ -95,12 +95,12 @@ def _get_ttm_value(
 
     # Fallback chain
     if ytd_val is None:
-        return fy_val                        # sem ITR recente
+        return fy_val  # sem ITR recente
     if fy_val is None:
-        return ytd_val                       # sem DFP anterior — YTD parcial
+        return ytd_val  # sem DFP anterior — YTD parcial
     if penu_val is None:
-        return fy_val                        # sem PENÚLTIMO — FY completo como proxy
-    return ytd_val + (fy_val - penu_val)     # TTM completo
+        return fy_val  # sem PENÚLTIMO — FY completo como proxy
+    return ytd_val + (fy_val - penu_val)  # TTM completo
 
 
 def _fetch_all_components(
@@ -115,7 +115,7 @@ def _fetch_all_components(
     balance_codes = [cd for cd in ACCOUNT_MAP if not cd.startswith("3.")]
     placeholders = ", ".join(f"'{cd}'" for cd in balance_codes)
     filter_clause = "AND CNPJ_CIA = ?" if cnpj else ""
-    
+
     # When cnpj filter is present, params must be duplicated for each UNION branch
     if cnpj:
         params: list[str] = [cnpj, cnpj]
@@ -167,7 +167,14 @@ def _fetch_all_dre_components(
 
     rows = conn.execute(
         f"""
-        SELECT CNPJ_CIA, DT_REFER::VARCHAR, CD_CONTA, ORDEM_EXERC, VL_CONTA, source, DT_FIM_EXERC::VARCHAR
+        SELECT
+            CNPJ_CIA,
+            DT_REFER::VARCHAR,
+            CD_CONTA,
+            ORDEM_EXERC,
+            VL_CONTA,
+            source,
+            DT_FIM_EXERC::VARCHAR
         FROM raw_dre_clean
         WHERE CD_CONTA IN ({placeholders})
             AND ORDEM_EXERC IN ('ÚLTIMO', 'PENÚLTIMO') {filter_clause}
@@ -189,9 +196,7 @@ def _fetch_all_dre_components(
 
     # Todos os pares (cnpj, dt_refer) que têm pelo menos uma linha ÚLTIMO
     all_pairs: set[tuple[str, str]] = {
-        (cnpj_r, dt_r)
-        for (cnpj_r, dt_r, _, ordem) in idx
-        if ordem == "ÚLTIMO"
+        (cnpj_r, dt_r) for (cnpj_r, dt_r, _, ordem) in idx if ordem == "ÚLTIMO"
     }
 
     result: dict[tuple[str, str], dict[str, float | None]] = {}

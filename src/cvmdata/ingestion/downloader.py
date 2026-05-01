@@ -4,10 +4,11 @@ Fluxo por source+ano:
   1. Baixa o ZIP para data/raw/{source}/{source}_cia_aberta_{year}.zip
   2. Extrai apenas os CSVs relevantes para data/raw/{source}/{year}/
 
-Fluxo cadastral:
-  download_cadastro() baixa meta_cad_cia_aberta.txt + cad_cia_aberta.csv
+Fluxo de Informação Cadastral:
+  download_info_cad() baixa meta_cad_cia_aberta.txt + cad_cia_aberta.csv
   para data/raw/cad/.
 """
+
 from __future__ import annotations
 
 import logging
@@ -122,14 +123,14 @@ def download_source_year(
     return extract_zip(zip_path, csv_dir)
 
 
-# ── Cadastro CVM ──────────────────────────────────────────────────────────────
+# ── Informação Cadastral CVM ──────────────────────────────────────────────────────────────
 
 # Nomes dos arquivos cadastrais oficiais
 CAD_META_FILENAME = "meta_cad_cia_aberta.txt"
 CAD_CSV_FILENAME = "cad_cia_aberta.csv"
 
 
-def download_cadastro(
+def download_info_cad(
     cad_meta_url: str,
     cad_csv_url: str,
     cad_dir: Path,

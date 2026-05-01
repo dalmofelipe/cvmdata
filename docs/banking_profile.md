@@ -130,5 +130,5 @@ Abaixo, proposta inicial de correspondencia por componente semantico.
 ## Proximos passos sugeridos
 1. Fechar um dicionario de componentes do profile `banking` usando amostra de bancos relevantes.
 2. Definir matriz de aplicabilidade de indicadores para perfil bancario.
-3. Rodar teste de regressao comparando `industrial_default` vs `banking` em CNPJs de referencia.
+3. Rodar teste de regressao comparando `default` vs `banking` em CNPJs de referencia.
 4. Promover os `xfail` bancarios para testes verdes apos implementacao do profile.

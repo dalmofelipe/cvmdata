@@ -183,11 +183,11 @@ Sugestao inicial de profiles:
 - `Bancos`, `Arrendamento Mercantil`, `Intermediacao Financeira` -> `banking` (prioridade)
 - `Seguradoras e Corretoras` -> `insurance` (futuro)
 - `Securitizacao de Recebiveis` -> `securitization` (futuro)
-- Demais setores -> `industrial_default` (default)
+- Demais setores -> `default` (fallback)
 
 ### 4 - Politica para vazios e desconhecidos
 Se `SETOR_ATIV` vier vazio ou nao mapeado:
-- aplicar `profile_id = industrial_default`
+- aplicar `profile_id = default`
 - gravar `confidence = low`
 - registrar evento para revisao manual (fila de curadoria)
 
@@ -199,6 +199,9 @@ Fluxo alvo (conceitual):
 4. Calculo de indicadores respeitando profile.
 
 ## Comandos CLI implementados
+
+> Nota (atualização): os comandos antigos `download-cad`, `load-cad` e `classify-cad` foram removidos.
+> Para preparar os dados, use `cvmdata pipeline run`. Para consultar o cadastro/classificação, use `cvmdata info-cad`.
 
 ### Download
 ```sh
@@ -226,10 +229,10 @@ Registra baixa confianca em `classification_curation_events`.
 ### Consulta
 ```sh
 # Resumo das 20 classificacoes mais recentes
-uv run cvmdata query-cad
+uv run cvmdata info-cad
 
 # Detalhe de uma empresa
-uv run cvmdata query-cad --cnpj 00.000.000/0001-91
+uv run cvmdata info-cad --cnpj 00.000.000/0001-91
 ```
 
 ## Validacao manual (SQL DuckDB)
