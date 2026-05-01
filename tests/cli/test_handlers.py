@@ -279,20 +279,3 @@ def test_info_cad_handler_summary_uses_custom_page_size(
     assert isinstance(outcome.payload, Paged)
     assert outcome.payload.page_size == 50
     assert len(outcome.payload.items) == 25
-
-
-def test_info_cad_handler_rejects_page_size_below_minimum(
-    monkeypatch: pytest.MonkeyPatch,
-    cli_info_cad_db_many,
-    connection_context_factory,
-) -> None:
-    def fake_get_connection(_):
-        return connection_context_factory(cli_info_cad_db_many)
-
-    monkeypatch.setattr(handlers.db, "get_connection", fake_get_connection)
-
-    outcome = handlers.info_cad(InfoCadInput(cnpj=None, verbose=False, page=1, page_size=19))
-
-    assert outcome.status == "error"
-    assert outcome.message is not None
-    assert "entre 20 e 1000" in outcome.message

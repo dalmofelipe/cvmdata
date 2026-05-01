@@ -11,12 +11,12 @@ from typing import Optional
 import typer
 
 from cvmdata.cli import handlers, logging, models, render
-from cvmdata.cli.constants import (
-    INDICATORS_YEAR_MAX,
-    INDICATORS_YEAR_MIN,
-    INFO_CAD_PAGE_SIZE_DEFAULT,
-    INFO_CAD_PAGE_SIZE_MAX,
-    INFO_CAD_PAGE_SIZE_MIN,
+from cvmdata.cli.constants import INFO_CAD_PAGE_SIZE_DEFAULT
+from cvmdata.cli.validation import (
+    ValidationError,
+    validate_indicators_year,
+    validate_info_cad_page,
+    validate_info_cad_page_size,
 )
 from cvmdata.config import settings
 from cvmdata.pipeline import PipelineExecutionError, YearsParseError, parse_years, run_full
@@ -90,11 +90,10 @@ def indicators(
     year: Optional[int] = typer.Option(None, "--year", "-y", help="Filtrar por ano (ex: 2024)."),
 ) -> None:
     """Consulta indicadores fundamentalistas calculados (por CNPJ)."""
-    if year is not None and not (INDICATORS_YEAR_MIN <= year <= INDICATORS_YEAR_MAX):
-        typer.echo(
-            f"✗ Ano inválido (deve estar entre {INDICATORS_YEAR_MIN} e {INDICATORS_YEAR_MAX})",
-            err=True,
-        )
+    try:
+        validate_indicators_year(year)
+    except ValidationError as exc:
+        typer.echo(f"✗ {exc}", err=True)
         raise typer.Exit(1)
 
     inp = models.IndicatorsInput(cnpj=cnpj, year=year)
@@ -103,14 +102,16 @@ def indicators(
 
 
 # ============================================================================
+# Informações Cadastrais (consulta)
+# ============================================================================
+
+
 @app.command("info-cad")
 def info_cad(
     cnpj: Optional[str] = typer.Option(
         None, "--cnpj", help="CNPJ da empresa (ex: 12.345.678/0001-99)."
     ),
-    page: int = typer.Option(
-        1, "--page", help="Página do resumo (>= 1)."
-    ),
+    page: int = typer.Option(1, "--page", help="Página do resumo (>= 1)."),
     page_size: int = typer.Option(
         INFO_CAD_PAGE_SIZE_DEFAULT,
         "--page-size",
@@ -121,16 +122,12 @@ def info_cad(
     """Consulta dados cadastrais e classificação setorial."""
     logging.configure_logging(verbose)
 
-    if page < 1:
-        typer.echo("✗ Página inválida (deve ser >= 1)", err=True)
-        raise typer.Exit(1)
-
-    if page_size < INFO_CAD_PAGE_SIZE_MIN or page_size > INFO_CAD_PAGE_SIZE_MAX:
-        typer.echo(
-            "✗ Tamanho de página inválido "
-            f"(deve estar entre {INFO_CAD_PAGE_SIZE_MIN} e {INFO_CAD_PAGE_SIZE_MAX})",
-            err=True,
-        )
+    try:
+        validate_info_cad_page(page)
+        if cnpj is None:
+            validate_info_cad_page_size(page_size)
+    except ValidationError as exc:
+        typer.echo(f"✗ {exc}", err=True)
         raise typer.Exit(1)
 
     inp = models.InfoCadInput(cnpj=cnpj, verbose=verbose, page=page, page_size=page_size)

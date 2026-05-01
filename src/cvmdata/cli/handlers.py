@@ -1,4 +1,3 @@
-from cvmdata.cli.constants import INFO_CAD_PAGE_SIZE_MAX, INFO_CAD_PAGE_SIZE_MIN
 from cvmdata.cli.models import (
     IndicatorsInput,
     IndicatorsResult,
@@ -17,7 +16,7 @@ def indicators(input: IndicatorsInput) -> Outcome[list[IndicatorsResult]]:
         try:
             params: list[object] = [input.cnpj]
             year_clause = ""
-            if hasattr(input, "year") and input.year is not None:
+            if input.year is not None:
                 year_clause = " AND YEAR(dt_refer) = ?"
                 params.append(input.year)
 
@@ -56,16 +55,9 @@ def info_cad(input: InfoCadInput) -> Outcome[list[InfoCadResult]]:
     with db.get_connection(settings.db_path) as conn:
         try:
             if input.cnpj is None:
-                if input.page_size < INFO_CAD_PAGE_SIZE_MIN or \
-                        input.page_size > INFO_CAD_PAGE_SIZE_MAX:
-                    return Outcome.error(
-                        "Falha na consulta de cadastro: tamanho de página inválido "
-                        f"(deve estar entre {INFO_CAD_PAGE_SIZE_MIN} e {INFO_CAD_PAGE_SIZE_MAX})"
-                    )
-
                 # Summary: last N classifications (paged)
                 limit = input.page_size
-                page = getattr(input, "page", 1) or 1
+                page = input.page or 1
                 offset = (page - 1) * limit
 
                 rows = conn.execute(
@@ -95,9 +87,8 @@ def info_cad(input: InfoCadInput) -> Outcome[list[InfoCadResult]]:
     if not rows:
         if input.cnpj:
             return Outcome.warning(f"Nenhuma classificação encontrada para CNPJ {input.cnpj!r}")
-        page = getattr(input, "page", 1) or 1
         return Outcome.warning(
-            f"Nenhuma classificação encontrada (página {page}) — rode 'classify-cad' primeiro"
+            f"Nenhuma classificação encontrada (página {input.page}) — rode 'classify-cad' primeiro"
         )
 
     results: list[InfoCadResult] = []
@@ -133,7 +124,6 @@ def info_cad(input: InfoCadInput) -> Outcome[list[InfoCadResult]]:
             )
 
     if input.cnpj is None:
-        page = getattr(input, "page", 1) or 1
-        return Outcome.success(payload=Paged(items=results, page=page, page_size=limit))
+        return Outcome.success(payload=Paged(items=results, page=input.page, page_size=limit))
 
     return Outcome.success(payload=results)
