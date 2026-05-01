@@ -200,6 +200,9 @@ Fluxo alvo (conceitual):
 
 ## Comandos CLI implementados
 
+> Nota (atualização): os comandos antigos `download-cad`, `load-cad` e `classify-cad` foram removidos.
+> Para preparar os dados, use `cvmdata pipeline run`. Para consultar o cadastro/classificação, use `cvmdata info-cad`.
+
 ### Download
 ```sh
 uv run cvmdata download-cad [--force]
@@ -226,10 +229,10 @@ Registra baixa confianca em `classification_curation_events`.
 ### Consulta
 ```sh
 # Resumo das 20 classificacoes mais recentes
-uv run cvmdata query-cad
+uv run cvmdata info-cad
 
 # Detalhe de uma empresa
-uv run cvmdata query-cad --cnpj 00.000.000/0001-91
+uv run cvmdata info-cad --cnpj 00.000.000/0001-91
 ```
 
 ## Validacao manual (SQL DuckDB)

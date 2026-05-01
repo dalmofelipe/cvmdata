@@ -5,7 +5,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from cvmdata.cli.models import Outcome, QueryInfoCadResult, QueryResult
+from cvmdata.cli.models import IndicatorsResult, InfoCadResult, Outcome
 
 
 def _format_confidence(value: float | str | None) -> str:
@@ -62,8 +62,8 @@ def render_outcome(outcome: Outcome[Any]) -> None:
 # ============================================================================
 
 
-def render_query_result(outcome: Outcome[list[QueryResult]]) -> None:
-    """Renderiza saída do comando query em tabela Rich."""
+def render_indicators_result(outcome: Outcome[list[IndicatorsResult]]) -> None:
+    """Renderiza saída do comando indicators em tabela Rich."""
     console = Console()
 
     if outcome.status == "error":
@@ -78,31 +78,14 @@ def render_query_result(outcome: Outcome[list[QueryResult]]) -> None:
 
     results = outcome.payload
 
-    # Detect query type: summary (n_indicadores set) vs detail
-    if results and results[0].n_indicadores is not None:
-        # Summary: top companies with most indicators
-        tbl = Table(title="Top 10 empresas com mais indicadores", show_lines=False)
-        tbl.add_column("CNPJ", style="cyan", no_wrap=True)
-        tbl.add_column("Indicadores", justify="right")
-        tbl.add_column("Primeiro período", justify="center")
-        tbl.add_column("Último período", justify="center")
-        for row in results:
-            tbl.add_row(
-                row.cnpj_cia,
-                str(row.n_indicadores),
-                str(row.primeiro_periodo),
-                str(row.ultimo_periodo),
-            )
-    else:
-        # Detail: indicators by period for specific company
-        cnpj_display = results[0].cnpj_cia if results else "unknown"
-        tbl = Table(title=f"Indicadores — {cnpj_display}", show_lines=False)
-        tbl.add_column("dt_refer", style="cyan", no_wrap=True)
-        tbl.add_column("indicador")
-        tbl.add_column("valor", justify="right")
-        for row in results:
-            valor_str = f"{row.valor:.4f}" if row.valor is not None else "—"
-            tbl.add_row(str(row.dt_refer), str(row.indicador), valor_str)
+    cnpj_display = results[0].cnpj_cia if results else "unknown"
+    tbl = Table(title=f"Indicadores — {cnpj_display}", show_lines=False)
+    tbl.add_column("dt_refer", style="cyan", no_wrap=True)
+    tbl.add_column("indicador")
+    tbl.add_column("valor", justify="right")
+    for row in results:
+        valor_str = f"{row.valor:.4f}" if row.valor is not None else "—"
+        tbl.add_row(str(row.dt_refer), str(row.indicador), valor_str)
 
     console.print(tbl)
     raise typer.Exit(0)
@@ -113,15 +96,8 @@ def render_query_result(outcome: Outcome[list[QueryResult]]) -> None:
 # ============================================================================
 
 
-def render_query_info_cad_result(outcome: Outcome[list[QueryInfoCadResult]]) -> None:
-    """Renderiza saída do comando query-cad com suporte a dois modos.
-
-    Summary mode (no --cnpj):
-    - Últimas 20 classificações com CNPJ, Razão Social, Setor, Profile, Confidence, Atualizado
-
-    Detail mode (com --cnpj):
-    - Detalhe completo com todas as colunas de company_classification
-    """
+def render_info_cad_result(outcome: Outcome[list[InfoCadResult]]) -> None:
+    """Renderiza saída do comando info-cad com suporte a dois modos (summary/detail)."""
     console = Console()
 
     if outcome.status == "error":

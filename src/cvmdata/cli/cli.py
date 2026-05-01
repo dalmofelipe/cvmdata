@@ -10,13 +10,10 @@ from typing import Optional
 
 import typer
 
-from cvmdata.cli import handlers
-from cvmdata.cli.logging import configure_logging
-from cvmdata.cli.models import QueryInfoCadInput, QueryInput
-from cvmdata.cli.render import render_query_info_cad_result, render_query_result
+from cvmdata.cli import handlers, logging, models, render
 from cvmdata.config import settings
 from cvmdata.pipeline import PipelineExecutionError, YearsParseError, parse_years, run_full
-from cvmdata.pipeline.models import PipelineReport
+from cvmdata.pipeline import models as pipeline_models
 
 app = typer.Typer(
     name="cvmdata",
@@ -24,15 +21,17 @@ app = typer.Typer(
 )
 
 
+
 pipeline_app = typer.Typer(
     help="Executa o pipeline completo (financeiro + cadastral).",
     no_args_is_help=True,
 )
 
+
 app.add_typer(pipeline_app, name="pipeline")
 
 
-def _render_pipeline_report(report: PipelineReport) -> None:
+def _render_pipeline_report(report: pipeline_models.PipelineReport) -> None:
     typer.echo(f"Pipeline '{report.name}': {report.status}")
     for step in report.steps:
         msg = f" — {step.message}" if step.message else ""
@@ -59,7 +58,7 @@ def pipeline_run(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Executa o pipeline full (financeiro + cadastral)."""
-    configure_logging(verbose)
+    logging.configure_logging(verbose)
 
     try:
         years_list = parse_years(years) if years else list(settings.years)
@@ -77,38 +76,35 @@ def pipeline_run(
 
 
 # ============================================================================
-# Query Command (T034)
+# Indicators (consulta)
 # ============================================================================
 
 
-@app.command()
-def query(
-    cnpj: Optional[str] = typer.Option(
-        None, "--cnpj", help="CNPJ da empresa (ex: 00.000.000/0001-00)."
-    ),
+@app.command("indicators")
+def indicators(
+    cnpj: str = typer.Option(..., "--cnpj", help="CNPJ da empresa (ex: 00.000.000/0001-00)."),
     year: Optional[int] = typer.Option(None, "--year", "-y", help="Filtrar por ano (ex: 2024)."),
 ) -> None:
-    """Consulta indicadores fundamentalistas calculados."""
+    """Consulta indicadores fundamentalistas calculados (por CNPJ)."""
     if year is not None and not (2000 <= year <= 3000):
         typer.echo("✗ Ano inválido (deve estar entre 2000 e 3000)", err=True)
         raise typer.Exit(1)
 
-    inp = QueryInput(cnpj=cnpj, year=year)
-    outcome = handlers.query.handle(inp)
-    render_query_result(outcome)
+    inp = models.IndicatorsInput(cnpj=cnpj, year=year)
+    outcome = handlers.indicators.handle(inp)
+    render.render_indicators_result(outcome)
 
 
 # ============================================================================
-@app.command("query-info-cad")
-def query_info_cad(
+@app.command("info-cad")
+def info_cad(
     cnpj: Optional[str] = typer.Option(
         None, "--cnpj", help="CNPJ da empresa (ex: 12.345.678/0001-99)."
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Consulta dados cadastrais e classificação setorial."""
-    configure_logging(verbose)
-
-    inp = QueryInfoCadInput(cnpj=cnpj, verbose=verbose)
-    outcome = handlers.query_info_cad.handle(inp)
-    render_query_info_cad_result(outcome)
+    logging.configure_logging(verbose)
+    inp = models.InfoCadInput(cnpj=cnpj, verbose=verbose)
+    outcome = handlers.info_cad.handle(inp)
+    render.render_info_cad_result(outcome)

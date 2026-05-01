@@ -1,16 +1,11 @@
-# Query cadastro CVM handler
-from cvmdata.cli.models import Outcome, QueryInfoCadInput, QueryInfoCadResult
+# InfoCad handler implementation (renomeado de query_info_cad.py)
+from cvmdata.cli.models import InfoCadInput, InfoCadResult, Outcome
 from cvmdata.config import settings
 from cvmdata.ingestion.db import get_connection
 
 
-def handle(input: QueryInfoCadInput) -> Outcome[list[QueryInfoCadResult]]:
-    """Consulta dados cadastrais e classificação setorial.
-
-    Two modes:
-    - No cnpj filter: summary of last 20 classifications
-    - With cnpj filter: detail for specific company (incl. all fields)
-    """
+def handle(input: InfoCadInput) -> Outcome[list[InfoCadResult]]:
+    """Consulta dados cadastrais e classificação setorial para uma empresa (CNPJ opcional)."""
     with get_connection(settings.db_path) as conn:
         try:
             if input.cnpj is None:
@@ -43,14 +38,13 @@ def handle(input: QueryInfoCadInput) -> Outcome[list[QueryInfoCadResult]]:
             return Outcome.warning(f"Nenhuma classificação encontrada para CNPJ {input.cnpj!r}")
         return Outcome.warning("Nenhuma classificação encontrada — rode 'classify-cad' primeiro")
 
-    # Convert rows to typed QueryCadResult objects
-    results: list[QueryInfoCadResult] = []
+    results: list[InfoCadResult] = []
 
     if input.cnpj is None:
         # Summary mode: 6 columns
         for row in rows:
             results.append(
-                QueryInfoCadResult(
+                InfoCadResult(
                     cnpj_cia=row[0],
                     denom_social=row[1],
                     setor_ativ=row[2],
@@ -63,7 +57,7 @@ def handle(input: QueryInfoCadInput) -> Outcome[list[QueryInfoCadResult]]:
         # Detail mode: 9 columns
         for row in rows:
             results.append(
-                QueryInfoCadResult(
+                InfoCadResult(
                     cnpj_cia=row[0],
                     cd_cvm=row[1],
                     denom_social=row[2],

@@ -80,16 +80,16 @@ class NormalizeInput:
 class IndicatorsInput:
     """Input for indicators command handler."""
 
-    cnpj: str | None
-    verbose: bool
+    cnpj: str
+    year: int | None = None
 
 
 @dataclass
-class QueryInput:
-    """Input for query command handler."""
+class InfoCadInput:
+    """Input for info-cad command handler."""
 
-    cnpj: str | None
-    year: int | None
+    cnpj: str | None = None
+    verbose: bool = False
 
 
 # ============================================================================
@@ -98,19 +98,13 @@ class QueryInput:
 
 
 @dataclass
-class QueryResult:
-    """Row from indicators query result.
-
-    Used by query handler to return typed rows instead of raw tuples.
-    """
+class IndicatorsResult:
+    """Row from indicators query result."""
 
     cnpj_cia: str
     dt_refer: str | None = None
     indicador: str | None = None
     valor: float | None = None
-    n_indicadores: int | None = None  # Summary query only
-    primeiro_periodo: str | None = None  # Summary query only
-    ultimo_periodo: str | None = None  # Summary query only
 
 
 # ============================================================================
@@ -140,12 +134,7 @@ class ClassifyInfoCadInput:
     verbose: bool
 
 
-@dataclass
-class QueryInfoCadInput:
-    """Input for query-info-cad command handler."""
-
-    cnpj: str | None
-    verbose: bool
+# InfoCadInput já definido acima
 
 
 @dataclass
@@ -161,15 +150,8 @@ class ClassifyInfoCadResult:
 
 
 @dataclass
-class QueryInfoCadResult:
-    """Row from query-info-cad result.
-
-    Summary mode (no cnpj filter):
-    - cnpj_cia, denom_social, setor_ativ, profile_id, confidence, updated_at populated
-
-    Detail mode (cnpj filter):
-    - Same fields but typically filtering to one company.
-    """
+class InfoCadResult:
+    """Row from info-cad result (summary or detail)."""
 
     cnpj_cia: str
     denom_social: str | None = None

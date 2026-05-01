@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typer.testing import CliRunner
 
 from cvmdata.cli import app, handlers
-from cvmdata.cli.models import Outcome, QueryInfoCadResult, QueryResult
+from cvmdata.cli.models import IndicatorsResult, InfoCadResult, Outcome
 from cvmdata.pipeline.models import PipelineReport, StepReport
 
 runner = CliRunner()
@@ -17,8 +17,8 @@ def test_app_help_lists_all_commands() -> None:
     """Ajuda principal deve listar todos os comandos esperados."""
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "query" in result.stdout
-    assert "query-info-cad" in result.stdout
+    assert "indicators" in result.stdout
+    assert "info-cad" in result.stdout
     assert "pipeline" in result.stdout
 
 
@@ -28,33 +28,26 @@ def _patch_handle(monkeypatch, module_obj, outcome: Outcome) -> None:
     def fake_handle(_input):
         return outcome
 
-    monkeypatch.setattr(module_obj, "handle", fake_handle)
+    # Se for handlers.indicators ou handlers.info_cad, patchar o submódulo
+    if hasattr(module_obj, "indicators"):
+        monkeypatch.setattr(module_obj.indicators, "handle", fake_handle)
+    elif hasattr(module_obj, "info_cad"):
+        monkeypatch.setattr(module_obj.info_cad, "handle", fake_handle)
+    else:
+        monkeypatch.setattr(module_obj, "handle", fake_handle)
 
 
-def test_query_command_summary_table(monkeypatch) -> None:
-    """Query sem CNPJ deve renderizar tabela de resumo e sair com 0."""
+def test_indicators_command_requires_cnpj() -> None:
+    result = runner.invoke(app, ["indicators"])
+    assert result.exit_code != 0
+    assert "--cnpj" in (result.stdout + result.stderr)
+
+
+def test_indicators_command_detail_table(monkeypatch) -> None:
+    """Indicators com CNPJ deve renderizar tabela de detalhe e sair com 0."""
     outcome = Outcome.success(
         payload=[
-            QueryResult(
-                cnpj_cia="00.000.000/0001-91",
-                n_indicadores=10,
-                primeiro_periodo="2021-12-31",
-                ultimo_periodo="2024-12-31",
-            )
-        ]
-    )
-    _patch_handle(monkeypatch, handlers.query, outcome)
-
-    result = runner.invoke(app, ["query"])
-    assert result.exit_code == 0
-    assert "Top 10 empresas" in result.stdout
-
-
-def test_query_command_detail_table(monkeypatch) -> None:
-    """Query com CNPJ deve renderizar tabela de detalhe e sair com 0."""
-    outcome = Outcome.success(
-        payload=[
-            QueryResult(
+            IndicatorsResult(
                 cnpj_cia="00.000.000/0001-91",
                 dt_refer="2024-12-31",
                 indicador="ROE",
@@ -62,40 +55,40 @@ def test_query_command_detail_table(monkeypatch) -> None:
             )
         ]
     )
-    _patch_handle(monkeypatch, handlers.query, outcome)
+    _patch_handle(monkeypatch, handlers.indicators, outcome)
 
-    result = runner.invoke(app, ["query", "--cnpj", "00.000.000/0001-91"])
+    result = runner.invoke(app, ["indicators", "--cnpj", "00.000.000/0001-91"])
     assert result.exit_code == 0
     assert "Indicadores" in result.stdout
 
 
-def test_query_command_warning(monkeypatch) -> None:
-    """Query com warning deve sair com 0 e exibir aviso."""
+def test_indicators_command_warning(monkeypatch) -> None:
+    """Indicators com warning deve sair com 0 e exibir aviso."""
     _patch_handle(
         monkeypatch,
-        handlers.query,
+        handlers.indicators,
         Outcome.warning(message="sem resultados", payload=[]),
     )
 
-    result = runner.invoke(app, ["query", "--cnpj", "99.999.999/0001-99"])
+    result = runner.invoke(app, ["indicators", "--cnpj", "99.999.999/0001-99"])
     assert result.exit_code == 0
     assert "⚠" in result.stdout
 
 
-def test_query_command_error(monkeypatch) -> None:
-    """Query com erro deve sair com 1 e exibir mensagem em stderr."""
-    _patch_handle(monkeypatch, handlers.query, Outcome.error(message="erro"))
+def test_indicators_command_error(monkeypatch) -> None:
+    """Indicators com erro deve sair com 1 e exibir mensagem em stderr."""
+    _patch_handle(monkeypatch, handlers.indicators, Outcome.error(message="erro"))
 
-    result = runner.invoke(app, ["query", "--cnpj", "00.000.000/0001-91"])
+    result = runner.invoke(app, ["indicators", "--cnpj", "00.000.000/0001-91"])
     assert result.exit_code == 1
     assert "✗" in result.stderr
 
 
-def test_query_info_cad_command_summary_table(monkeypatch) -> None:
-    """Query-info-cad sem CNPJ deve renderizar tabela de resumo."""
+def test_info_cad_command_summary_table(monkeypatch) -> None:
+    """Info-cad sem CNPJ deve renderizar tabela de resumo."""
     outcome = Outcome.success(
         payload=[
-            QueryInfoCadResult(
+            InfoCadResult(
                 cnpj_cia="00.000.000/0001-91",
                 denom_social="Banco X",
                 setor_ativ="Financial",
@@ -105,18 +98,18 @@ def test_query_info_cad_command_summary_table(monkeypatch) -> None:
             )
         ]
     )
-    _patch_handle(monkeypatch, handlers.query_info_cad, outcome)
+    _patch_handle(monkeypatch, handlers.info_cad, outcome)
 
-    result = runner.invoke(app, ["query-info-cad"])
+    result = runner.invoke(app, ["info-cad"])
     assert result.exit_code == 0
     assert "company_classification" in result.stdout
 
 
-def test_query_info_cad_command_detail_table(monkeypatch) -> None:
-    """Query-info-cad com CNPJ deve renderizar tabela de detalhe."""
+def test_info_cad_command_detail_table(monkeypatch) -> None:
+    """Info-cad com CNPJ deve renderizar tabela de detalhe."""
     outcome = Outcome.success(
         payload=[
-            QueryInfoCadResult(
+            InfoCadResult(
                 cnpj_cia="00.000.000/0001-91",
                 cd_cvm="1234",
                 denom_social="Banco X",
@@ -129,9 +122,9 @@ def test_query_info_cad_command_detail_table(monkeypatch) -> None:
             )
         ]
     )
-    _patch_handle(monkeypatch, handlers.query_info_cad, outcome)
+    _patch_handle(monkeypatch, handlers.info_cad, outcome)
 
-    result = runner.invoke(app, ["query-info-cad", "--cnpj", "00.000.000/0001-91"])
+    result = runner.invoke(app, ["info-cad", "--cnpj", "00.000.000/0001-91"])
     assert result.exit_code == 0
     assert "Classificação" in result.stdout
 

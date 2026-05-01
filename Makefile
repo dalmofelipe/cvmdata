@@ -20,6 +20,9 @@ test:
 lint:
 	uv run --extra dev ruff check src/ tests/
 
+lint-fix:
+	uv run --extra dev ruff check src/ tests/ --fix
+
 fmt:
 	uv run --extra dev ruff format src/ tests/
 

@@ -1,8 +1,7 @@
 # Handlers subpackage initialization
-from .ingestion import query
-from .transform import query_info_cad
+from . import indicators, info_cad
 
 __all__ = [
-    "query",
-    "query_info_cad",
+    "indicators",
+    "info_cad",
 ]

@@ -18,23 +18,22 @@ cvmdata pipeline run --force-download
 cvmdata pipeline run --verbose
 ```
 
-### `cvmdata query`
+### `cvmdata indicators`
 
-Consulta indicadores calculados (tabela `indicators`).
+Consulta indicadores calculados (tabela `indicators`) para um CNPJ.
 
 ```bash
-cvmdata query
-cvmdata query --cnpj "00.000.000/0001-91"
-cvmdata query --cnpj "00.000.000/0001-91" --year 2024
+cvmdata indicators --cnpj "00.000.000/0001-91"
+cvmdata indicators --cnpj "00.000.000/0001-91" --year 2024
 ```
 
-### `cvmdata query-info-cad`
+### `cvmdata info-cad`
 
 Consulta classificação cadastral (tabela `company_classification`).
 
 ```bash
-cvmdata query-info-cad
-cvmdata query-info-cad --cnpj "00.000.000/0001-91"
+cvmdata info-cad
+cvmdata info-cad --cnpj "00.000.000/0001-91"
 ```
 
 ### `Scripts`

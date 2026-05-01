@@ -5,7 +5,7 @@ Pipeline de dados CVM para cálculo de **indicadores de análise fundamentalista
 ***Consultar indicadores trimestrais da `PETROBRAS` dos últimos 5 anos.***
 
 ```sh
-$ cvmdata query --cnpj "33.000.167/0001-01"
+$ cvmdata indicators --cnpj "33.000.167/0001-01"
 ```
 
 ```sh
@@ -90,19 +90,19 @@ cvmdata pipeline run --years 2021:2025
 
 Atualmente, as buscas são feita com base no CNPJ da empresa.
 
-Para buscas por informações cadastrais de empresas, use `query-info-cad`:
+Para buscas por informações cadastrais de empresas, use `info-cad`:
 
 ```bash
-cvmdata query-info-cad
-cvmdata query-info-cad --cnpj "33.000.167/0001-01"
+cvmdata info-cad
+cvmdata info-cad --cnpj "33.000.167/0001-01"
 ```
 
 ## Indicadores
 
 ```bash
-cvmdata query --cnpj "33.000.167/0001-01"
+cvmdata indicators --cnpj "33.000.167/0001-01"
 
-cvmdata query --cnpj "33.000.167/0001-01" --year 2025 # Somente indicadores de 2025
+cvmdata indicators --cnpj "33.000.167/0001-01" --year 2025 # Somente indicadores de 2025
 ```
 
 Retorna uma tabela contendo todos os indicadores trimestrais dos ultimos 5 anos.
