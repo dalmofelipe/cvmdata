@@ -28,13 +28,7 @@ def _patch_handle(monkeypatch, module_obj, outcome: Outcome) -> None:
     def fake_handle(_input):
         return outcome
 
-    # Se for handlers.indicators ou handlers.info_cad, patchar o submódulo
-    if hasattr(module_obj, "indicators"):
-        monkeypatch.setattr(module_obj.indicators, "handle", fake_handle)
-    elif hasattr(module_obj, "info_cad"):
-        monkeypatch.setattr(module_obj.info_cad, "handle", fake_handle)
-    else:
-        monkeypatch.setattr(module_obj, "handle", fake_handle)
+    monkeypatch.setattr(handlers, module_obj.__name__, fake_handle)
 
 
 def test_indicators_command_requires_cnpj() -> None:

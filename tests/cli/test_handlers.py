@@ -9,7 +9,7 @@ from __future__ import annotations
 import duckdb
 import pytest
 
-from cvmdata.cli.handlers import indicators, info_cad
+from cvmdata.cli import handlers
 from cvmdata.cli.models import IndicatorsInput, InfoCadInput, Outcome
 
 
@@ -39,9 +39,9 @@ def test_indicators_handler_success_detail(
     def fake_get_connection(_):
         return connection_context_factory(cli_test_db)
 
-    monkeypatch.setattr(indicators, "get_connection", fake_get_connection)
+    monkeypatch.setattr(handlers.db, "get_connection", fake_get_connection)
 
-    outcome = indicators.handle(IndicatorsInput(cnpj="00.000.000/0001-91", year=None))
+    outcome = handlers.indicators(IndicatorsInput(cnpj="00.000.000/0001-91", year=None))
 
     assert outcome.status == "success"
     assert outcome.payload
@@ -56,9 +56,9 @@ def test_indicators_handler_warning_empty_result(
     def fake_get_connection(_):
         return connection_context_factory(cli_test_db)
 
-    monkeypatch.setattr(indicators, "get_connection", fake_get_connection)
+    monkeypatch.setattr(handlers.db, "get_connection", fake_get_connection)
 
-    outcome = indicators.handle(IndicatorsInput(cnpj="99.999.999/0001-99", year=2024))
+    outcome = handlers.indicators(IndicatorsInput(cnpj="99.999.999/0001-99", year=2024))
 
     assert outcome.status == "warning"
 
@@ -74,9 +74,9 @@ def test_indicators_handler_error(
     def fake_get_connection(_):
         return connection_context_factory(BrokenConn())
 
-    monkeypatch.setattr(indicators, "get_connection", fake_get_connection)
+    monkeypatch.setattr(handlers.db, "get_connection", fake_get_connection)
 
-    outcome = indicators.handle(IndicatorsInput(cnpj="00.000.000/0001-91", year=None))
+    outcome = handlers.indicators(IndicatorsInput(cnpj="00.000.000/0001-91", year=None))
 
     assert outcome.status == "error"
 
@@ -135,9 +135,9 @@ def test_info_cad_handler_success_detail(
     def fake_get_connection(_):
         return connection_context_factory(cli_info_cad_db)
 
-    monkeypatch.setattr(info_cad, "get_connection", fake_get_connection)
+    monkeypatch.setattr(handlers.db, "get_connection", fake_get_connection)
 
-    outcome = info_cad.handle(InfoCadInput(cnpj="00.000.000/0001-91", verbose=False))
+    outcome = handlers.info_cad(InfoCadInput(cnpj="00.000.000/0001-91", verbose=False))
 
     assert outcome.status == "success"
     assert outcome.payload
@@ -152,9 +152,9 @@ def test_info_cad_handler_warning_empty_result(
     def fake_get_connection(_):
         return connection_context_factory(cli_info_cad_db)
 
-    monkeypatch.setattr(info_cad, "get_connection", fake_get_connection)
+    monkeypatch.setattr(handlers.db, "get_connection", fake_get_connection)
 
-    outcome = info_cad.handle(InfoCadInput(cnpj="99.999.999/0001-99", verbose=False))
+    outcome = handlers.info_cad(InfoCadInput(cnpj="99.999.999/0001-99", verbose=False))
 
     assert outcome.status == "warning"
 
@@ -170,8 +170,8 @@ def test_info_cad_handler_error(
     def fake_get_connection(_):
         return connection_context_factory(BrokenConn())
 
-    monkeypatch.setattr(info_cad, "get_connection", fake_get_connection)
+    monkeypatch.setattr(handlers.db, "get_connection", fake_get_connection)
 
-    outcome = info_cad.handle(InfoCadInput(cnpj=None, verbose=False))
+    outcome = handlers.info_cad(InfoCadInput(cnpj=None, verbose=False))
 
     assert outcome.status == "error"

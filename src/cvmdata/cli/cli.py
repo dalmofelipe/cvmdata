@@ -20,13 +20,10 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-
-
 pipeline_app = typer.Typer(
     help="Executa o pipeline completo (financeiro + cadastral).",
     no_args_is_help=True,
 )
-
 
 app.add_typer(pipeline_app, name="pipeline")
 
@@ -91,7 +88,7 @@ def indicators(
         raise typer.Exit(1)
 
     inp = models.IndicatorsInput(cnpj=cnpj, year=year)
-    outcome = handlers.indicators.handle(inp)
+    outcome = handlers.indicators(inp)
     render.render_indicators_result(outcome)
 
 
@@ -106,5 +103,5 @@ def info_cad(
     """Consulta dados cadastrais e classificação setorial."""
     logging.configure_logging(verbose)
     inp = models.InfoCadInput(cnpj=cnpj, verbose=verbose)
-    outcome = handlers.info_cad.handle(inp)
+    outcome = handlers.info_cad(inp)
     render.render_info_cad_result(outcome)
