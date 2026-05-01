@@ -7,7 +7,7 @@ Etapas internas:
   1. Ler linhas SIT='ATIVO' de cad_cia_aberta_raw
   2. Resolver setor único por CNPJ usando apenas SETOR_ATIV
   3. Lookup profile_id via setor_profile_map
-  4. Aplicar fallback industrial_default para não-mapeados/ambíguos/vazios
+    4. Aplicar fallback default para não-mapeados/ambíguos/vazios
   5. Persistir company_classification (INSERT OR REPLACE)
   6. Registrar eventos de curadoria para casos confidence=low (upsert idempotente)
 """
@@ -22,7 +22,7 @@ import duckdb
 logger = logging.getLogger(__name__)
 
 # Perfil padrão quando setor não está mapeado ou é ambíguo
-FALLBACK_PROFILE = "industrial_default"
+FALLBACK_PROFILE = "default"
 
 # Tipos de evento de curadoria
 EVENT_AMBIGUOUS = "ambiguous_setor"

@@ -183,11 +183,11 @@ Sugestao inicial de profiles:
 - `Bancos`, `Arrendamento Mercantil`, `Intermediacao Financeira` -> `banking` (prioridade)
 - `Seguradoras e Corretoras` -> `insurance` (futuro)
 - `Securitizacao de Recebiveis` -> `securitization` (futuro)
-- Demais setores -> `industrial_default` (default)
+- Demais setores -> `default` (fallback)
 
 ### 4 - Politica para vazios e desconhecidos
 Se `SETOR_ATIV` vier vazio ou nao mapeado:
-- aplicar `profile_id = industrial_default`
+- aplicar `profile_id = default`
 - gravar `confidence = low`
 - registrar evento para revisao manual (fila de curadoria)
 

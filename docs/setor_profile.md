@@ -11,7 +11,7 @@ Definir uma arquitetura de perfis setoriais para calcular indicadores de forma c
 ## Principios
 - Perfil por empresa deve ser deterministico e auditavel.
 - Regras devem ser extensivas sem alterar o core a cada novo setor.
-- Fallback seguro para `industrial_default`.
+- Fallback seguro para `default`.
 - Performance em batch deve ser preservada.
 
 ## Entidades conceituais
@@ -19,7 +19,7 @@ Definir uma arquitetura de perfis setoriais para calcular indicadores de forma c
 Conjunto de regras de calculo para um grupo de empresas.
 
 Campos recomendados:
-- `profile_id` (ex.: `industrial_default`, `banking`)
+- `profile_id` (ex.: `default`, `banking`)
 - `description`
 - `account_map` (componente -> lista ordenada de contas CVM)
 - `indicator_policy` (enabled, disabled, alt_formula)
@@ -33,7 +33,7 @@ Funcao que determina `profile_id` por empresa, usando dados cadastrais e regras.
 2. Regra por `SETOR_ATIV`
 3. Regra por `CD_CVM` (se aplicavel)
 4. Heuristica por denominacao social/comercial
-5. Fallback para `industrial_default`
+5. Fallback para `default`
 
 ## confidence e rule_version
 - `confidence`: confianca da classificacao (`high`, `medium`, `low`).
@@ -67,7 +67,7 @@ Diretriz:
 - prever modo de descoberta/evolucao de perfil para nao perder contas relevantes.
 
 ## Roadmap sugerido
-1. Fase 1: `industrial_default` + `banking`.
+1. Fase 1: `default` + `banking`.
 2. Fase 2: `insurance` e `securitization` (se necessario por evidencia).
 3. Fase 3: consolidar matriz de aplicabilidade de indicadores por setor.
 
