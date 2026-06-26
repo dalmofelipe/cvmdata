@@ -3,9 +3,6 @@
 Demonstrativos em escopo (INDICATOR_DEMOS = BPA, BPP, DRE):
   Grupo A — Balanço (BPA, BPP): 14 colunas, sem DT_INI_EXERC
   Grupo B — Fluxo/Resultado (DRE): 15 colunas, com DT_INI_EXERC
-
-[ADR 2026-02-20]: DFC_MD, DFC_MI, DMPL, DRA, DVA descartados — nenhuma
-conta desses demonstrativos é necessária para os 7 indicadores planejados.
 """
 
 from __future__ import annotations
@@ -19,9 +16,6 @@ logger = logging.getLogger(__name__)
 
 # Demonstrativos necessários para os 7 indicadores planejados
 INDICATOR_DEMOS: list[str] = ["BPA", "BPP", "DRE"]
-DEMOS: list[str] = INDICATOR_DEMOS  # alias mantido para retrocompatibilidade
-
-# Grupos por schema real (verificado nos CSVs 2024)
 BALANCE_DEMOS: frozenset[str] = frozenset({"BPA", "BPP"})
 FLOW_DEMOS: frozenset[str] = frozenset({"DRE"})
 
@@ -73,15 +67,6 @@ CREATE TABLE IF NOT EXISTS raw_{demo} (
 );"""
 
 
-def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
-    """Retorna conexão DuckDB persistente. Cria o arquivo se não existir."""
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = duckdb.connect(str(db_path))
-    conn.execute("SET memory_limit = '1GB'")
-    logger.debug("Conectado a %s", db_path)
-    return conn
-
-
 _INDICATORS_DDL = """\
 CREATE TABLE IF NOT EXISTS indicators (
     cnpj_cia  VARCHAR NOT NULL,
@@ -92,6 +77,15 @@ CREATE TABLE IF NOT EXISTS indicators (
 );"""
 
 
+def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
+    """Retorna conexão DuckDB persistente. Cria o arquivo se não existir."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = duckdb.connect(str(db_path))
+    conn.execute("SET memory_limit = '1GB'")
+    logger.debug("Conectado a %s", db_path)
+    return conn
+
+
 def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
     """Cria tabelas raw_* se ainda não existirem (idempotente)."""
     for demo in sorted(BALANCE_DEMOS):
@@ -100,7 +94,7 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
     for demo in sorted(FLOW_DEMOS):
         conn.execute(_FLOW_DDL.format(demo=demo.lower()))
 
-    logger.info("Schema raw_* OK (%d tabelas)", len(DEMOS))
+    logger.info("Schema raw_* OK (%d tabelas)", len(INDICATOR_DEMOS))
 
 
 def init_indicators_schema(conn: duckdb.DuckDBPyConnection) -> None:

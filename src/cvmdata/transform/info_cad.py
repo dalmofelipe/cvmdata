@@ -183,19 +183,17 @@ def classify_info_cad(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
             event_type = None
             details = None
 
-        classification_rows.append(
-            (
-                cnpj_cia,
-                cd_cvm,
-                denom_social,
-                denom_comerc,
-                setor_str or None,
-                profile_id,
-                confidence,
-                rule,
-                now,
-            )
-        )
+        classification_rows.append((
+            cnpj_cia,
+            cd_cvm,
+            denom_social,
+            denom_comerc,
+            setor_str or None,
+            profile_id,
+            confidence,
+            rule,
+            now,
+        ))
 
         if event_type is not None:
             curation_rows.append((cnpj_cia, event_type, details, now, now))

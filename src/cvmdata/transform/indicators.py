@@ -132,7 +132,7 @@ def _fetch_all_components(
             SELECT CNPJ_CIA, DT_REFER, CD_CONTA, VL_CONTA FROM raw_bpp_clean
             WHERE CD_CONTA IN ({placeholders}) {filter_clause}
         )
-        ORDER BY CNPJ_CIA, DT_REFER
+        ORDER BY CNPJ_CIA, DT_REFER 
         """,
         params,
     ).fetchall()
@@ -160,8 +160,8 @@ def _fetch_all_dre_components(
     Returns:
         ``{(cnpj, dt_refer): {componente_semantico: valor_ttm}}``
     """
-    dre_codes = [cd for cd in ACCOUNT_MAP if cd.startswith("3.")]
-    placeholders = ", ".join(f"'{cd}'" for cd in dre_codes)
+    dre_codes = [code for code in ACCOUNT_MAP if code.startswith("3.")]
+    placeholders = ", ".join(f"'{code}'" for code in dre_codes)
     filter_clause = "AND CNPJ_CIA = ?" if cnpj else ""
     params: list[str] = [cnpj] if cnpj else []
 

@@ -23,8 +23,6 @@ logger = logging.getLogger(__name__)
 DEMOS: list[str] = ["BPA", "BPP", "DFC_MD", "DFC_MI", "DMPL", "DRA", "DRE", "DVA"]
 
 # Subset necessário para calcular os 7 indicadores planejados
-# [ADR 2026-02-20]: DFC_MD, DFC_MI, DMPL, DRA, DVA descartados — nenhum
-# indicador planejado requer contas desses demonstrativos.
 INDICATOR_DEMOS: frozenset[str] = frozenset({"BPA", "BPP", "DRE"})
 
 # Arquivos que NÃO são demonstrativos — ignorados no load

@@ -22,7 +22,7 @@ from pathlib import Path
 
 import duckdb
 
-from cvmdata.ingestion.db import BALANCE_DEMOS, DEMOS, FLOW_DEMOS, init_schema
+from cvmdata.ingestion.db import INDICATOR_DEMOS, BALANCE_DEMOS, FLOW_DEMOS, init_schema
 from cvmdata.transform.account_map import ACCOUNT_MAP
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,39 @@ _FILENAME_RE = re.compile(
 # Contas necessárias para os indicadores — filtragem aplicada no load
 _ACCOUNT_CODES_SQL = ", ".join(f"'{k}'" for k in sorted(ACCOUNT_MAP.keys()))
 
+_COMMON_COLS_HEAD = """\
+    CNPJ_CIA::VARCHAR,
+    CAST(DT_REFER AS DATE),
+    VERSAO::SMALLINT,
+    DENOM_CIA::VARCHAR,
+    CD_CVM::VARCHAR,
+    GRUPO_DFP::VARCHAR,
+    MOEDA::VARCHAR,
+    ESCALA_MOEDA::VARCHAR,
+    ORDEM_EXERC::VARCHAR,"""
+
+_COMMON_COLS_TAIL = """\
+    CD_CONTA::VARCHAR,
+    DS_CONTA::VARCHAR,
+    TRY_CAST(VL_CONTA AS DOUBLE),
+    ST_CONTA_FIXA::VARCHAR"""
+
+_ALT_COLS: dict[frozenset, str] = {
+    frozenset(BALANCE_DEMOS): "CAST(DT_FIM_EXERC AS DATE),",
+    frozenset(FLOW_DEMOS):    "CAST(DT_INI_EXERC AS DATE), CAST(DT_FIM_EXERC AS DATE),",
+    frozenset(INDICATOR_DEMOS): (
+        "CAST(DT_INI_EXERC AS DATE), CAST(DT_FIM_EXERC AS DATE), COLUNA_DF::VARCHAR,"
+    ),
+}
+
+
+def _alt_cols_for(demo: str) -> str:
+    demo_upper = demo.upper()
+    for demos, cols in _ALT_COLS.items():
+        if demo_upper in demos:
+            return cols
+    raise ValueError(f"Demo desconhecido: {demo!r}")
+
 
 def _build_insert_sql(csv_path: Path, demo: str, source: str, year: int, scope: str) -> str:
     """Monta o SQL de INSERT conforme o grupo de schema do demonstrativo.
@@ -45,79 +78,30 @@ def _build_insert_sql(csv_path: Path, demo: str, source: str, year: int, scope: 
     todas as contas irrelevantes para os indicadores antes da persistência.
     """
     table = f"raw_{demo.lower()}"
-    demo_upper = demo.upper()
     fpath = csv_path.as_posix()
+    alt_cols = _alt_cols_for(demo)
 
-    if demo_upper in BALANCE_DEMOS:
-        # 14 colunas — BPA, BPP (sem DT_INI_EXERC)
-        data_select = """\
-        CNPJ_CIA::VARCHAR,
-        CAST(DT_REFER AS DATE),
-        VERSAO::SMALLINT,
-        DENOM_CIA::VARCHAR,
-        CD_CVM::VARCHAR,
-        GRUPO_DFP::VARCHAR,
-        MOEDA::VARCHAR,
-        ESCALA_MOEDA::VARCHAR,
-        ORDEM_EXERC::VARCHAR,
-        CAST(DT_FIM_EXERC AS DATE),
-        CD_CONTA::VARCHAR,
-        DS_CONTA::VARCHAR,
-        TRY_CAST(VL_CONTA AS DOUBLE),
-        ST_CONTA_FIXA::VARCHAR"""
-    elif demo_upper in FLOW_DEMOS:
-        # 15 colunas — DRE (com DT_INI_EXERC)
-        data_select = """\
-        CNPJ_CIA::VARCHAR,
-        CAST(DT_REFER AS DATE),
-        VERSAO::SMALLINT,
-        DENOM_CIA::VARCHAR,
-        CD_CVM::VARCHAR,
-        GRUPO_DFP::VARCHAR,
-        MOEDA::VARCHAR,
-        ESCALA_MOEDA::VARCHAR,
-        ORDEM_EXERC::VARCHAR,
-        CAST(DT_INI_EXERC AS DATE),
-        CAST(DT_FIM_EXERC AS DATE),
-        CD_CONTA::VARCHAR,
-        DS_CONTA::VARCHAR,
-        TRY_CAST(VL_CONTA AS DOUBLE),
-        ST_CONTA_FIXA::VARCHAR"""
-    else:
-        # 16 colunas — DMPL (com DT_INI_EXERC + COLUNA_DF)
-        data_select = """\
-        CNPJ_CIA::VARCHAR,
-        CAST(DT_REFER AS DATE),
-        VERSAO::SMALLINT,
-        DENOM_CIA::VARCHAR,
-        CD_CVM::VARCHAR,
-        GRUPO_DFP::VARCHAR,
-        MOEDA::VARCHAR,
-        ESCALA_MOEDA::VARCHAR,
-        ORDEM_EXERC::VARCHAR,
-        CAST(DT_INI_EXERC AS DATE),
-        CAST(DT_FIM_EXERC AS DATE),
-        COLUNA_DF::VARCHAR,
-        CD_CONTA::VARCHAR,
-        DS_CONTA::VARCHAR,
-        TRY_CAST(VL_CONTA AS DOUBLE),
-        ST_CONTA_FIXA::VARCHAR"""
+    query = "\n        ".join([
+        _COMMON_COLS_HEAD,
+        alt_cols,
+        _COMMON_COLS_TAIL,
+    ])
 
     return f"""
-INSERT INTO {table}
-SELECT
-{data_select},
+    INSERT INTO {table}
+    SELECT
+        {query},
         '{source}'::VARCHAR  AS source,
         {year}::SMALLINT     AS year,
         '{scope}'::VARCHAR   AS scope
-FROM read_csv(
-    '{fpath}',
-    delim    = ';',
-    header   = true,
-    encoding = 'latin-1',
-    nullstr  = ''
-)
-WHERE CD_CONTA::VARCHAR IN ({_ACCOUNT_CODES_SQL});"""
+    FROM read_csv(
+        '{fpath}',
+        delim    = ';',
+        header   = true,
+        encoding = 'cp1252',
+        nullstr  = ''
+    )
+    WHERE CD_CONTA::VARCHAR IN ({_ACCOUNT_CODES_SQL});"""
 
 
 def parse_csv_filename(path: Path) -> tuple[str, str, str, int] | None:
@@ -130,7 +114,7 @@ def parse_csv_filename(path: Path) -> tuple[str, str, str, int] | None:
     if not m:
         return None
     demo = m.group("demo").upper()
-    if demo not in DEMOS:
+    if demo not in INDICATOR_DEMOS:
         logger.debug("Demo desconhecido '%s', pulando %s", demo, path.name)
         return None
     return demo, "con", m.group("source").lower(), int(m.group("year"))
@@ -182,7 +166,7 @@ def load_source_year(
 ) -> dict[str, int]:
     """Carrega todos os CSVs de um source+year no DuckDB.
 
-    Escaneia raw_dir/{source}/{year}/*.csv, identifica demos via filename e
+    Escaneia raw_dir/{source}/{year}/*.csv, identifica demostrativos via filename e
     chama load_csv para cada um.
 
     Retorna dict {"{DEMO}/{scope}": row_count} para os arquivos carregados.
