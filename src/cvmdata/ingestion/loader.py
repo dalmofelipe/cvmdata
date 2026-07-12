@@ -22,7 +22,13 @@ from pathlib import Path
 
 import duckdb
 
-from cvmdata.ingestion.db import INDICATOR_DEMOS, BALANCE_DEMOS, FLOW_DEMOS, init_schema
+from cvmdata.ingestion.db import (
+    BALANCE_DEMOS,
+    FLOW_DEMOS,
+    INDICATOR_DEMOS,
+    init_b3_tickers_schema,
+    init_schema,
+)
 from cvmdata.transform.account_map import ACCOUNT_MAP
 
 logger = logging.getLogger(__name__)
@@ -266,3 +272,65 @@ def load_info_cad(
         logger.info("SC-001 OK: %d linhas — CSV == raw", inserted)
 
     return inserted
+
+
+# ── Tickers B3 ───────────────────────────────────────────────────────────────────────────
+
+
+def _build_b3_tickers_sql(json_glob: Path) -> str:
+    """Monta o SQL de carga da tabela de tickers a partir dos JSONs do B3."""
+    fpath = json_glob.as_posix()
+    return f"""
+    CREATE OR REPLACE TABLE b3_tickers AS
+    SELECT
+        TRY_CAST(r.codeCVM AS INTEGER) AS cod_cvm,
+        r.issuingCompany::VARCHAR      AS ticker_root,
+        r.companyName::VARCHAR         AS company_name,
+        r.tradingName::VARCHAR         AS trading_name,
+        regexp_replace(COALESCE(r.cnpj::VARCHAR, ''), '[^0-9]', '', 'g') AS cnpj_digits,
+        r.status::VARCHAR              AS status,
+        r.segment::VARCHAR             AS segment,
+        r.market::VARCHAR              AS market
+    FROM read_json_auto('{fpath}') AS p,
+        UNNEST(p.results) AS t(r)
+    WHERE r.status::VARCHAR = 'A';"""
+
+
+def load_b3_tickers(
+    conn: duckdb.DuckDBPyConnection,
+    tickers_dir: Path,
+    *,
+    glob_pattern: str = "page_*.json",
+) -> int:
+    """Carrega tickers da B3 a partir dos JSONs page_*.json.
+
+    Retorna o total de linhas gravadas. Se a pasta ou os arquivos não existirem,
+    registra warning e retorna 0 sem falhar o pipeline principal.
+    """
+    if not tickers_dir.exists():
+        logger.warning("Diretório de tickers não encontrado: %s", tickers_dir)
+        logger.warning("Verifique processamento do github/dalmofelipe/b3-tickers no CI")
+        return 0
+
+    files = sorted(tickers_dir.glob(glob_pattern))
+    if not files:
+        logger.warning(
+            "Nenhum JSON de tickers encontrado em %s usando %s",
+            tickers_dir,
+            glob_pattern,
+        )
+        return 0
+
+    init_b3_tickers_schema(conn)
+
+    sql = _build_b3_tickers_sql(tickers_dir / glob_pattern)
+    conn.execute(sql)
+
+    row = conn.execute(f"SELECT COUNT(*) FROM b3_tickers").fetchone()
+    assert row is not None, "[load_b3_tickers] Não foi possível contar linhas em b3_tickers"
+    count: int = row[0]
+
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_b3_tickers_cod_cvm ON b3_tickers (cod_cvm)")
+
+    logger.info("Tickers B3 carregados: %d linhas em b3_tickers", count)
+    return count

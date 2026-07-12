@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from cvmdata.ingestion.db import init_schema
-from cvmdata.ingestion.loader import load_csv, load_source_year, parse_csv_filename
+from cvmdata.ingestion.loader import (
+    load_b3_tickers,
+    load_csv,
+    load_source_year,
+    parse_csv_filename,
+)
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -57,6 +63,41 @@ def _make_flow_csv(path: Path, rows: int = 3) -> Path:
             f"{cd};Conta {i};{1000 + i * 100}.0;S"
         )
     path.write_bytes("\n".join(lines).encode("latin1"))
+    return path
+
+
+def _make_b3_tickers_json(path: Path) -> Path:
+    payload = {
+        "page": {
+            "pageNumber": 1,
+            "pageSize": 120,
+            "totalRecords": 2,
+            "totalPages": 1,
+        },
+        "results": [
+            {
+                "codeCVM": "1234",
+                "issuingCompany": "ABCD",
+                "companyName": "ABC COMPANHIA",
+                "tradingName": "ABC",
+                "cnpj": "12.345.678/0001-90",
+                "status": "A",
+                "segment": "Novo Mercado",
+                "market": "Ações",
+            },
+            {
+                "codeCVM": "9999",
+                "issuingCompany": "WXYZ",
+                "companyName": "WXYZ COMPANHIA",
+                "tradingName": "WXYZ",
+                "cnpj": "00.000.000/0001-00",
+                "status": "I",
+                "segment": "Tradicional",
+                "market": "Ações",
+            },
+        ],
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 
 
@@ -168,3 +209,35 @@ def test_load_source_year_skips_non_demo_files(tmp_path, db):
     results = load_source_year(db, "itr", 2024, tmp_path)
 
     assert list(results.keys()) == ["BPA/con"]
+
+
+# ── Testes: load_b3_tickers ─────────────────────────────────────────────────
+
+
+def test_load_b3_tickers_inserts_active_rows(tmp_path, db):
+    tickers_dir = tmp_path / "b3_tickers"
+    tickers_dir.mkdir(parents=True)
+    _make_b3_tickers_json(tickers_dir / "page_1.json")
+
+    count = load_b3_tickers(db, tickers_dir)
+
+    assert count == 1
+    row = db.execute(
+        (
+            "SELECT cod_cvm, ticker_root, company_name, trading_name, "
+            "cnpj_digits, status FROM b3_tickers"
+        )
+    ).fetchone()
+    assert row == (1234, "ABCD", "ABC COMPANHIA", "ABC", "12345678000190", "A")
+
+
+def test_load_b3_tickers_is_idempotent(tmp_path, db):
+    tickers_dir = tmp_path / "b3_tickers"
+    tickers_dir.mkdir(parents=True)
+    _make_b3_tickers_json(tickers_dir / "page_1.json")
+
+    load_b3_tickers(db, tickers_dir)
+    load_b3_tickers(db, tickers_dir)
+
+    count = db.execute("SELECT COUNT(*) FROM b3_tickers").fetchone()[0]
+    assert count == 1

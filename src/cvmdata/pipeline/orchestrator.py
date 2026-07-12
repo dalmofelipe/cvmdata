@@ -7,7 +7,7 @@ from pathlib import Path
 from cvmdata.config import settings
 from cvmdata.ingestion.db import get_connection
 from cvmdata.ingestion.downloader import download_info_cad, download_source_year
-from cvmdata.ingestion.loader import load_info_cad, load_source_year
+from cvmdata.ingestion.loader import load_b3_tickers, load_info_cad, load_source_year
 from cvmdata.pipeline.models import PipelineExecutionError, PipelineReport, StepReport
 from cvmdata.transform.indicators import calculate_all
 from cvmdata.transform.info_cad import classify_info_cad
@@ -28,7 +28,7 @@ def run_full(
     data_dir: Path | None = None,
     db_path: Path | None = None,
 ) -> PipelineReport:
-    """Executa o pipeline completo (financeiro + cadastral).
+    """Executa o pipeline completo.
 
     Este é o ponto único de orquestração. CLI/cron/scripts devem chamar aqui.
 
@@ -46,9 +46,10 @@ def run_full(
 
     meta_path: Path | None = None
     cad_csv_path: Path | None = None
+    b3_tickers_dir = settings.b3_tickers_dir
 
     try:
-        # 1) Download financeiro (ITR/DFP)
+        # Download financeiro (ITR/DFP)
         s0 = _now()
         downloaded_counts: dict[str, int] = {}
         for year in years:
@@ -80,8 +81,29 @@ def run_full(
         )
 
         with get_connection(effective_db_path) as conn:
-            # 2) Load financeiro
+            # Load opcional de tickers B3
             s1 = _now()
+            loaded_tickers = load_b3_tickers(
+                conn,
+                b3_tickers_dir,
+                glob_pattern=settings.b3_tickers_glob,
+            )
+            step_reports.append(
+                StepReport(
+                    name="load_b3_tickers",
+                    status="success" if loaded_tickers > 0 else "warning",
+                    message=(f"{loaded_tickers} linhas carregadas em b3_tickers"),
+                    metrics={
+                        "rows_loaded": loaded_tickers,
+                        "table": "b3_tickers",
+                    },
+                    started_at=s1,
+                    finished_at=_now(),
+                )
+            )
+
+            # Load financeiro
+            s2 = _now()
             loaded_total = 0
             per_source_year: dict[str, int] = {}
             for year in years:
@@ -100,13 +122,13 @@ def run_full(
                         else "Nenhuma linha carregada (rode download primeiro)"
                     ),
                     metrics=per_source_year,
-                    started_at=s1,
+                    started_at=s2,
                     finished_at=_now(),
                 )
             )
 
-            # 3) Normalize
-            s2 = _now()
+            # Normalize
+            s3 = _now()
             normalized = normalize_all(conn)
             step_reports.append(
                 StepReport(
@@ -118,13 +140,13 @@ def run_full(
                         else "Nenhuma tabela raw_* encontrada para normalizar"
                     ),
                     metrics=normalized,
-                    started_at=s2,
+                    started_at=s3,
                     finished_at=_now(),
                 )
             )
 
-            # 4) Indicators
-            s3 = _now()
+            # Indicators
+            s4 = _now()
             indicators_rows = calculate_all(conn, cnpj=cnpj)
             step_reports.append(
                 StepReport(
@@ -136,13 +158,13 @@ def run_full(
                         else "Nenhum indicador calculado (verifique normalize/dados)"
                     ),
                     metrics={"rows": indicators_rows, "cnpj": cnpj},
-                    started_at=s3,
+                    started_at=s4,
                     finished_at=_now(),
                 )
             )
 
-            # 5) Download cadastral
-            s4 = _now()
+            # Download cadastral
+            s5 = _now()
             meta_path, cad_csv_path = download_info_cad(
                 settings.cad_meta_url,
                 settings.cad_csv_url,
@@ -155,13 +177,13 @@ def run_full(
                     status="success",
                     message="Arquivos cadastrais OK",
                     metrics={"meta": str(meta_path), "csv": str(cad_csv_path)},
-                    started_at=s4,
+                    started_at=s5,
                     finished_at=_now(),
                 )
             )
 
-            # 6) Load cadastral
-            s5 = _now()
+            # Load cadastral
+            s6 = _now()
             if cad_csv_path is None or not cad_csv_path.exists():
                 raise RuntimeError("Arquivo cad_cia_aberta.csv não encontrado após download")
             inserted = load_info_cad(conn, cad_csv_path)
@@ -175,13 +197,13 @@ def run_full(
                         else "cad_cia_aberta_raw ficou vazia (arquivo vazio?)"
                     ),
                     metrics={"rows": inserted},
-                    started_at=s5,
+                    started_at=s6,
                     finished_at=_now(),
                 )
             )
 
-            # 7) Classify cadastral
-            s6 = _now()
+            # Classify cadastral
+            s7 = _now()
             counts = classify_info_cad(conn)
             step_reports.append(
                 StepReport(
@@ -193,7 +215,7 @@ def run_full(
                         else "Nenhuma classificação gerada"
                     ),
                     metrics=counts,
-                    started_at=s6,
+                    started_at=s7,
                     finished_at=_now(),
                 )
             )

@@ -153,6 +153,18 @@ CREATE TABLE IF NOT EXISTS classification_curation_events (
     PRIMARY KEY (cnpj_cia, event_type)
 );"""
 
+_B3_TICKERS_DDL = """\
+CREATE TABLE IF NOT EXISTS b3_tickers (
+    cod_cvm       INTEGER,
+    ticker_root   VARCHAR,
+    company_name  VARCHAR,
+    trading_name  VARCHAR,
+    cnpj_digits   VARCHAR,
+    status        VARCHAR,
+    segment       VARCHAR,
+    market        VARCHAR
+);"""
+
 # Mapeamentos iniciais de setor para profile (banking e arrendamento mercantil)
 _SETOR_PROFILE_SEED: list[tuple[str, str]] = [
     ("Bancos", "banking"),
@@ -184,3 +196,9 @@ def init_info_cad_schema(conn: duckdb.DuckDBPyConnection) -> None:
         )
 
     logger.info("Schema cadastral OK (4 tabelas)")
+
+
+def init_b3_tickers_schema(conn: duckdb.DuckDBPyConnection) -> None:
+    """Cria a tabela de tickers se ainda não existir (idempotente)."""
+    conn.execute(_B3_TICKERS_DDL)
+    logger.info("Schema b3_tickers OK")
