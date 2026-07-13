@@ -18,7 +18,16 @@ class Settings(BaseSettings):
     )
 
     # Anos a processar (separados por vírgula na env: "2021,2022,2023,2024,2025")
-    years: list[int] = [2021, 2022, 2023, 2024, 2025]
+    years: str = "2021,2022,2023,2024,2025"
+
+    @property
+    def years_list(self) -> list[int]:
+        return sorted({int(y.strip()) for y in self.years.split(",") if y.strip()})
+
+    # Comportamento do pipeline
+    force_download: bool = False
+    verbose: bool = False
+    cnpj: str | None = None
 
     # URLs base dos ZIPs da CVM
     itr_url_template: str = (
@@ -60,7 +69,7 @@ class Settings(BaseSettings):
     @property
     def db_path(self) -> Path:
         return self.data_dir / "db" / "cvmdata.duckdb"
-    
+
     # Integração com dados de tickers da B3
     b3_tickers_glob: str = "page_*.json"
 

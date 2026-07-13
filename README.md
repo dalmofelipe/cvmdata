@@ -2,107 +2,70 @@
 
 Pipeline de dados CVM para cálculo de **indicadores de análise fundamentalista** de companhias abertas brasileiras. 
 
-***Consultar indicadores trimestrais da `PETROBRAS` dos últimos 5 anos.***
-
-```sh
-$ cvmdata indicators --cnpj "33.000.167/0001-01"
-```
-
-```sh
-┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┓
-┃ dt_refer   ┃ indicador           ┃             valor ┃
-┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━┩
-│ 2021-03-31 │ cobertura_juros     │           -1.0789 │
-│ 2021-03-31 │ divida_bruta        │ 404316000000.0000 │
-│ 2021-03-31 │ divida_liquida      │ 332862000000.0000 │
-│ 2021-03-31 │ divida_liquida_pl   │            1.0394 │
-│ 2021-03-31 │ endividamento_geral │           67.9204 │
-│ 2021-03-31 │ giro_ativo          │            0.0863 │
-│ ...        │ ...                 │...                │
-│ 2025-09-30 │ roe                 │           18.3523 │
-│ 2025-12-31 │ cobertura_juros     │          -43.9300 │
-│ 2025-12-31 │ divida_bruta        │ 384025000000.0000 │
-│ 2025-12-31 │ divida_liquida      │ 333417000000.0000 │
-│ 2025-12-31 │ divida_liquida_pl   │            0.7984 │
-│ 2025-12-31 │ endividamento_geral │           65.8664 │
-│ 2025-12-31 │ giro_ativo          │            0.4067 │
-│ 2025-12-31 │ liquidez_corrente   │            0.7059 │
-│ 2025-12-31 │ liquidez_geral      │            0.3498 │
-│ 2025-12-31 │ liquidez_imediata   │            0.1795 │
-│ 2025-12-31 │ liquidez_seca       │            0.4782 │
-│ 2025-12-31 │ margem_bruta        │           47.6331 │
-│ 2025-12-31 │ margem_liquida      │           22.2300 │
-│ 2025-12-31 │ margem_operacional  │           29.2691 │
-│ 2025-12-31 │ roa                 │            9.0409 │
-│ 2025-12-31 │ roe                 │           26.4867 │
-└────────────┴─────────────────────┴───────────────────┘
-```
-
-
-### Indicadores calculados
-
-Atualmente, são calculados 15 indicadores por trimestre, dos ultimos 5 anos de dados divulgados. 
+- Baixa documentos CSVs (ITR, DFP) da base de dados abertos da CVM
+- São carregados em base dados OLAD DuckDB
+- CONTAS_CVM são selecionadas e aplicadas aos calculos dos indicadores fundamentalistas.
+- Por padrão, serão processados dados dos ultimos 5 anos de todas empresas contidas nos documentos.
+- Atualmente, são calculados 15 indicadores de cada trimestre. 
 
 Segue lista de fórmulas e mapeamento de contas CVM, de cada indicador: [`docs/analise_fundamentalista.md`](docs/analise_fundamentalista.md).
 
 
-## Inicio Rápido
+### Configuração do Ambiente
 
 Projeto é gerenciado pelo [`UV - https://docs.astral.sh/uv/`](https://docs.astral.sh/uv/)
-
 
 ```bash
 git clone https://github.com/dalmofelipe/cvmdata.git
 cd cvmdata
 uv sync
-```
-
-Para desenvolvimento (linter + testes + cobertura):
-
-```bash
 uv sync --extra dev
 ```
 
 
 ## Pipeline
 
-Em ambiente Linux
+O processamento dos dados varia conforme a configuração da maquina. Geralmente é concluído em 10min.
+
+__Configuração padrão__
+
+| Variável | Valor Padrão | Descrição |
+|----------|----------------|-----------|
+| CVM_DATA_DIR | ./data | Diretório de storage dos dados |
+| CVM_YEARS | 2021,2022,2023,2024,2025 | Anos a serem processados |
+| CVM_FORCE_DOWNLOAD | false | Forçar download dos documentos |
+| CVM_VERBOSE | false | Nível de log detalhado |
+| CVM_CNPJ | None | CNPJ da empresa a ser processada. Se None, processa todas as empresas. |
+
+
+### Entry Point
 
 ```bash
-make all
+# Executa o pipeline completo (configurado via .env ou env vars)
+uv run cvmdata
+
+# Ou equivalente:
+uv run python -m cvmdata.pipeline
 ```
 
-O processamento dos dados, geralmente leva entre **3 a 6 min**. Esse tempo varia conforme a configuração da maquina.
+
+### Exemplo `.env`
+
+Caso necessário, crie um arquivo `.env` na raiz do projeto, com as variáveis de configuração desejadas.
+
+```env
+CVM_YEARS=2024
+CVM_FORCE_DOWNLOAD=true
+# CVM_CNPJ=00.000.000/0001-91
+```
+
+_O `.env` acima, personaliza a execução para baixar novamente os documentos e reprocessar o ano 2024, somente para os dados do Banco do Brasil._
 
 Para personalizar o pipeline, leia o documento [`docs/pipeline.md`](docs/pipeline.md).
 
-Para executar diretamente via CLI:
 
-```bash
-cvmdata pipeline run
-cvmdata pipeline run --years 2021:2025
-```
+### DBGate
 
+Use o gerenciador de database `DbGate Community` para explorar os dados e indicadores calculados.
 
-## Consultando Indicadores
-
-### Informações Cadastrais de Empresas
-
-Atualmente, as buscas são feita com base no CNPJ da empresa.
-
-Para buscas por informações cadastrais de empresas, use `info-cad`:
-
-```bash
-cvmdata info-cad
-cvmdata info-cad --cnpj "33.000.167/0001-01"
-```
-
-## Indicadores
-
-```bash
-cvmdata indicators --cnpj "33.000.167/0001-01"
-
-cvmdata indicators --cnpj "33.000.167/0001-01" --year 2025 # Somente indicadores de 2025
-```
-
-Retorna uma tabela contendo todos os indicadores trimestrais dos ultimos 5 anos.
+Link: [DbGate Community](https://www.dbgate.io/download-community/)

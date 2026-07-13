@@ -36,7 +36,7 @@ def run_full(
     (downloader/loader/normalize/indicators/info_cad). Este orquestrador só
     define ordem, compõe parâmetros e reporta execução.
     """
-    years = years or list(settings.years)
+    years = years or settings.years_list
 
     started_at = _now()
     step_reports: list[StepReport] = []

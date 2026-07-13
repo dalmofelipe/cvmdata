@@ -8,14 +8,14 @@ install:
 
 # ── Pipeline (full por padrão) ───────────────────────────────────────────────
 pipeline:
-	uv run cvmdata pipeline run
+	uv run cvmdata
 
 all: pipeline
 
 
 # ── Qualidade ────────────────────────────────────────────────────────────────
 test:
-	uv run --extra dev --group dev pytest -v
+	uv run --extra dev pytest -v
 
 lint:
 	uv run --extra dev ruff check src/ tests/

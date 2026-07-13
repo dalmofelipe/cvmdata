@@ -155,10 +155,12 @@ def load_csv(
     sql = _build_insert_sql(csv_path, demo, source, year, scope)
     conn.execute(sql)
 
-    count = conn.execute(
+    row = conn.execute(
         f"SELECT COUNT(*) FROM {table} WHERE source = ? AND year = ? AND scope = ?",
         [source, year, scope],
-    ).fetchone()[0]
+    ).fetchone()
+    assert row is not None
+    count: int = row[0]
 
     logger.info("  %s/%s/%s/%s → %d linhas", demo, scope, source, year, count)
     return count
@@ -235,9 +237,11 @@ def load_info_cad(
     fpath = csv_path.as_posix()
 
     # Contar linhas do CSV antes de carregar (SC-001)
-    csv_count = conn.execute(
+    row = conn.execute(
         f"SELECT COUNT(*) FROM read_csv('{fpath}', delim=';', header=true, encoding='latin-1')"
-    ).fetchone()[0]
+    ).fetchone()
+    csv_count = row[0] if row else 0
+
     logger.info("CSV cadastral: %d linhas", csv_count)
 
     # CTAS: CREATE OR REPLACE atomically replaces the table with auto-detected schema.
@@ -259,7 +263,9 @@ def load_info_cad(
                 nullstr  = ''
             )
         """)
-        inserted = conn.execute("SELECT COUNT(*) FROM cad_cia_aberta_raw").fetchone()[0]
+        row = conn.execute("SELECT COUNT(*) FROM cad_cia_aberta_raw").fetchone()
+        inserted = row[0] if row else 0
+        
         conn.execute("COMMIT")
     except Exception:
         conn.execute("ROLLBACK")

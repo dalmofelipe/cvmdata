@@ -92,7 +92,9 @@ def normalize_table(table: str, conn: duckdb.DuckDBPyConnection) -> int:
             f"CREATE INDEX IF NOT EXISTS idx_{clean}_lookup ON {clean} (CNPJ_CIA, CD_CONTA)"
         )
 
-    count: int = conn.execute(f"SELECT COUNT(*) FROM {clean}").fetchone()[0]
+    row = conn.execute(f"SELECT COUNT(*) FROM {clean}").fetchone()
+    count = row[0] if row else 0
+
     logger.info("  %s → %s: %d linhas", table, clean, count)
     return count
 

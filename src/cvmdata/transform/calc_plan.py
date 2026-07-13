@@ -1,13 +1,5 @@
 """Funções puras de cálculo de indicadores fundamentalistas e plano de cálculo."""
 
-from __future__ import annotations
-
-from cvmdata.transform.account_map import ACCOUNT_MAP
-
-# Contas de resultado (3.xx) — usam TTM em vez de YTD parcial
-DRE_ACCOUNTS: frozenset[str] = frozenset(v for k, v in ACCOUNT_MAP.items() if k.startswith("3."))
-
-
 # ── Rentabilidade ─────────────────────────────────────────────────────────────
 
 
