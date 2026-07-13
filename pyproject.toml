@@ -11,6 +11,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "pyclean>=3.7.0",
     "pytest>=8",
     "pytest-cov>=7.0.0",
     "ruff>=0.9",

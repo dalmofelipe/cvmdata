@@ -1,9 +1,9 @@
 # cvmdata
 
-Pipeline de dados CVM para cálculo de **indicadores de análise fundamentalista** de companhias abertas brasileiras. 
+Pipeline de dados CVM para cálculo de **indicadores de análise fundamentalista** de companhias abertas brasileiras.
 
 - Baixa documentos CSVs (ITR, DFP) da base de dados abertos da CVM
-- São carregados em base dados OLAD DuckDB
+- Dados de BPA, BPP, DRE são carregados para base de dados DuckDB
 - CONTAS_CVM são selecionadas e aplicadas aos calculos dos indicadores fundamentalistas.
 - Por padrão, serão processados dados dos ultimos 5 anos de todas empresas contidas nos documentos.
 - Atualmente, são calculados 15 indicadores de cada trimestre. 
@@ -41,11 +41,14 @@ __Configuração padrão__
 ### Entry Point
 
 ```bash
-# Executa o pipeline completo (configurado via .env ou env vars)
+# Executa o pipeline completo (configuração padrão)
 uv run cvmdata
 
 # Ou equivalente:
 uv run python -m cvmdata.pipeline
+
+# Variaveis de ambiente via CLI tem prioridade sob 'config.py' e '.env'
+CVM_YEARS=2020,2021,2022,2023,2024,2025,2026 cvmdata 
 ```
 
 
@@ -56,7 +59,7 @@ Caso necessário, crie um arquivo `.env` na raiz do projeto, com as variáveis d
 ```env
 CVM_YEARS=2024
 CVM_FORCE_DOWNLOAD=true
-# CVM_CNPJ=00.000.000/0001-91
+CVM_CNPJ=00.000.000/0001-91
 ```
 
 _O `.env` acima, personaliza a execução para baixar novamente os documentos e reprocessar o ano 2024, somente para os dados do Banco do Brasil._
