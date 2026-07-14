@@ -332,11 +332,11 @@ def load_b3_tickers(
     sql = _build_b3_tickers_sql(tickers_dir / glob_pattern)
     conn.execute(sql)
 
-    row = conn.execute(f"SELECT COUNT(*) FROM b3_tickers").fetchone()
+    row = conn.execute("SELECT COUNT(*) FROM b3_tickers").fetchone()
     assert row is not None, "[load_b3_tickers] Não foi possível contar linhas em b3_tickers"
     count: int = row[0]
 
-    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_b3_tickers_cod_cvm ON b3_tickers (cod_cvm)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_b3_tickers_cod_cvm ON b3_tickers (cod_cvm)")
 
     logger.info("Tickers B3 carregados: %d linhas em b3_tickers", count)
     return count

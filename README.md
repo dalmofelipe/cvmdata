@@ -5,8 +5,7 @@ Pipeline de dados CVM para cálculo de **indicadores de análise fundamentalista
 - Baixa documentos CSVs (ITR, DFP) da base de dados abertos da CVM
 - Dados de BPA, BPP, DRE são carregados para base de dados DuckDB
 - CONTAS_CVM são selecionadas e aplicadas aos calculos dos indicadores fundamentalistas.
-- Por padrão, serão processados dados dos ultimos 5 anos de todas empresas contidas nos documentos.
-- Atualmente, são calculados 15 indicadores de cada trimestre. 
+- Atualmente, são calculados 15 indicadores trimestrais dos ultimos 5 anos.
 
 Segue lista de fórmulas e mapeamento de contas CVM, de cada indicador: [`docs/analise_fundamentalista.md`](docs/analise_fundamentalista.md).
 
@@ -32,7 +31,7 @@ __Configuração padrão__
 | Variável | Valor Padrão | Descrição |
 |----------|----------------|-----------|
 | CVM_DATA_DIR | ./data | Diretório de storage dos dados |
-| CVM_YEARS | 2021,2022,2023,2024,2025 | Anos a serem processados |
+| CVM_YEARS | 2021,2022,2023,2024,2025 | Anos a serem processados. Também aceita range inclusivo como `2021:2025` ou `2021-2025`. |
 | CVM_FORCE_DOWNLOAD | false | Forçar download dos documentos |
 | CVM_VERBOSE | false | Nível de log detalhado |
 | CVM_CNPJ | None | CNPJ da empresa a ser processada. Se None, processa todas as empresas. |
@@ -47,8 +46,8 @@ uv run cvmdata
 # Ou equivalente:
 uv run python -m cvmdata.pipeline
 
-# Variaveis de ambiente via CLI tem prioridade sob 'config.py' e '.env'
-CVM_YEARS=2020,2021,2022,2023,2024,2025,2026 cvmdata 
+# Variaveis de ambiente via CLI têm prioridade sobre 'config.py' e '.env'
+CVM_YEARS=2020:2026 cvmdata
 ```
 
 

@@ -9,6 +9,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from cvmdata.core.years import parse_years
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -22,7 +24,7 @@ class Settings(BaseSettings):
 
     @property
     def years_list(self) -> list[int]:
-        return sorted({int(y.strip()) for y in self.years.split(",") if y.strip()})
+        return parse_years(self.years)
 
     # Comportamento do pipeline
     force_download: bool = False

@@ -14,7 +14,7 @@ O arquivo `.env` na raiz do projeto é carregado automaticamente.
 
 | Variável | Tipo | Default | Descrição |
 |---|---|---|---|
-| `CVM_YEARS` | `list[int]` | `2021,2022,2023,2024,2025` | Anos a processar |
+| `CVM_YEARS` | `string` | `2021,2022,2023,2024,2025` | Anos a processar. Aceita lista por vírgula ou range inclusivo (`2021:2025`, `2021-2025`). |
 | `CVM_DATA_DIR` | `Path` | `data` | Diretório raiz dos dados |
 | `CVM_FORCE_DOWNLOAD` | `bool` | `False` | Forçar re-download mesmo com cache |
 | `CVM_VERBOSE` | `bool` | `False` | Logging detalhado (DEBUG) |
