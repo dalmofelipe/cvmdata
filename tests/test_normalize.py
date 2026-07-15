@@ -1,4 +1,5 @@
 """Testes unitários do normalize (Phase 2 — T019)."""
+
 from __future__ import annotations
 
 import duckdb
@@ -75,9 +76,7 @@ def test_normalize_removes_penultimo(db: duckdb.DuckDBPyConnection) -> None:
 
     normalize_table("raw_bpa", db)
 
-    remaining = db.execute(
-        "SELECT ORDEM_EXERC FROM raw_bpa_clean"
-    ).fetchall()
+    remaining = db.execute("SELECT ORDEM_EXERC FROM raw_bpa_clean").fetchall()
     assert len(remaining) == 1
     assert remaining[0][0] == "ÚLTIMO"
 
@@ -241,9 +240,18 @@ def _insert_dre(
             ?, 2024, 'con'
         )
         """,
-        [cnpj, dt_refer, versao, cd_cvm,
-         ordem_exerc, dt_ini_exerc, dt_fim_exerc,
-         cd_conta, vl_conta, source],
+        [
+            cnpj,
+            dt_refer,
+            versao,
+            cd_cvm,
+            ordem_exerc,
+            dt_ini_exerc,
+            dt_fim_exerc,
+            cd_conta,
+            vl_conta,
+            source,
+        ],
     )
 
 
@@ -280,10 +288,7 @@ def test_normalize_dre_preserves_penultimo(db: duckdb.DuckDBPyConnection) -> Non
     count = normalize_table("raw_dre", db)
 
     assert count == 2
-    ordens = {
-        r[0]
-        for r in db.execute("SELECT DISTINCT ORDEM_EXERC FROM raw_dre_clean").fetchall()
-    }
+    ordens = {r[0] for r in db.execute("SELECT DISTINCT ORDEM_EXERC FROM raw_dre_clean").fetchall()}
     assert "ÚLTIMO" in ordens
     assert "PENÚLTIMO" in ordens
 

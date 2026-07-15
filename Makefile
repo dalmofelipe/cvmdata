@@ -1,42 +1,34 @@
-.PHONY: install download load normalize indicators all test lint fmt
+.PHONY: install pipeline test lint lint-fix fmt ci clean
 
 # ── Ambiente ────────────────────────────────────────────────────────────────
 install:
 	uv sync --all-extras
 
-# ── Pipeline (todos os anos padrão) ─────────────────────────────────────────
-download:
-	uv run cvmdata download
+clean:
+	rm -rf data/raw data/db
+	uv run pyclean src/ tests/
 
-load:
-	uv run cvmdata load
 
-normalize:
-	uv run cvmdata normalize
+# ── Pipeline ────────────────────────────────────────────────────────────────
+pipeline:
+	uv run cvmdata
 
-indicators:
-	uv run cvmdata indicators
 
-all: download load normalize indicators
-
-# ── Ano específico: make download YEAR=2024 ──────────────────────────────────
-ifdef YEAR
-download:
-	uv run cvmdata download --year $(YEAR)
-
-load:
-	uv run cvmdata load --year $(YEAR)
-endif
-
-# ── Qualidade ────────────────────────────────────────────────────────────────
+# ── Qualidade ───────────────────────────────────────────────────────────────
 test:
 	uv run pytest -v
 
 lint:
-	uv run ruff check src/ tests/
+	ruff check src/ tests/
+
+lint-fix:
+	ruff check src/ tests/ --fix
 
 fmt:
-	uv run ruff format src/ tests/
+	ruff format src/ tests/
 
-# ── Atalho "tudo + qualidade" ────────────────────────────────────────────────
+fix: lint-fix fmt
+
+
+# ── CI ──────────────────────────────────────────────────────────────────────
 ci: lint test
