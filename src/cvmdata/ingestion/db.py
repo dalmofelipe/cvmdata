@@ -1,8 +1,13 @@
-"""Conexão DuckDB e DDL das tabelas raw_*.
+"""Conexão DuckDB e DDL das tabelas.
 
-Demonstrativos em escopo (INDICATOR_DEMOS = BPA, BPP, DRE):
+Tabelas raw_* (BPA, BPP, DRE):
   Grupo A — Balanço (BPA, BPP): 14 colunas, sem DT_INI_EXERC
   Grupo B — Fluxo/Resultado (DRE): 15 colunas, com DT_INI_EXERC
+
+Tabelas diretas (composicao_capital): criadas com DDL própria.
+
+O catálogo central (CATALOG) em core/catalog.py define quais datasets
+são processados; este módulo só fornece as DDLs e init.
 """
 
 from __future__ import annotations
@@ -12,12 +17,9 @@ from pathlib import Path
 
 import duckdb
 
-logger = logging.getLogger(__name__)
+from cvmdata.core.catalog import BALANCE_DEMOS, CATALOG, FLOW_DEMOS, DatasetType
 
-# Demonstrativos necessários para os 7 indicadores planejados
-INDICATOR_DEMOS: list[str] = ["BPA", "BPP", "DRE"]
-BALANCE_DEMOS: frozenset[str] = frozenset({"BPA", "BPP"})
-FLOW_DEMOS: frozenset[str] = frozenset({"DRE"})
+logger = logging.getLogger(__name__)
 
 # ── DDL ───────────────────────────────────────────────────────────────────────
 
@@ -67,6 +69,23 @@ CREATE TABLE IF NOT EXISTS raw_{demo} (
 );"""
 
 
+# Composicao Capital — tabela direta (sem CD_CONTA, sem filtro)
+_COMPOSICAO_CAPITAL_DDL = """\
+CREATE TABLE IF NOT EXISTS composicao_capital (
+    CNPJ_CIA                 VARCHAR,
+    DT_REFER                 DATE,
+    VERSAO                   INTEGER,
+    DENOM_CIA                VARCHAR,
+    QT_ACAO_ORDIN_CAP_INTEGR BIGINT,
+    QT_ACAO_PREF_CAP_INTEGR  BIGINT,
+    QT_ACAO_TOTAL_CAP_INTEGR BIGINT,
+    QT_ACAO_ORDIN_TESOURO    BIGINT,
+    QT_ACAO_PREF_TESOURO     BIGINT,
+    QT_ACAO_TOTAL_TESOURO    BIGINT,
+    source                   VARCHAR,
+    year                     SMALLINT
+);"""
+
 _INDICATORS_DDL = """\
 CREATE TABLE IF NOT EXISTS indicators (
     cnpj_cia  VARCHAR NOT NULL,
@@ -87,14 +106,17 @@ def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
 
 
 def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
-    """Cria tabelas raw_* se ainda não existirem (idempotente)."""
-    for demo in sorted(BALANCE_DEMOS):
-        conn.execute(_BALANCE_DDL.format(demo=demo.lower()))
+    """Cria tabelas do catálogo se ainda não existirem (idempotente)."""
+    for key, ds in CATALOG.items():
+        if key in BALANCE_DEMOS:
+            conn.execute(_BALANCE_DDL.format(demo=key.lower()))
+        elif key in FLOW_DEMOS:
+            conn.execute(_FLOW_DDL.format(demo=key.lower()))
+        elif ds.type == DatasetType.DIRECT_INSERT:
+            conn.execute(_COMPOSICAO_CAPITAL_DDL)
 
-    for demo in sorted(FLOW_DEMOS):
-        conn.execute(_FLOW_DDL.format(demo=demo.lower()))
-
-    logger.info("Schema raw_* OK (%d tabelas)", len(INDICATOR_DEMOS))
+    count = len(CATALOG)
+    logger.info("Schema OK (%d tabelas no catálogo)", count)
 
 
 def init_indicators_schema(conn: duckdb.DuckDBPyConnection) -> None:

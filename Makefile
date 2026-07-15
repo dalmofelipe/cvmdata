@@ -1,31 +1,34 @@
-.PHONY: install pipeline all \
-	test lint fmt ci
+.PHONY: install pipeline test lint lint-fix fmt ci clean
 
 # ── Ambiente ────────────────────────────────────────────────────────────────
 install:
-	uv sync --all-extras --all-groups
+	uv sync --all-extras
+
+clean:
+	rm -rf data/raw data/db
+	uv run pyclean src/ tests/
 
 
-# ── Pipeline (full por padrão) ───────────────────────────────────────────────
+# ── Pipeline ────────────────────────────────────────────────────────────────
 pipeline:
 	uv run cvmdata
 
-all: pipeline
 
-
-# ── Qualidade ────────────────────────────────────────────────────────────────
+# ── Qualidade ───────────────────────────────────────────────────────────────
 test:
-	uv run --extra dev pytest -v
+	uv run pytest -v
 
 lint:
-	uv run --extra dev ruff check src/ tests/
+	ruff check src/ tests/
 
 lint-fix:
-	uv run --extra dev ruff check src/ tests/ --fix
+	ruff check src/ tests/ --fix
 
 fmt:
-	uv run --extra dev ruff format src/ tests/
+	ruff format src/ tests/
+
+fix: lint-fix fmt
 
 
-# ── Atalho "tudo + qualidade" ────────────────────────────────────────────────
+# ── CI ──────────────────────────────────────────────────────────────────────
 ci: lint test

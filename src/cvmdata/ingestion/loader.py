@@ -1,44 +1,23 @@
 """Ingestão de CSVs extraídos dos ZIPs CVM para o DuckDB.
 
-Apenas arquivos consolidados (_con_) são aceitos — individuais (_ind_) são
-ignorados em todas as etapas (extração, parse e load).
+O catálogo em core/catalog.py define quais datasets são processados
+e como cada um é carregado (demonstrativo com filtro de contas vs. tabela direta).
 
-Padrão de nome de arquivo (CVM usa maiúsculas no demo):
-  {source}_cia_aberta_{DEMO}_con_{year}.csv
-  ex: itr_cia_aberta_BPA_con_2024.csv
-
-Cada arquivo é carregado na tabela raw_{demo} com colunas
-de metadata: source, year, scope.
-
-Idempotência: rows existentes para (source, year, scope) são
-deletadas antes de cada INSERT.
+Idempotência: rows existentes para (source, year) são deletadas antes de cada INSERT.
 """
 
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
 
 import duckdb
 
-from cvmdata.ingestion.db import (
-    BALANCE_DEMOS,
-    FLOW_DEMOS,
-    INDICATOR_DEMOS,
-    init_b3_tickers_schema,
-    init_schema,
-)
+from cvmdata.core.catalog import BALANCE_DEMOS, CATALOG, FLOW_DEMOS, DatasetType
+from cvmdata.ingestion.db import init_b3_tickers_schema, init_schema
 from cvmdata.transform.account_map import ACCOUNT_MAP
 
 logger = logging.getLogger(__name__)
-
-# Regex extrai (source, demo, year) do basename — apenas scope=con
-# Ex: itr_cia_aberta_BPA_con_2024.csv
-_FILENAME_RE = re.compile(
-    r"^(?P<source>itr|dfp)_cia_aberta_(?P<demo>[A-Z_]+)_(?P<scope>con)_(?P<year>\d{4})\.csv$",
-    re.IGNORECASE,
-)
 
 # Contas necessárias para os indicadores — filtragem aplicada no load
 _ACCOUNT_CODES_SQL = ", ".join(f"'{k}'" for k in sorted(ACCOUNT_MAP.keys()))
@@ -63,25 +42,32 @@ _COMMON_COLS_TAIL = """\
 _ALT_COLS: dict[frozenset, str] = {
     frozenset(BALANCE_DEMOS): "CAST(DT_FIM_EXERC AS DATE),",
     frozenset(FLOW_DEMOS):    "CAST(DT_INI_EXERC AS DATE), CAST(DT_FIM_EXERC AS DATE),",
-    frozenset(INDICATOR_DEMOS): (
+    frozenset({*BALANCE_DEMOS, *FLOW_DEMOS}): (
         "CAST(DT_INI_EXERC AS DATE), CAST(DT_FIM_EXERC AS DATE), COLUNA_DF::VARCHAR,"
     ),
 }
 
 
 def _alt_cols_for(demo: str) -> str:
-    demo_upper = demo.upper()
     for demos, cols in _ALT_COLS.items():
-        if demo_upper in demos:
+        if demo.upper() in demos:
             return cols
     raise ValueError(f"Demo desconhecido: {demo!r}")
 
 
-def _build_insert_sql(csv_path: Path, demo: str, source: str, year: int, scope: str) -> str:
-    """Monta o SQL de INSERT conforme o grupo de schema do demonstrativo.
+def _match_dataset(filename: str) -> tuple[str, DatasetType] | None:
+    """Retorna (key, type) se o filename corresponde a algum dataset do catálogo."""
+    fname = filename.lower()
+    for key, ds in CATALOG.items():
+        if ds.pattern in fname:
+            return key, ds.type
+    return None
 
-    Filtra apenas as linhas cujo CD_CONTA está no ACCOUNT_MAP, descartando
-    todas as contas irrelevantes para os indicadores antes da persistência.
+
+def _build_demo_insert_sql(csv_path: Path, demo: str, source: str, year: int, scope: str) -> str:
+    """Monta o SQL de INSERT para demonstrativos (BPA, BPP, DRE).
+
+    Filtra apenas as linhas cujo CD_CONTA está no ACCOUNT_MAP.
     """
     table = f"raw_{demo.lower()}"
     fpath = csv_path.as_posix()
@@ -110,34 +96,19 @@ def _build_insert_sql(csv_path: Path, demo: str, source: str, year: int, scope: 
     WHERE CD_CONTA::VARCHAR IN ({_ACCOUNT_CODES_SQL});"""
 
 
-def parse_csv_filename(path: Path) -> tuple[str, str, str, int] | None:
-    """Extrai (demo, scope, source, year) do nome do arquivo.
-
-    Retorna None se o arquivo não for um demonstrativo consolidado (_con_)
-    de um demo em escopo. Arquivos _ind_ não casam com o regex e retornam None.
-    """
-    m = _FILENAME_RE.match(path.name)
-    if not m:
-        return None
-    demo = m.group("demo").upper()
-    if demo not in INDICATOR_DEMOS:
-        logger.debug("Demo desconhecido '%s', pulando %s", demo, path.name)
-        return None
-    return demo, "con", m.group("source").lower(), int(m.group("year"))
-
-
 def load_csv(
     conn: duckdb.DuckDBPyConnection,
     csv_path: Path,
     demo: str,
     source: str,
     year: int,
-    scope: str,
+    scope: str = "con",
 ) -> int:
-    """Carrega um CSV consolidado na tabela raw_{demo}. Retorna linhas inseridas.
+    """Carrega um CSV de demonstrativo (BPA, BPP, DRE) na tabela raw_{demo}.
 
-    Idempotente: deleta linhas existentes para (source, year, scope) antes do INSERT.
-    Levanta ValueError se scope != 'con' — apenas consolidado é suportado.
+    Idempotente: deleta linhas de (source, year, scope) antes do INSERT.
+
+    Mantida como API pública para testes e compatibilidade.
     """
     if scope != "con":
         raise ValueError(
@@ -146,13 +117,12 @@ def load_csv(
         )
     table = f"raw_{demo.lower()}"
 
-    # Remove dados anteriores desse arquivo específico
     conn.execute(
         f"DELETE FROM {table} WHERE source = ? AND year = ? AND scope = ?",
         [source, year, scope],
     )
 
-    sql = _build_insert_sql(csv_path, demo, source, year, scope)
+    sql = _build_demo_insert_sql(csv_path, demo, source, year, scope)
     conn.execute(sql)
 
     row = conn.execute(
@@ -166,6 +136,62 @@ def load_csv(
     return count
 
 
+def _build_comp_capital_insert_sql(csv_path: Path, source: str, year: int) -> str:
+    """Monta o SQL de INSERT para composicao_capital (sem filtro de CD_CONTA)."""
+    fpath = csv_path.as_posix()
+    return f"""
+    INSERT INTO composicao_capital
+    SELECT
+        CNPJ_CIA::VARCHAR,
+        TRY_CAST(DT_REFER AS DATE),
+        VERSAO::INTEGER,
+        DENOM_CIA::VARCHAR,
+        TRY_CAST(QT_ACAO_ORDIN_CAP_INTEGR AS BIGINT),
+        TRY_CAST(QT_ACAO_PREF_CAP_INTEGR AS BIGINT),
+        TRY_CAST(QT_ACAO_TOTAL_CAP_INTEGR AS BIGINT),
+        TRY_CAST(QT_ACAO_ORDIN_TESOURO AS BIGINT),
+        TRY_CAST(QT_ACAO_PREF_TESOURO AS BIGINT),
+        TRY_CAST(QT_ACAO_TOTAL_TESOURO AS BIGINT),
+        '{source}'::VARCHAR AS source,
+        {year}::SMALLINT    AS year
+    FROM read_csv(
+        '{fpath}',
+        delim    = ';',
+        header   = true,
+        encoding = 'cp1252',
+        nullstr  = ''
+    );"""
+
+
+def _load_composicao_capital_csv(
+    conn: duckdb.DuckDBPyConnection,
+    csv_path: Path,
+    source: str,
+    year: int,
+) -> int:
+    """Carrega um CSV de composicao_capital na tabela composicao_capital.
+
+    Idempotente: deleta linhas de (source, year) antes do INSERT.
+    """
+    conn.execute("DELETE FROM composicao_capital WHERE source = ? AND year = ?", [source, year])
+
+    sql = _build_comp_capital_insert_sql(csv_path, source, year)
+    conn.execute(sql)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cc_cnpj ON composicao_capital (CNPJ_CIA)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cc_source_year ON composicao_capital (source, year)")
+
+    row = conn.execute(
+        "SELECT COUNT(*) FROM composicao_capital WHERE source = ? AND year = ?", 
+        [source, year]
+    ).fetchone()
+    assert row is not None
+    count: int = row[0]
+
+    logger.info("  composicao_capital/%s/%s → %d linhas", source, year, count)
+    return count
+
+
 def load_source_year(
     conn: duckdb.DuckDBPyConnection,
     source: str,
@@ -174,13 +200,13 @@ def load_source_year(
 ) -> dict[str, int]:
     """Carrega todos os CSVs de um source+year no DuckDB.
 
-    Escaneia raw_dir/{source}/{year}/*.csv, identifica demostrativos via filename e
-    chama load_csv para cada um.
+    Escaneia raw_dir/{source}/{year}/*.csv, identifica datasets via catálogo e
+    chama o método de carga adequado (demonstrativo vs. tabela direta).
 
-    Retorna dict {"{DEMO}/{scope}": row_count} para os arquivos carregados.
+    Retorna dict com "{key}": row_count para os arquivos carregados.
     """
     init_schema(conn)
-
+    
     csv_dir = raw_dir / source / str(year)
     if not csv_dir.exists():
         logger.warning("Diretório não encontrado: %s — rode 'download' primeiro", csv_dir)
@@ -196,21 +222,24 @@ def load_source_year(
     logger.info("Carregando %d arquivos de %s …", len(csv_files), csv_dir)
 
     for csv_path in csv_files:
-        parsed = parse_csv_filename(csv_path)
-        if parsed is None:
-            logger.debug("Pulando %s (não é demo com scope)", csv_path.name)
+        matched = _match_dataset(csv_path.name)
+        if matched is None:
+            logger.debug("Pulando %s (não está no catálogo)", csv_path.name)
             continue
 
-        demo, scope, _src, _yr = parsed
+        key, ds_type = matched
         try:
-            count = load_csv(conn, csv_path, demo, source, year, scope)
-            results[f"{demo}/{scope}"] = count
+            if ds_type == DatasetType.STATEMENT:
+                count = load_csv(conn, csv_path, key, source, year)
+            else:
+                count = _load_composicao_capital_csv(conn, csv_path, source, year)
+            results[key] = count
         except Exception as exc:
             logger.error("Erro ao carregar %s: %s", csv_path.name, exc)
             raise
 
     total = sum(results.values())
-    logger.info("Load %s/%d concluído: %d linhas em %d tabelas", source, year, total, len(results))
+    logger.info("Load %s/%d concluído: %d linhas em %d datasets", source, year, total, len(results))
     return results
 
 
@@ -333,7 +362,7 @@ def load_b3_tickers(
     conn.execute(sql)
 
     row = conn.execute("SELECT COUNT(*) FROM b3_tickers").fetchone()
-    assert row is not None, "[load_b3_tickers] Não foi possível contar linhas em b3_tickers"
+    assert row is not None
     count: int = row[0]
 
     conn.execute("CREATE INDEX IF NOT EXISTS idx_b3_tickers_cod_cvm ON b3_tickers (cod_cvm)")

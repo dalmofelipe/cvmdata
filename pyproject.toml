@@ -28,7 +28,7 @@ build-backend = "hatchling.build"
 packages = ["src/cvmdata"]
 
 [tool.ruff]
-line-length = 100
+line-length = 110
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]

@@ -17,33 +17,17 @@ from pathlib import Path
 
 import httpx
 
+from cvmdata.core.catalog import CATALOG
+
 logger = logging.getLogger(__name__)
 
-# Todos os demonstrativos disponíveis nos ZIPs da CVM (para referência)
-DEMOS: list[str] = ["BPA", "BPP", "DFC_MD", "DFC_MI", "DMPL", "DRA", "DRE", "DVA"]
 
-# Subset necessário para calcular os 7 indicadores planejados
-INDICATOR_DEMOS: frozenset[str] = frozenset({"BPA", "BPP", "DRE"})
-
-# Arquivos que NÃO são demonstrativos — ignorados no load
-_SKIP_PATTERNS: tuple[str, ...] = (
-    "composicao_capital",
-    "parecer",
-    # arquivo-índice sem sufixo de scope (ex: itr_cia_aberta_2024.csv)
-)
-
-
-def _is_demo_csv(filename: str) -> bool:
-    """Retorna True se o arquivo é um CSV de demonstrativo (com scope _con_)."""
+def _should_extract(filename: str) -> bool:
+    """Retorna True se o arquivo CSV corresponde a algum dataset do catálogo."""
     fname = filename.lower()
     if not fname.endswith(".csv"):
         return False
-    if any(skip in fname for skip in _SKIP_PATTERNS):
-        return False
-    # Deve conter _con_ e ser um demo em escopo (INDICATOR_DEMOS) — _ind_ ignorado
-    if "_con_" not in fname:
-        return False
-    return any(f"_{demo.lower()}_" in fname for demo in INDICATOR_DEMOS)
+    return any(ds.pattern in fname for ds in CATALOG.values())
 
 
 def download_zip(url: str, dest: Path, *, force: bool = False) -> Path:
@@ -76,16 +60,15 @@ def download_zip(url: str, dest: Path, *, force: bool = False) -> Path:
 
 
 def extract_zip(zip_path: Path, dest_dir: Path) -> list[Path]:
-    """Extrai CSVs de demonstrativos de *zip_path* em *dest_dir*.
+    """Extrai CSVs dos datasets do catálogo de *zip_path* em *dest_dir*.
 
-    Ignora arquivos não-demo (composicao_capital, parecer, etc.).
     Retorna lista dos CSVs extraídos.
     """
     dest_dir.mkdir(parents=True, exist_ok=True)
     extracted: list[Path] = []
 
     with zipfile.ZipFile(zip_path) as zf:
-        members = [m for m in zf.namelist() if _is_demo_csv(m)]
+        members = [m for m in zf.namelist() if _should_extract(m)]
         for member in members:
             # Evitar path traversal: usar só o basename
             basename = Path(member).name
@@ -94,7 +77,7 @@ def extract_zip(zip_path: Path, dest_dir: Path) -> list[Path]:
                 dst.write(src.read())
             extracted.append(target)
 
-    logger.info("%d CSVs de demonstrativos extraídos em %s", len(extracted), dest_dir)
+    logger.info("%d CSVs extraídos em %s", len(extracted), dest_dir)
     return extracted
 
 
