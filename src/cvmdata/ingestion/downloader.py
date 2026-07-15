@@ -3,7 +3,12 @@
 Fluxo por source+ano:
   1. Baixa o ZIP para data/raw/{source}/{source}_cia_aberta_{year}.zip
   2. Extrai apenas os CSVs relevantes para data/raw/{source}/{year}/
+
+Fluxo de Informação Cadastral:
+  download_info_cad() baixa meta_cad_cia_aberta.txt + cad_cia_aberta.csv
+  para data/raw/cad/.
 """
+
 from __future__ import annotations
 
 import logging
@@ -12,35 +17,17 @@ from pathlib import Path
 
 import httpx
 
+from cvmdata.core.catalog import CATALOG
+
 logger = logging.getLogger(__name__)
 
-# Todos os demonstrativos disponíveis nos ZIPs da CVM (para referência)
-DEMOS: list[str] = ["BPA", "BPP", "DFC_MD", "DFC_MI", "DMPL", "DRA", "DRE", "DVA"]
 
-# Subset necessário para calcular os 7 indicadores planejados
-# [ADR 2026-02-20]: DFC_MD, DFC_MI, DMPL, DRA, DVA descartados — nenhum
-# indicador planejado requer contas desses demonstrativos.
-INDICATOR_DEMOS: frozenset[str] = frozenset({"BPA", "BPP", "DRE"})
-
-# Arquivos que NÃO são demonstrativos — ignorados no load
-_SKIP_PATTERNS: tuple[str, ...] = (
-    "composicao_capital",
-    "parecer",
-    # arquivo-índice sem sufixo de scope (ex: itr_cia_aberta_2024.csv)
-)
-
-
-def _is_demo_csv(filename: str) -> bool:
-    """Retorna True se o arquivo é um CSV de demonstrativo (com scope _con_)."""
+def _should_extract(filename: str) -> bool:
+    """Retorna True se o arquivo CSV corresponde a algum dataset do catálogo."""
     fname = filename.lower()
     if not fname.endswith(".csv"):
         return False
-    if any(skip in fname for skip in _SKIP_PATTERNS):
-        return False
-    # Deve conter _con_ e ser um demo em escopo (INDICATOR_DEMOS) — _ind_ ignorado
-    if "_con_" not in fname:
-        return False
-    return any(f"_{demo.lower()}_" in fname for demo in INDICATOR_DEMOS)
+    return any(ds.pattern in fname for ds in CATALOG.values())
 
 
 def download_zip(url: str, dest: Path, *, force: bool = False) -> Path:
@@ -73,16 +60,15 @@ def download_zip(url: str, dest: Path, *, force: bool = False) -> Path:
 
 
 def extract_zip(zip_path: Path, dest_dir: Path) -> list[Path]:
-    """Extrai CSVs de demonstrativos de *zip_path* em *dest_dir*.
+    """Extrai CSVs dos datasets do catálogo de *zip_path* em *dest_dir*.
 
-    Ignora arquivos não-demo (composicao_capital, parecer, etc.).
     Retorna lista dos CSVs extraídos.
     """
     dest_dir.mkdir(parents=True, exist_ok=True)
     extracted: list[Path] = []
 
     with zipfile.ZipFile(zip_path) as zf:
-        members = [m for m in zf.namelist() if _is_demo_csv(m)]
+        members = [m for m in zf.namelist() if _should_extract(m)]
         for member in members:
             # Evitar path traversal: usar só o basename
             basename = Path(member).name
@@ -91,7 +77,7 @@ def extract_zip(zip_path: Path, dest_dir: Path) -> list[Path]:
                 dst.write(src.read())
             extracted.append(target)
 
-    logger.info("%d CSVs de demonstrativos extraídos em %s", len(extracted), dest_dir)
+    logger.info("%d CSVs extraídos em %s", len(extracted), dest_dir)
     return extracted
 
 
@@ -116,3 +102,55 @@ def download_source_year(
     url = url_template.format(year=year)
     download_zip(url, zip_path, force=force)
     return extract_zip(zip_path, csv_dir)
+
+
+# ── Informação Cadastral CVM ──────────────────────────────────────────────────────────────
+
+# Nomes dos arquivos cadastrais oficiais
+CAD_META_FILENAME = "meta_cad_cia_aberta.txt"
+CAD_CSV_FILENAME = "cad_cia_aberta.csv"
+
+
+def download_info_cad(
+    cad_meta_url: str,
+    cad_csv_url: str,
+    cad_dir: Path,
+    *,
+    force: bool = False,
+) -> tuple[Path, Path]:
+    """Baixa os arquivos cadastrais da CVM para *cad_dir*.
+
+    Returns:
+        (meta_path, csv_path) — caminhos locais dos arquivos.
+
+    Idempotente: pula arquivos já existentes a menos que *force=True*.
+    Falha de download não corrompe arquivo previamente baixado.
+    """
+    cad_dir.mkdir(parents=True, exist_ok=True)
+    meta_path = cad_dir / CAD_META_FILENAME
+    csv_path = cad_dir / CAD_CSV_FILENAME
+
+    for url, dest in [(cad_meta_url, meta_path), (cad_csv_url, csv_path)]:
+        if dest.exists() and not force:
+            logger.info("Arquivo cadastral já existe, pulando: %s", dest.name)
+            continue
+        # Baixar para temporário e só mover ao final (evita corromper arquivo prévio)
+        tmp = dest.with_suffix(dest.suffix + ".tmp")
+        try:
+            logger.info("Baixando %s …", url)
+            with httpx.stream("GET", url, follow_redirects=True, timeout=300) as r:
+                r.raise_for_status()
+                downloaded = 0
+                with tmp.open("wb") as fh:
+                    for chunk in r.iter_bytes(chunk_size=65_536):
+                        fh.write(chunk)
+                        downloaded += len(chunk)
+            mb = downloaded / 1_048_576
+            logger.info("  %.1f MB → %s", mb, dest.name)
+            tmp.replace(dest)
+        except Exception:
+            if tmp.exists():
+                tmp.unlink()
+            raise
+
+    return meta_path, csv_path

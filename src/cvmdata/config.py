@@ -2,11 +2,14 @@
 
 Carrega variáveis do arquivo .env (ou ambiente) com prefixo CVM_.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from cvmdata.core.years import parse_years
 
 
 class Settings(BaseSettings):
@@ -16,11 +19,17 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    # Diretório raiz dos dados (relativo ao CWD ou absoluto)
-    data_dir: Path = Path("data")
-
     # Anos a processar (separados por vírgula na env: "2021,2022,2023,2024,2025")
-    years: list[int] = [2021, 2022, 2023, 2024, 2025]
+    years: str = "2021,2022,2023,2024,2025"
+
+    @property
+    def years_list(self) -> list[int]:
+        return parse_years(self.years)
+
+    # Comportamento do pipeline
+    force_download: bool = False
+    verbose: bool = False
+    cnpj: str | None = None
 
     # URLs base dos ZIPs da CVM
     itr_url_template: str = (
@@ -29,6 +38,19 @@ class Settings(BaseSettings):
     dfp_url_template: str = (
         "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/DFP/DADOS/dfp_cia_aberta_{year}.zip"
     )
+
+    # URLs dos arquivos cadastrais da CVM
+    cad_meta_url: str = "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/META/meta_cad_cia_aberta.txt"
+    cad_csv_url: str = "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv"
+
+    def itr_url(self, year: int) -> str:
+        return self.itr_url_template.format(year=year)
+
+    def dfp_url(self, year: int) -> str:
+        return self.dfp_url_template.format(year=year)
+
+    # Diretório raiz dos dados (relativo ao CWD ou absoluto)
+    data_dir: Path = Path("data")
 
     @property
     def raw_dir(self) -> Path:
@@ -43,14 +65,19 @@ class Settings(BaseSettings):
         return self.raw_dir / "dfp"
 
     @property
+    def cad_dir(self) -> Path:
+        return self.raw_dir / "cad"
+
+    @property
     def db_path(self) -> Path:
         return self.data_dir / "db" / "cvmdata.duckdb"
 
-    def itr_url(self, year: int) -> str:
-        return self.itr_url_template.format(year=year)
+    # Integração com dados de tickers da B3
+    b3_tickers_glob: str = "page_*.json"
 
-    def dfp_url(self, year: int) -> str:
-        return self.dfp_url_template.format(year=year)
+    @property
+    def b3_tickers_dir(self) -> Path:
+        return self.data_dir / "b3_tickers"
 
 
 # instância global — importar com `from cvmdata.config import settings`
