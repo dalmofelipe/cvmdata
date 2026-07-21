@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from cvmdata.config import Settings
-from cvmdata.core.years import YearsParseError, parse_years
+from cvmdata.utils.years import YearsParseError, parse_years
 
 
 @pytest.mark.parametrize(

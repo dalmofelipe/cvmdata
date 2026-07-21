@@ -82,14 +82,12 @@ cada empresa. Valores observados no arquivo `itr_cia_aberta_BPA_con_2025.csv`:
 | Março | 30/jun | 30/set | 31/dez | 31/mar |
 | Junho | 30/set | 31/dez | 31/mar | 30/jun |
 
-A regra invariante: **Q4 nunca aparece em ITR** — é sempre o exercício completo no DFP,
+A regra invariante: **Q4 as vezes aparece em ITR** — é sempre o exercício completo no DFP,
 qualquer que seja o mês de encerramento.
 
-### Metodologias implementadas
+## Metodologias implementadas
 
-O pipeline suporta duas metodologias selecionáveis via `--methodology`:
-
-#### Point-in-Time (PiT) — padrão atual
+### Point-in-Time (PiT) — padrão atual
 
 Calcula cada indicador usando exclusivamente os valores do `DT_REFER` solicitado.
 Não há lookback — é uma foto dos fundamentos naquele momento.
@@ -99,7 +97,7 @@ Não há lookback — é uma foto dos fundamentos naquele momento.
 
 Uso: backtesting, auditoria histórica, modelos quantitativos.
 
-#### Trailing Twelve Months (TTM)
+### Trailing Twelve Months (TTM)
 
 Acumula os resultados dos últimos 12 meses encerrados, independentemente do ano fiscal.
 Bancos as contas de fluxo ficam anualizadas. Balanço continua em snapshot.
@@ -112,11 +110,12 @@ Bancos as contas de fluxo ficam anualizadas. Balanço continua em snapshot.
 TTM = YTD_atual + (FY_ano_anterior − YTD_mesmo_periodo_ano_anterior)
 ```
 
-| Variável | Fonte | `ORDEM_EXERC` | `DT_INI_EXERC` |
-|---|---|---|---|
-| `YTD_atual` | ITR do `DT_REFER` corrente | `ÚLTIMO` | menor para aquele `DT_REFER` |
-| `FY_ano_anterior` | DFP do exercício anterior | `ÚLTIMO` | menor para aquele `DT_REFER` |
-| `YTD_mesmo_periodo_ano_anterior` | mesmo arquivo ITR | `PENÚLTIMO` | menor para aquele `DT_REFER` |
+| Variável | Significado | Origem no banco |
+|---|---|---|
+| **YTD atual** | Valor acumulado do ano corrente até o período mais recente disponível (ex: jan–set) | `ORDEM_EXERC = 'ÚLTIMO'`, mesmo `DT_REFER` do período sendo calculado |
+| **YTD anterior** (penúltimo) | Valor acumulado do mesmo intervalo (jan–set), mas do ano anterior — serve pra "descontar" a sobreposição | `ORDEM_EXERC = 'PENÚLTIMO'`, mesmo `DT_REFER` |
+| **FY anterior** | Valor do ano fiscal completo anterior (jan–dez) | `ORDEM_EXERC = 'ÚLTIMO'` da linha DFP (`source = 'dfp'`) mais recente com `DT_FIM_EXERC` < `DT_REFER` do período atual |
+
 
 **Exemplo — Petrobras Q3/2024 (`3.01` Receita Líquida):**
 ```
@@ -127,22 +126,13 @@ YTD_2023_9m        = 377.736M  (PENÚLTIMO, DT_INI=2023-01-01, DT_FIM=2023-09-30
 TTM = 369.561 + (X − 377.736)
 ```
 
-> **Atenção — deduplicação DRE:** cada registro ITR da DRE contém **duas linhas** por
-> conta e `ORDEM_EXERC` a partir de Q2 — acumulado YTD e trimestral isolado — com o
-> **mesmo `VERSAO`**. A única diferença é `DT_INI_EXERC`:
-> a linha YTD tem o `DT_INI_EXERC` mais antigo (início do exercício fiscal da empresa).
-> A deduplicação correta ordena por `DT_INI_EXERC ASC` dentro de cada grupo, mantendo 
-> a linha YTD independentemente do mês de início do exercício fiscal.
->
-> ❌ **Errado:** `MONTH(DT_INI_EXERC) = 1` — falha para empresas com ano fiscal não-janeiro.
-> ✅ **Correto:** `ORDER BY DT_INI_EXERC ASC` na janela de deduplicação.
+_A lógica: pega o ano fiscal fechado anterior inteiro, tira o pedaço equivalente ao trecho já coberto pelo YTD atual (pra não contar duas vezes), e soma o que já foi realizado no ano corrente. Resultado: uma janela móvel de 12 meses._
 
-> **Dependência de `PENÚLTIMO`:** o TTM exige que a normalização preserve as linhas
-> `ORDEM_EXERC = 'PENÚLTIMO'` da DRE. O filtro atual que descarta `PENÚLTIMO` precisa
-> ser removido para tabelas DRE quando a metodologia TTM for utilizada.
+**Fallback (quando faltam dados)**
 
-**Fallback (sem ITR recente disponível):** usar o DFP diretamente como proxy do ano completo.
-
-**DFC (escopo futuro — EBITDA):**
-Apenas DFP anual. Método predominante é DFC-MI (96% das empresas). Ver seção 5.
-
+```
+sem YTD_atual            → retorna FY_anterior (se existir), senão None
+sem FY_anterior          → retorna YTD_atual (proxy parcial)
+sem YTD_anterior         → retorna FY_anterior (proxy sem ajuste)
+todos presentes          → aplica a fórmula completa
+```

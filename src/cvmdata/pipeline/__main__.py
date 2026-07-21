@@ -4,6 +4,7 @@ import logging
 
 from cvmdata.config import settings
 from cvmdata.pipeline.orchestrator import run_full
+from cvmdata.utils.years import YearsParseError
 
 
 def main() -> None:
@@ -13,9 +14,15 @@ def main() -> None:
         datefmt="%H:%M:%S",
         level=level,
     )
+    
+    try:
+        years = settings.years_list
+    except YearsParseError as exc:
+        print(f"Configuração inválida (CVM_YEARS): {exc}")
+        raise SystemExit(2) from None
 
     report = run_full(
-        years=settings.years_list,
+        years=years,
         force_download=settings.force_download,
         cnpj=settings.cnpj,
     )

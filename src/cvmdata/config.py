@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from cvmdata.core.years import parse_years
+from cvmdata.utils.years import parse_years
 
 
 class Settings(BaseSettings):
@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     )
 
     # Anos a processar (separados por vírgula na env: "2021,2022,2023,2024,2025")
+    # Intervalo válido: 2011 até o ano corrente (ver cvmdata.utils.years).
+    # Valor fora do intervalo NÃO é corrigido silenciosamente — years_list
+    # levanta YearsParseError; quem chama decide o que fazer (o CLI, em
+    # __main__.py, para o pipeline e mostra a mensagem).
     years: str = "2021,2022,2023,2024,2025"
 
     @property
@@ -80,5 +84,4 @@ class Settings(BaseSettings):
         return self.data_dir / "b3_tickers"
 
 
-# instância global — importar com `from cvmdata.config import settings`
 settings = Settings()

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import duckdb
 
-from cvmdata.core.catalog import BALANCE_DEMOS, CATALOG, FLOW_DEMOS, DatasetType
+from cvmdata.ingestion.catalog import BALANCE_DEMOS, CATALOG, FLOW_DEMOS, DatasetType
 from cvmdata.ingestion.db import init_b3_tickers_schema, init_schema
 from cvmdata.transform.account_map import ACCOUNT_MAP
 

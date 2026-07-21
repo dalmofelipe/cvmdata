@@ -17,7 +17,7 @@ from pathlib import Path
 
 import httpx
 
-from cvmdata.core.catalog import CATALOG
+from cvmdata.ingestion.catalog import CATALOG
 
 logger = logging.getLogger(__name__)
 

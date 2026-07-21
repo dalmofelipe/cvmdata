@@ -11,8 +11,8 @@ from enum import Enum, auto
 
 
 class DatasetType(Enum):
-    STATEMENT = auto()   # BPA, BPP, DRE — colunas financeiras + filtro CD_CONTA
-    DIRECT_INSERT = auto()   # composicao_capital — INSERT direto sem filtro
+    STATEMENT = auto()          # BPA, BPP, DRE — colunas financeiras + filtro CD_CONTA
+    DIRECT_INSERT = auto()      # composicao_capital — INSERT direto sem filtro
 
 
 @dataclass

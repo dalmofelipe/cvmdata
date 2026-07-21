@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from cvmdata.core.catalog import DatasetType
+from cvmdata.ingestion.catalog import DatasetType
 from cvmdata.ingestion.db import init_schema
 from cvmdata.ingestion.loader import (
     _match_dataset,
