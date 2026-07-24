@@ -18,7 +18,6 @@ import duckdb
 from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
 from cvmdata.transform.indicators.models import Components
 
-
 # Fórmula TTM completa, com fallback gradual, expressa em SQL:
 #   1. Sem YTD atual   -> retorna FY anterior (ou NULL)
 #   2. Sem FY anterior -> retorna YTD atual (proxy parcial)

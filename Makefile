@@ -24,9 +24,6 @@ lint:
 lint-fix:
 	ruff check src/ tests/ --fix
 
-fmt:
-	ruff format src/ tests/
-
 fix: lint-fix fmt
 
 
