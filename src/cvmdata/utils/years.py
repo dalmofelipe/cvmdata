@@ -20,22 +20,18 @@ _CURRENT_YEAR_AVAILABLE_FROM_MONTH = 6
 @dataclass(frozen=True)
 class YearsParseError(ValueError):
     value: str
-    invalid_years: tuple[int, ...] = ()
     min_year: int | None = None
     max_year: int | None = None
 
     def __str__(self) -> str:
         msg = (
             "Formato inválido para years. "
-            "Use um ano (ex: 2024), lista (ex: 2021,2022,2024) "
+            "\nUse um ano (ex: 2024), lista (ex: 2021,2022,2024) "
             "ou intervalo inclusivo (ex: 2021:2025, 2020-2026)."
         )
         if self.min_year is not None and self.max_year is not None:
-            msg += f" Intervalo válido: {self.min_year}-{self.max_year}."
-        if self.invalid_years:
-            years = ", ".join(str(y) for y in self.invalid_years)
-            msg += f" Ano(s) fora do intervalo: {years}."
-        return f"{msg} Recebido: {self.value!r}"
+            msg += f"\n Intervalo válido: {self.min_year}-{self.max_year}."
+        return f"{msg}\n Recebido: {self.value!r}"
 
 
 def _max_valid_year(today: date | None = None) -> int:
@@ -97,11 +93,6 @@ def parse_years(value: str, *, today: date | None = None) -> list[int]:
     max_year = _max_valid_year(today)
     invalid = sorted({y for y in years if not (MIN_VALID_YEAR <= y <= max_year)})
     if invalid:
-        raise YearsParseError(
-            value=value,
-            invalid_years=tuple(invalid),
-            min_year=MIN_VALID_YEAR,
-            max_year=max_year,
-        )
+        raise YearsParseError(value=value, min_year=MIN_VALID_YEAR, max_year=max_year)
 
     return sorted(set(years))

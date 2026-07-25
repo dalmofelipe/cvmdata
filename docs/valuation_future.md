@@ -7,7 +7,7 @@
 
 ## 1. Indicadores e Fórmulas
 
-Os três indicadores de valuation mais utilizados dependem do preço corrente (ou histórico) da ação na B3. Consulte também [`docs/analise_fundamentalista.md`](./analise_fundamentalista.md) — seção *"4. Indicadores fora do escopo atual"*.
+Os três indicadores de valuation mais utilizados dependem do preço corrente (ou histórico) da ação na B3.
 
 | Indicador | Fórmula | Componentes CVM | Componente externo |
 |---|---|---|---|
@@ -15,7 +15,9 @@ Os três indicadores de valuation mais utilizados dependem do preço corrente (o
 | **P/VPA** (Preço / Valor Patrimonial) | `Preço / VPA` | `VPA = PL (2.03) / nº ações` | Preço da ação (B3) |
 | **Dividend Yield** | `(Dividendos por ação / Preço) × 100` | Dividendos pagos (não consta nas demonstrações CVM baixadas) | Preço + proventos (B3) |
 
-> **Nota sobre nº de ações**: o arquivo `cad_cia_aberta.csv` da CVM contém `QT_AÇO_ORDI` e `QT_AÇO_PREF`, mas não é baixado neste pipeline. É um prerequisito adicional.
+> **Nota sobre nº de ações**: O arquivo de **composição de capital** foi integrado ao pipeline, processando quantidades total de ações Ordinárias e Preferências, tanto de capital integrado quanto tesouraria.
+
+> **Tickers das ações**: A integração de tickers da B3 esta implementada ao `cvmdata`. Mais detalhes na sessão 4 desde documento.
 
 ### Limitações adicionais
 
@@ -88,9 +90,6 @@ Dados reais do DFP 2024 (449 empresas com DFC-MI):
 
 O identificador `CD_CVM` nos arquivos CVM (ex: `1023` para Banco do Brasil) **não tem relação direta** com o ticker negociado na B3 (ex: `BBAS3`). 
 
-Foi implementado solução propria.
+Foi implementado solução propria, num projeto a parte: [b3-tickers](https://github.com/dalmofelipe/b3-tickers)
 
-### Prerequisitos técnicos
-
-- **Número de ações emitidas**: baixar `cad_cia_aberta.csv` da CVM (URL: `https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv`) e persistir colunas `CD_CVM`, `QT_AÇO_ORDI`, `QT_AÇO_PREF`.
-- **Decisão de design**: usar preço de fechamento na `DT_REFER` ou preço médio do trimestre.
+Mais informações em [docs/b3_tickers.md](./b3_tickers.md).

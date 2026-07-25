@@ -2,9 +2,17 @@
 
 Pipeline dos dados abertos da CVM para cálculo de **indicadores fundamentalistas** de companhias abertas brasileiras.
 
-Por padrão, calcula 15 indicadores trimestrais dos últimos 5 anos
+Por padrão, o pipeline processa os últimos cinco anos de demonstrações financeiras e calcula 15 indicadores fundamentalistas trimestrais para todas as companhias abertas disponíveis na CVM.
 
-Segue lista de fórmulas e mapeamento de contas CVM, de cada indicador: [`docs/analise_fundamentalista.md`](docs/analise_fundamentalista.md).
+### Features
+
+- Download automático dos dados públicos da CVM (ITR e DFP)
+- Cálculo automático de indicadores fundamentalistas
+- Suporte ao processamento de uma única empresa (CNPJ)
+- Integração automática com dados da B3, quando disponíveis
+- Configuração via variáveis de ambiente
+
+<br>
 
 ```
 Indicadores — 33.000.167/0001-01 - PETROBRAS 
@@ -17,15 +25,6 @@ Indicadores — 33.000.167/0001-01 - PETROBRAS
 │ 2021-03-31 │ divida_liquida_pl   │            1.0394 │
 │ 2021-03-31 │ endividamento_geral │           67.9204 │
 │ 2021-03-31 │ giro_ativo          │            0.0863 │
-│ 2021-03-31 │ liquidez_corrente   │            1.2370 │
-│ 2021-03-31 │ liquidez_geral      │            0.3952 │
-│ 2021-03-31 │ liquidez_imediata   │            0.5476 │
-│ 2021-03-31 │ liquidez_seca       │            0.9178 │
-│ 2021-03-31 │ margem_bruta        │           51.0978 │
-│ 2021-03-31 │ margem_liquida      │            1.4807 │
-│ 2021-03-31 │ margem_operacional  │           39.3437 │
-│ 2021-03-31 │ roa                 │            0.1278 │
-│ 2021-03-31 │ roe                 │            0.3984 │
 | ...        | ...                 | ...               |
 │ 2025-09-30 │ roa                 │            6.4346 │
 │ 2025-09-30 │ roe                 │           18.3523 │
@@ -47,81 +46,106 @@ Indicadores — 33.000.167/0001-01 - PETROBRAS
 └────────────┴─────────────────────┴───────────────────┘
 ```
 
+Segue lista de fórmulas e mapeamento de contas CVM, de cada indicador: [`docs/analise_fundamentalista.md`](docs/analise_fundamentalista.md).
 
-### Configuração do Ambiente
 
-Projeto é gerenciado pelo [`UV - https://docs.astral.sh/uv/`](https://docs.astral.sh/uv/)
+## Objetivo
+
+O objetivo do projeto é construir uma base de dados contendo demonstrações financeiras de empresas brasileiras, com indicadores fundamentalistas calculados automaticamente a partir dos dados da CVM.
+
+O projeto busca reproduzir parte do pipeline utilizado por plataformas de análise fundamentalista, utilizando exclusivamente dados públicos.
+
+
+## Configuração do Ambiente
+
+### Requisitos
+
+- UV: [https://docs.astral.sh/uv](https://docs.astral.sh/uv/)
+- Python 3.12+
+
+<br>
 
 ```bash
 git clone https://github.com/dalmofelipe/cvmdata.git
+
 cd cvmdata
+
 uv sync
-uv sync --extra dev
+
+uv sync --extra dev # apenas para desenvolvimento
 ```
 
 
 ## Pipeline
 
-O processamento dos dados varia conforme a configuração da maquina. Geralmente é concluído em 10min.
-
-__Configuração padrão__
-
-| Variável | Valor Padrão | Descrição |
-|----------|----------------|-----------|
-| CVM_DATA_DIR | ./data | Diretório de storage dos dados |
-| CVM_YEARS | 2021,2022,2023,2024,2025 | Anos a serem processados. Também aceita range inclusivo como `2021:2025` ou `2021-2025`. |
-| CVM_FORCE_DOWNLOAD | false | Forçar download dos documentos |
-| CVM_VERBOSE | false | Nível de log detalhado |
-| CVM_CNPJ | None | CNPJ da empresa a ser processada. Se None, processa todas as empresas. |
-
-
-### Entry Point
+Ative o ambiente virtual Python, criado pelo UV
 
 ```bash
-# Executa o pipeline completo (configuração padrão)
-uv run cvmdata
+# Linux
+source .venv/bin/activate
 
-# Ou equivalente:
-uv run python -m cvmdata.pipeline
-
-# Variaveis de ambiente via CLI têm prioridade sobre 'config.py' e '.env'
-CVM_YEARS=2020:2026 cvmdata
+# Windows
+ps .venv/Scripts/activate.ps1
 ```
 
+Execute o pipeline completo (configuração padrão)
 
-### Exemplo `.env`
+```sh
+cvmdata
 
-Caso necessário, crie um arquivo `.env` na raiz do projeto, com as variáveis de configuração desejadas.
+# Ou
+uv run cvmdata
 
-```env
+# Windows se necessário
+uv run python -m cvmdata.pipeline
+```
+
+O tempo para concluir o pipeline pode variar entre 3 e 10 minutos. Essa variação depende da configuração da máquina utilizada e da personalização do pipeline.
+
+
+### Personalizando o pipeline
+
+É possível modificar o comportamento do pipeline por meio de variáveis de ambiente.
+
+```sh
+# Variáveis de ambiente via terminal têm prioridade sobre 'config.py' e '.env'
+CVM_YEARS=2020:2026 cvmdata
+
+CVM_YEARS=2024 CVM_FORCE_DOWNLOAD=true CVM_CNPJ=00.000.000/0001-91 cvmdata
+```
+
+Também é possível configurar via arquivo `.env` na raiz do projeto, com as variáveis de configuração desejadas, por exemplo:
+
+```
 CVM_YEARS=2024
 CVM_FORCE_DOWNLOAD=true
 CVM_CNPJ=00.000.000/0001-91
 ```
 
-_O `.env` acima, personaliza a execução para baixar novamente os documentos e reprocessar o ano 2024, somente para os dados do Banco do Brasil._
+_O `.env` acima, personaliza o pipeline para baixar novamente os documentos e recalcular os indicadores de 2024 do Banco do Brasil._
 
-Para personalizar o pipeline, leia o documento [`docs/pipeline.md`](docs/pipeline.md).
+Lista completa de variáveis em: [`docs/pipeline.md`](docs/pipeline.md)
 
 
 ### Scripts
 
-Para consultar indicadores pela CLI
+`indicators.py`: permite realizar consultas básicas aos indicadores, diretamente pelo terminal:
 
 ```sh
 # Instale dependencias de scripts
-uv sync --extra scripts
+uv sync --extras scripts
 
-# Script padrão retorna todos indicadores da PETROBRAS
+# indicadores.py, por padrão retorna todos indicadores da PETROBRAS
 python scripts/indicators.py
 
-# Indique um CNPJ e/ou ANO especifico. O comando abaixo retorna indicadores de 2026 da VALE S.A.
+# Filtre por CNPJ e/ou ANO especifico. 
+# O comando abaixo retorna os indicadores de 2026 da VALE S.A.
 python scripts/indicators.py --cnpj "33.592.510/0001-54" --year 2026
 ```
 
 
 ### DBGate
 
-Use o gerenciador de database `DbGate Community` para explorar os dados e indicadores calculados.
+O banco de dados DuckDB gerado, pode ser explorado utilizando o `DbGate Community`.
 
 Link: [DbGate Community](https://www.dbgate.io/download-community/)

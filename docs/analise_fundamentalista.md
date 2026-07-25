@@ -69,21 +69,17 @@ Documentados em [`docs/valuation_future.md`](./valuation_future.md).
 | `DFP` — DFC-MI `_con_` | Anual | Consolidado | D&A para EBITDA (escopo futuro) |
 | Qualquer arquivo `_ind_` | — | Individual | **Descartado** — metodologia usa apenas consolidado |
 
-### Calendário fiscal — não assume dezembro
+### Calendário fiscal
 
-Empresas brasileiras podem encerrar o ano fiscal em qualquer mês. O `DT_REFER` do ITR
-não é fixo em março/junho/setembro — reflete os trimestres relativos ao ano fiscal de
-cada empresa. Valores observados no arquivo `itr_cia_aberta_BPA_con_2025.csv`:
+A `DT_REFER` do ITR não é fixo em março/junho/setembro
+
+Valores observados no arquivo `itr_cia_aberta_BPA_con_2025.csv`:
 `2025-03-31`, `2025-05-31`, `2025-06-30`, `2025-08-31`, `2025-09-30`, `2025-11-30`, `2025-12-31`.
 
-| Encerramento do ano fiscal | Q1 (ITR) | Q2 (ITR) | Q3 (ITR) | Q4 (apenas DFP) |
-|---|---|---|---|---|
-| Dezembro (maioria) | 31/mar | 30/jun | 30/set | 31/dez |
-| Março | 30/jun | 30/set | 31/dez | 31/mar |
-| Junho | 30/set | 31/dez | 31/mar | 30/jun |
+> O ITR do 1º trimestre tem prazo legal de 45 dias após 31/03 (~15/05). Isso pode ajudar a explicar resultados nos meses 05, 08 e 11.
 
-A regra invariante: **Q4 as vezes aparece em ITR** — é sempre o exercício completo no DFP,
-qualquer que seja o mês de encerramento.
+A regra invariante: **Q4 pode aparecer em ITR** — porem sempre o exercício completo no DFP, qualquer que seja o mês de encerramento.
+
 
 ## Metodologias implementadas
 
@@ -120,10 +116,10 @@ TTM = YTD_atual + (FY_ano_anterior − YTD_mesmo_periodo_ano_anterior)
 **Exemplo — Petrobras Q3/2024 (`3.01` Receita Líquida):**
 ```
 YTD_atual          = 369.561M  (ÚLTIMO,    DT_INI=2024-01-01, DT_FIM=2024-09-30)
-FY_2023            = X M       (DFP 2023,  DT_INI=2023-01-01, DT_FIM=2023-12-31)
+FY_2023            = 511.994M  (DFP 2023,  DT_INI=2023-01-01, DT_FIM=2023-12-31)
 YTD_2023_9m        = 377.736M  (PENÚLTIMO, DT_INI=2023-01-01, DT_FIM=2023-09-30)
 
-TTM = 369.561 + (X − 377.736)
+TTM = 369.561 + (511.994 − 377.736) = 503.819M
 ```
 
 _A lógica: pega o ano fiscal fechado anterior inteiro, tira o pedaço equivalente ao trecho já coberto pelo YTD atual (pra não contar duas vezes), e soma o que já foi realizado no ano corrente. Resultado: uma janela móvel de 12 meses._
