@@ -1,18 +1,6 @@
 # cvmdata
 
-Pipeline dos dados abertos da CVM para cálculo de **indicadores fundamentalistas** de companhias abertas brasileiras.
-
-Por padrão, o pipeline processa os últimos cinco anos de demonstrações financeiras e calcula 15 indicadores fundamentalistas trimestrais para todas as companhias abertas disponíveis na CVM.
-
-### Features
-
-- Download automático dos dados públicos da CVM (ITR e DFP)
-- Cálculo automático de indicadores fundamentalistas
-- Suporte ao processamento de uma única empresa (CNPJ)
-- Integração automática com dados da B3, quando disponíveis
-- Configuração via variáveis de ambiente
-
-<br>
+Pipeline para processamento dos dados abertos da CVM, desenvolvido para calcular indicadores fundamentalistas de empresas brasileiras de capital aberto. Por padrão, processa os últimos cinco anos de demonstrações financeiras e gera 15 indicadores fundamentalistas trimestrais para todas as empresas disponíveis na base de dados da CVM.
 
 ```
 Indicadores — 33.000.167/0001-01 - PETROBRAS 
@@ -46,14 +34,15 @@ Indicadores — 33.000.167/0001-01 - PETROBRAS
 └────────────┴─────────────────────┴───────────────────┘
 ```
 
-Segue lista de fórmulas e mapeamento de contas CVM, de cada indicador: [`docs/analise_fundamentalista.md`](docs/analise_fundamentalista.md).
+Segue lista de fórmulas e mapeamento de contas CVM, de cada indicador: [docs/analise_fundamentalista.md](docs/analise_fundamentalista.md).
 
 
-## Objetivo
+### Features
 
-O objetivo do projeto é construir uma base de dados contendo demonstrações financeiras de empresas brasileiras, com indicadores fundamentalistas calculados automaticamente a partir dos dados da CVM.
-
-O projeto busca reproduzir parte do pipeline utilizado por plataformas de análise fundamentalista, utilizando exclusivamente dados públicos.
+- Download automático dos dados públicos da CVM (ITR e DFP)
+- Suporte ao processamento de uma única empresa (CNPJ)
+- Integração com dados da B3, quando disponíveis
+- Configuração via variáveis de ambiente
 
 
 ## Configuração do Ambiente
@@ -85,19 +74,17 @@ Ative o ambiente virtual Python, criado pelo UV
 source .venv/bin/activate
 
 # Windows
-ps .venv/Scripts/activate.ps1
+.venv/Scripts/activate.ps1
 ```
 
 Execute o pipeline completo (configuração padrão)
 
 ```sh
+# Importante: execute o comando no diretório raiz do projeto
 cvmdata
 
 # Ou
 uv run cvmdata
-
-# Windows se necessário
-uv run python -m cvmdata.pipeline
 ```
 
 O tempo para concluir o pipeline pode variar entre 3 e 10 minutos. Essa variação depende da configuração da máquina utilizada e da personalização do pipeline.
@@ -124,18 +111,18 @@ CVM_CNPJ=00.000.000/0001-91
 
 _O `.env` acima, personaliza o pipeline para baixar novamente os documentos e recalcular os indicadores de 2024 do Banco do Brasil._
 
-Lista completa de variáveis em: [`docs/pipeline.md`](docs/pipeline.md)
+Lista completa de variáveis em: [docs/pipeline.md](docs/pipeline.md)
 
 
 ### Scripts
 
-`indicators.py`: permite realizar consultas básicas aos indicadores, diretamente pelo terminal:
+`indicators.py`: consulta rápida aos indicadores pelo terminal
 
 ```sh
 # Instale dependencias de scripts
 uv sync --extras scripts
 
-# indicadores.py, por padrão retorna todos indicadores da PETROBRAS
+# por padrão retorna todos indicadores da PETROBRAS
 python scripts/indicators.py
 
 # Filtre por CNPJ e/ou ANO especifico. 
