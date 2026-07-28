@@ -125,9 +125,23 @@ uv sync --extras scripts
 # por padrão retorna todos indicadores da PETROBRAS
 python scripts/indicators.py
 
-# Filtre por CNPJ e/ou ANO especifico. 
+# Filtre por CNPJ e/ou ANO especifico.
 # O comando abaixo retorna os indicadores de 2026 da VALE S.A.
 python scripts/indicators.py --cnpj "33.592.510/0001-54" --year 2026
+
+# Filtre pelo código CVM da empresa
+python scripts/indicators.py --cod_cvm "200"
+
+# Filtre pelo ticker (4 letras maiúsculas)
+python scripts/indicators.py --ticker "PETR"
+
+# Busque pela denominação comercial (mínimo 4 caracteres).
+# Quando a busca retorna mais de uma empresa, uma tabela
+# de seleção é exibida com CNPJ, COD_CVM, TICKER e NOME.
+python scripts/indicators.py --name "BRASIL"
+
+# Os filtros podem ser combinados (AND)
+python scripts/indicators.py --ticker "PETR" --year 2024
 ```
 
 
