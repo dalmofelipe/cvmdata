@@ -17,7 +17,7 @@ from pathlib import Path
 
 import duckdb
 
-from cvmdata.core.catalog import BALANCE_DEMOS, CATALOG, FLOW_DEMOS, DatasetType
+from cvmdata.ingestion.catalog import BALANCE_DEMOS, CATALOG, FLOW_DEMOS, DatasetType
 
 logger = logging.getLogger(__name__)
 

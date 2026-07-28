@@ -196,7 +196,7 @@ def test_none_argument_returns_none(fn, args):
 # Helpers para criar CSVs mínimos in-memory
 
 
-def _bpa_csv(tmp_path, filename: str, rows: list[tuple[str, str, str, float]]) -> object:
+def _bpa_csv(tmp_path: Path, filename: str, rows: list[tuple[str, str, str, float]]) -> Path:
     """Cria CSV de BPA/BPP com as linhas (cd_conta, ds_conta, dt_refer, vl_conta)."""
     header = (
         "CNPJ_CIA;DT_REFER;VERSAO;DENOM_CIA;CD_CVM;GRUPO_DFP;"
@@ -214,7 +214,7 @@ def _bpa_csv(tmp_path, filename: str, rows: list[tuple[str, str, str, float]]) -
     return p
 
 
-def _dre_csv(tmp_path, filename: str, rows: list[tuple[str, str, str, float]]) -> object:
+def _dre_csv(tmp_path: Path, filename: str, rows: list[tuple[str, str, str, float]]) -> Path:
     """Cria CSV de DRE (15 colunas, com DT_INI_EXERC)."""
     header = (
         "CNPJ_CIA;DT_REFER;VERSAO;DENOM_CIA;CD_CVM;GRUPO_DFP;"
@@ -261,7 +261,8 @@ DRE_ROWS = [
 ]
 
 
-def test_calculate_all_inserts_15_indicators(tmp_path, db):
+
+def test_calculate_all_inserts_15_indicators(tmp_path: Path, db):
     """calculate_all deve gravar exatamente 15 indicadores por empresa/período."""
     init_schema(db)
 
@@ -301,7 +302,8 @@ def test_calculate_all_inserts_15_indicators(tmp_path, db):
     assert count == 15
 
 
-def test_calculate_all_roe_plausible(tmp_path, db):
+
+def test_calculate_all_roe_plausible(tmp_path: Path, db):
     """ROE = 500/1000*100 = 50.0 com os dados de fixture."""
     init_schema(db)
     load_csv(
@@ -339,7 +341,8 @@ def test_calculate_all_roe_plausible(tmp_path, db):
     assert row[0] == pytest.approx(50.0)
 
 
-def test_calculate_all_cnpj_filter(tmp_path, db):
+
+def test_calculate_all_cnpj_filter(tmp_path: Path, db):
     """calculate_all com --cnpj deve processar apenas a empresa solicitada."""
     init_schema(db)
     load_csv(
@@ -381,7 +384,8 @@ def test_calculate_all_cnpj_filter(tmp_path, db):
     assert total_none == 0
 
 
-def test_calculate_all_idempotent(tmp_path, db):
+
+def test_calculate_all_idempotent(tmp_path: Path, db):
     """Rodar calculate_all duas vezes não duplica registros em indicators."""
     init_schema(db)
     load_csv(
@@ -829,7 +833,17 @@ def test_ttm_fallback_no_dfp(db):
 
 
 def test_ttm_fallback_no_itr(db):
-    """T018 — Sem ITR (só DFP FY2023) → retorna FY direto (494) para dt_refer inexistente."""
+    """T018 — Consulta a um dt_refer sem NENHUMA linha na base → None.
+
+    Diferente dos demais fallbacks (que tratam ausência de PENÚLTIMO ou de
+    DFP anterior para um período que EXISTE nos dados), este caso consulta
+    um dt_refer para o qual a empresa não reportou nada — nem ITR nem DFP
+    diretamente nessa data. Não há "TTM hipotético" a calcular: o
+    pipeline de produção (_fetch_all_dre_components) nunca gera um
+    indicador para um período sem nenhuma linha ÚLTIMO na base, então
+    _get_ttm_value — que é um wrapper sobre a mesma fonte de verdade —
+    reproduz o mesmo comportamento.
+    """
     init_schema(db)
     _insert_raw_dre(
         db,
@@ -844,10 +858,10 @@ def test_ttm_fallback_no_itr(db):
 
     normalize_table("raw_dre", db)
 
-    # Consulta para dt_refer que não tem ITR
+    # Consulta para dt_refer que não tem nenhuma linha registrada
     result = _get_ttm_value(db, _TTM_CNPJ, "2024-09-30", "3.01")
 
-    assert result == pytest.approx(494.0)
+    assert result is None
 
 
 # ── T019: Ano fiscal não-dezembro ─────────────────────────────────────────────
@@ -954,7 +968,7 @@ def test_ttm_two_dfps_selects_correct_fy(db):
 # ── T025: Regressão batch — calculate_all com múltiplas empresas ─────────────
 
 
-def test_calculate_all_regression_batch(tmp_path, db):
+def test_calculate_all_regression_batch(tmp_path: Path, db):
     """T025 — calculate_all produz indicadores corretos via batch (vs. comportamento esperado).
 
     Usa fixture com BPA/BPP+DRE ITR, confirma que os indicadores de resultado
@@ -1034,7 +1048,6 @@ def test_calculate_all_regression_batch(tmp_path, db):
 
 
 # ── T027: Integration test: batch TTM correctness via calculate_all ──────────
-
 
 def test_calculate_all_ttm_correctness(db):
     """T027 — calculate_all (batch path) produces correct TTM values.

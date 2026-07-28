@@ -1,12 +1,12 @@
-.PHONY: install pipeline test lint lint-fix fmt ci clean
+.PHONY: install pipeline test lint lint-fix fmt ci clean destroy
+
 
 # ── Ambiente ────────────────────────────────────────────────────────────────
 install:
 	uv sync --all-extras
 
 clean:
-	rm -rf data/raw data/db
-	uv run pyclean src/ tests/
+	uv run pyclean . --debris
 
 
 # ── Pipeline ────────────────────────────────────────────────────────────────
@@ -23,9 +23,6 @@ lint:
 
 lint-fix:
 	ruff check src/ tests/ --fix
-
-fmt:
-	ruff format src/ tests/
 
 fix: lint-fix fmt
 

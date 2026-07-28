@@ -16,6 +16,9 @@ dev = [
     "pytest-cov>=7.0.0",
     "ruff>=0.9",
 ]
+scripts = [
+    "rich>=13",
+]
 
 [project.scripts]
 cvmdata = "cvmdata.pipeline.__main__:main"

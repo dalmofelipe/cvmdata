@@ -184,7 +184,7 @@ def calc_divida_liquida_pl(comp: dict[str, float | None]) -> float | None:
     return divida_liquida_pl(dl, comp.get("patrimonio_liquido"))
 
 
-# (nome, função, [nomes dos componentes])
+# (nome do indicador, função, [nomes dos componentes])
 CALC_PLAN: list[tuple[str, object, list[str]]] = [
     ("roe", roe, ["lucro_liquido", "patrimonio_liquido"]),
     ("roa", roa, ["lucro_liquido", "ativo_total"]),
