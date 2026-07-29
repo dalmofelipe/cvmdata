@@ -36,11 +36,11 @@ def _collect_components(
     has_balance = bool(tables & {"raw_bpa_clean", "raw_bpp_clean"})
     balance_comps = _fetch_all_components(conn, cnpj) if has_balance else {}
     dre_comps = _fetch_all_dre_components(conn, cnpj) if "raw_dre_clean" in tables else {}
-    merged: Components = {}
 
+    merged: Components = {}
     for key in set(balance_comps) | set(dre_comps):
         merged[key] = {**balance_comps.get(key, {}), **dre_comps.get(key, {})}
-    
+
     return merged
 
 
@@ -48,12 +48,23 @@ def _persist_rows(conn: duckdb.DuckDBPyConnection, cnpj: str | None, rows: list[
     """Substitui as linhas de ``indicators`` (do cnpj filtrado, ou todas) em uma transação."""
     conn.execute("BEGIN")
     try:
-        cnpj_filter = f"WHERE cnpj_cia = '{cnpj}'" if cnpj else ""
-        conn.execute(f"DELETE FROM indicators {cnpj_filter}")
-        conn.executemany(
-            "INSERT INTO indicators (cnpj_cia, dt_refer, indicador, valor) VALUES (?, ?, ?, ?)",
-            rows,
-        )
+        if cnpj:
+            conn.execute("DELETE FROM indicators WHERE cnpj_cia = ?", [cnpj])
+        else:
+            conn.execute("TRUNCATE indicators")
+
+        if rows:
+            cnpjs, dt_refers, indicadores, valores = zip(*rows)
+            conn.execute(
+                """
+                INSERT INTO indicators (cnpj_cia, dt_refer, indicador, valor)
+                SELECT
+                    unnest(?) AS cnpj_cia, unnest(?)::DATE AS dt_refer,
+                    unnest(?) AS indicador, unnest(?) AS valor
+                """,
+                [list(cnpjs), list(dt_refers), list(indicadores), list(valores)],
+            )
+
         conn.execute("COMMIT")
     except Exception:
         conn.execute("ROLLBACK")
@@ -65,7 +76,8 @@ def calculate_all(conn: duckdb.DuckDBPyConnection, cnpj: str | None = None) -> i
 
     Usa duas queries batch (``_fetch_all_components`` + ``_fetch_all_dre_components``,
     a última já com TTM resolvido em SQL) em vez de N round-trips por par
-    (cnpj, dt_refer), e persiste tudo em uma única transação.
+    (cnpj, dt_refer), e persiste tudo em uma única transação via UNNEST
+    (ver ``_persist_rows``).
 
     Args:
         conn: Conexão DuckDB com as tabelas ``*_clean`` já criadas.
@@ -89,7 +101,7 @@ def calculate_all(conn: duckdb.DuckDBPyConnection, cnpj: str | None = None) -> i
     logger.info("Calculando indicadores para %d empresa/período(s)…", len(components))
 
     all_rows: list[IndicatorRow] = []
-    for (cnpj_cia, dt_refer), comp in sorted(components.items()):
+    for (cnpj_cia, dt_refer), comp in components.items():
         try:
             all_rows.extend(_build_indicator_rows(cnpj_cia, dt_refer, comp))
         except Exception:

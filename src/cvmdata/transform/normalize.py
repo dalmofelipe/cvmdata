@@ -24,7 +24,9 @@ import duckdb
 
 logger = logging.getLogger(__name__)
 
-# SQL para BPA e BPP: deduplicação por versão mais alta, descarta PENÚLTIMO
+# SQL para BPA e BPP: deduplicação por versão mais alta, descarta PENÚLTIMO.
+# O filtro ORDEM_EXERC = 'ÚLTIMO' é aplicado antes da window function para
+# reduzir o volume processado pelo ROW_NUMBER (PENÚLTIMO é descartado).
 _NORMALIZE_BALANCE_SQL = """\
 CREATE OR REPLACE TABLE {clean} AS
 SELECT * EXCLUDE (rn)
@@ -34,13 +36,13 @@ FROM (
         TRY_CAST(TRIM(CD_CVM) AS INTEGER) AS CD_CVM
     ),
     ROW_NUMBER() OVER (
-        PARTITION BY CNPJ_CIA, DT_REFER, CD_CONTA, ORDEM_EXERC
+        PARTITION BY CNPJ_CIA, DT_REFER, CD_CONTA
         ORDER BY VERSAO DESC
     ) AS rn
     FROM {table}
+    WHERE ORDEM_EXERC = 'ÚLTIMO'
 )
 WHERE rn = 1
-    AND ORDEM_EXERC = 'ÚLTIMO'
 """
 
 # SQL para DRE: duas diferenças em relação ao balance SQL:

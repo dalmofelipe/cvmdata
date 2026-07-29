@@ -44,9 +44,8 @@ fy_ref AS (
         ORDER BY d.DT_FIM_EXERC DESC
     ) = 1
 ),
-accounts AS (
-    SELECT DISTINCT CD_CONTA FROM raw_dre_clean
-    WHERE CD_CONTA IN ({placeholders})
+accounts(CD_CONTA) AS (
+    SELECT UNNEST([{placeholders}])
 ),
 grid AS (
     SELECT fy_ref.*, a.CD_CONTA
@@ -78,7 +77,6 @@ LEFT JOIN raw_dre_clean fy
     AND fy.DT_REFER = g.fy_dt_refer
     AND fy.CD_CONTA = g.CD_CONTA 
     AND fy.ORDEM_EXERC = 'ÚLTIMO'
-ORDER BY g.CNPJ_CIA, g.DT_REFER, g.CD_CONTA
 """
 
 

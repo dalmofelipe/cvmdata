@@ -13,7 +13,7 @@ from pathlib import Path
 
 import duckdb
 
-from cvmdata.ingestion.catalog import BALANCE_DEMOS, CATALOG, FLOW_DEMOS, DatasetType
+from cvmdata.ingestion.catalog import CATALOG, DatasetType
 from cvmdata.ingestion.db import init_b3_tickers_schema, init_schema
 from cvmdata.transform.account_map import ACCOUNT_MAP
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Contas necessárias para os indicadores — filtragem aplicada no load
 _ACCOUNT_CODES_SQL = ", ".join(f"'{k}'" for k in sorted(ACCOUNT_MAP.keys()))
 
-_COMMON_COLS_HEAD = """\
+_COLUMNS_SQL_TMPL = """\
     CNPJ_CIA::VARCHAR,
     CAST(DT_REFER AS DATE),
     VERSAO::SMALLINT,
@@ -31,28 +31,25 @@ _COMMON_COLS_HEAD = """\
     GRUPO_DFP::VARCHAR,
     MOEDA::VARCHAR,
     ESCALA_MOEDA::VARCHAR,
-    ORDEM_EXERC::VARCHAR,"""
-
-_COMMON_COLS_TAIL = """\
+    ORDEM_EXERC::VARCHAR,
+    {alt_cols}
     CD_CONTA::VARCHAR,
     DS_CONTA::VARCHAR,
     TRY_CAST(VL_CONTA AS DOUBLE),
     ST_CONTA_FIXA::VARCHAR"""
 
-_ALT_COLS: dict[frozenset, str] = {
-    frozenset(BALANCE_DEMOS): "CAST(DT_FIM_EXERC AS DATE),",
-    frozenset(FLOW_DEMOS):    "CAST(DT_INI_EXERC AS DATE), CAST(DT_FIM_EXERC AS DATE),",
-    frozenset({*BALANCE_DEMOS, *FLOW_DEMOS}): (
-        "CAST(DT_INI_EXERC AS DATE), CAST(DT_FIM_EXERC AS DATE), COLUNA_DF::VARCHAR,"
-    ),
+_ALT_COLS: dict[str, str] = {
+    "BPA": "CAST(DT_FIM_EXERC AS DATE),",
+    "BPP": "CAST(DT_FIM_EXERC AS DATE),",
+    "DRE": "CAST(DT_INI_EXERC AS DATE), CAST(DT_FIM_EXERC AS DATE),",
 }
 
 
 def _alt_cols_for(demo: str) -> str:
-    for demos, cols in _ALT_COLS.items():
-        if demo.upper() in demos:
-            return cols
-    raise ValueError(f"Demo desconhecido: {demo!r}")
+    try:
+        return _ALT_COLS[demo.upper()]
+    except KeyError:
+        raise ValueError(f"Demo desconhecido: {demo!r}")
 
 
 def _match_dataset(filename: str) -> tuple[str, DatasetType] | None:
@@ -71,13 +68,7 @@ def _build_demo_insert_sql(csv_path: Path, demo: str, source: str, year: int, sc
     """
     table = f"raw_{demo.lower()}"
     fpath = csv_path.as_posix()
-    alt_cols = _alt_cols_for(demo)
-
-    query = "\n        ".join([
-        _COMMON_COLS_HEAD,
-        alt_cols,
-        _COMMON_COLS_TAIL,
-    ])
+    query = _COLUMNS_SQL_TMPL.format(alt_cols=_alt_cols_for(demo))
 
     return f"""
     INSERT INTO {table}

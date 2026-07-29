@@ -34,7 +34,6 @@ def _fetch_all_components(
             SELECT CNPJ_CIA, DT_REFER, CD_CONTA, VL_CONTA FROM raw_bpp_clean
             WHERE CD_CONTA IN ({placeholders}) {filter_clause}
         )
-        ORDER BY CNPJ_CIA, DT_REFER
         """,
         params,
     ).fetchall()
