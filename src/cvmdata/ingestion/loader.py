@@ -169,9 +169,6 @@ def _load_composicao_capital_csv(
     sql = _build_comp_capital_insert_sql(csv_path, source, year)
     conn.execute(sql)
 
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_cc_cnpj ON composicao_capital (CNPJ_CIA)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_cc_source_year ON composicao_capital (source, year)")
-
     row = conn.execute(
         "SELECT COUNT(*) FROM composicao_capital WHERE source = ? AND year = ?", 
         [source, year]
@@ -355,8 +352,6 @@ def load_b3_tickers(
     row = conn.execute("SELECT COUNT(*) FROM b3_tickers").fetchone()
     assert row is not None
     count: int = row[0]
-
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_b3_tickers_cod_cvm ON b3_tickers (cod_cvm)")
 
     logger.info("Tickers B3 carregados: %d linhas em b3_tickers", count)
     return count
