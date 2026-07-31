@@ -51,6 +51,7 @@ Segue lista de fórmulas e mapeamento de contas CVM, de cada indicador: [docs/an
 
 - UV: [https://docs.astral.sh/uv](https://docs.astral.sh/uv/)
 - Python 3.12+
+- Linux (extremamente recomendado)
 
 <br>
 
@@ -73,8 +74,8 @@ Ative o ambiente virtual Python, criado pelo UV
 # Linux
 source .venv/bin/activate
 
-# Windows
-.venv/Scripts/activate.ps1
+# Windows (powershell / cmd)
+.venv/Scripts/activate
 ```
 
 Execute o pipeline completo (configuração padrão)
@@ -99,6 +100,12 @@ O tempo para concluir o pipeline pode variar entre 3 e 10 minutos. Essa variaç�
 CVM_YEARS=2020:2026 cvmdata
 
 CVM_YEARS=2024 CVM_FORCE_DOWNLOAD=true CVM_CNPJ=00.000.000/0001-91 cvmdata
+
+# Windows (powershell)
+$env:CVM_YEARS="2020:2026"; cvmdata
+
+# Windows (cmd)
+set CVM_YEARS=2020:2026 && cvmdata
 ```
 
 Também é possível configurar via arquivo `.env` na raiz do projeto, com as variáveis de configuração desejadas, por exemplo:

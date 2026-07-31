@@ -15,9 +15,11 @@ import duckdb
 
 from cvmdata.ingestion.catalog import CATALOG, DatasetType
 from cvmdata.ingestion.db import init_b3_tickers_schema, init_schema
+from cvmdata.ingestion.encoding import _utf8_csv
 from cvmdata.transform.account_map import ACCOUNT_MAP
 
 logger = logging.getLogger(__name__)
+
 
 # Contas necessárias para os indicadores — filtragem aplicada no load
 _ACCOUNT_CODES_SQL = ", ".join(f"'{k}'" for k in sorted(ACCOUNT_MAP.keys()))
@@ -81,7 +83,6 @@ def _build_demo_insert_sql(csv_path: Path, demo: str, source: str, year: int, sc
         '{fpath}',
         delim    = ';',
         header   = true,
-        encoding = 'cp1252',
         nullstr  = ''
     )
     WHERE CD_CONTA::VARCHAR IN ({_ACCOUNT_CODES_SQL});"""
@@ -113,8 +114,9 @@ def load_csv(
         [source, year, scope],
     )
 
-    sql = _build_demo_insert_sql(csv_path, demo, source, year, scope)
-    conn.execute(sql)
+    with _utf8_csv(csv_path) as safe_path:
+        sql = _build_demo_insert_sql(safe_path, demo, source, year, scope)
+        conn.execute(sql)
 
     row = conn.execute(
         f"SELECT COUNT(*) FROM {table} WHERE source = ? AND year = ? AND scope = ?",
@@ -149,7 +151,6 @@ def _build_comp_capital_insert_sql(csv_path: Path, source: str, year: int) -> st
         '{fpath}',
         delim    = ';',
         header   = true,
-        encoding = 'cp1252',
         nullstr  = ''
     );"""
 
@@ -166,8 +167,9 @@ def _load_composicao_capital_csv(
     """
     conn.execute("DELETE FROM composicao_capital WHERE source = ? AND year = ?", [source, year])
 
-    sql = _build_comp_capital_insert_sql(csv_path, source, year)
-    conn.execute(sql)
+    with _utf8_csv(csv_path) as safe_path:
+        sql = _build_comp_capital_insert_sql(safe_path, source, year)
+        conn.execute(sql)
 
     row = conn.execute(
         "SELECT COUNT(*) FROM composicao_capital WHERE source = ? AND year = ?", 
@@ -251,44 +253,39 @@ def load_info_cad(
 
     init_info_cad_schema(conn)
 
-    fpath = csv_path.as_posix()
+    with _utf8_csv(csv_path) as safe_path:
+        fpath = safe_path.as_posix()
 
-    # Contar linhas do CSV antes de carregar (SC-001)
-    row = conn.execute(
-        f"SELECT COUNT(*) FROM read_csv('{fpath}', delim=';', header=true, encoding='latin-1')"
-    ).fetchone()
-    csv_count = row[0] if row else 0
+        row = conn.execute(
+            f"SELECT COUNT(*) FROM read_csv('{fpath}', delim=';', header=true)"
+        ).fetchone()
 
-    logger.info("CSV cadastral: %d linhas", csv_count)
+        csv_count = row[0] if row else 0
 
-    # CTAS: CREATE OR REPLACE atomically replaces the table with auto-detected schema.
-    # This preserves all columns from CVM CSV (includes unknown future columns per FR-014).
-    # Wrapped in explicit transaction so a failed SELECT rolls back without leaving
-    # a partial/corrupt table state (T011 rollback guard).
-    conn.execute("BEGIN")
-    try:
-        conn.execute(f"""
-            CREATE OR REPLACE TABLE cad_cia_aberta_raw AS
-            SELECT
-                *,
-                current_timestamp AS loaded_at
-            FROM read_csv(
-                '{fpath}',
-                delim    = ';',
-                header   = true,
-                encoding = 'latin-1',
-                nullstr  = ''
-            )
-        """)
-        row = conn.execute("SELECT COUNT(*) FROM cad_cia_aberta_raw").fetchone()
-        inserted = row[0] if row else 0
-        
-        conn.execute("COMMIT")
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
+        logger.info("CSV cadastral: %d linhas", csv_count)
 
-    # SC-001: validar paridade
+        conn.execute("BEGIN")
+        try:
+            conn.execute(f"""
+                CREATE OR REPLACE TABLE cad_cia_aberta_raw AS
+                SELECT
+                    *,
+                    current_timestamp AS loaded_at
+                FROM read_csv(
+                    '{fpath}',
+                    delim    = ';',
+                    header   = true,
+                    nullstr  = ''
+                )
+            """)
+            row = conn.execute("SELECT COUNT(*) FROM cad_cia_aberta_raw").fetchone()
+            inserted = row[0] if row else 0
+
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
     if inserted != csv_count:
         logger.warning("SC-001 FAIL: CSV=%d linhas, raw=%d linhas inseridas", csv_count, inserted)
     else:
@@ -350,8 +347,7 @@ def load_b3_tickers(
     conn.execute(sql)
 
     row = conn.execute("SELECT COUNT(*) FROM b3_tickers").fetchone()
-    assert row is not None
-    count: int = row[0]
+    count: int = row[0] if row else 0
 
     logger.info("Tickers B3 carregados: %d linhas em b3_tickers", count)
     return count
