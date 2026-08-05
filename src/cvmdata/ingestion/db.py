@@ -86,13 +86,13 @@ CREATE TABLE IF NOT EXISTS composicao_capital (
     year                     SMALLINT
 );"""
 
+
 _INDICATORS_DDL = """\
 CREATE TABLE IF NOT EXISTS indicators (
     cnpj_cia  VARCHAR NOT NULL,
     dt_refer  DATE    NOT NULL,
     indicador VARCHAR NOT NULL,
-    valor     DOUBLE,
-    PRIMARY KEY (cnpj_cia, dt_refer, indicador)
+    valor     DOUBLE
 );"""
 
 

@@ -172,11 +172,10 @@ def _load_composicao_capital_csv(
         conn.execute(sql)
 
     row = conn.execute(
-        "SELECT COUNT(*) FROM composicao_capital WHERE source = ? AND year = ?", 
+        "SELECT COUNT(*) FROM composicao_capital WHERE source = ? AND year = ?",
         [source, year]
     ).fetchone()
-    assert row is not None
-    count: int = row[0]
+    count: int = row[0] if row else 0
 
     logger.info("  composicao_capital/%s/%s → %d linhas", source, year, count)
     return count
@@ -196,7 +195,7 @@ def load_source_year(
     Retorna dict com "{key}": row_count para os arquivos carregados.
     """
     init_schema(conn)
-    
+
     csv_dir = raw_dir / source / str(year)
     if not csv_dir.exists():
         logger.warning("Diretório não encontrado: %s — rode 'download' primeiro", csv_dir)
@@ -259,7 +258,6 @@ def load_info_cad(
         row = conn.execute(
             f"SELECT COUNT(*) FROM read_csv('{fpath}', delim=';', header=true)"
         ).fetchone()
-
         csv_count = row[0] if row else 0
 
         logger.info("CSV cadastral: %d linhas", csv_count)
