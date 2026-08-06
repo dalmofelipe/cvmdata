@@ -51,7 +51,7 @@ Segue lista de fórmulas e mapeamento de contas CVM, de cada indicador: [docs/an
 
 - UV: [https://docs.astral.sh/uv](https://docs.astral.sh/uv/)
 - Python 3.12+
-- Linux (extremamente recomendado)
+- Linux (Recomendado)
 
 <br>
 

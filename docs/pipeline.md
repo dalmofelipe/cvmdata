@@ -41,14 +41,14 @@ pipeline/__main__.py (entry point)
     ▼
 pipeline/orchestrator.py: run_full()
     │
-    ├── Step 0: ingestion/downloader.py  (download ZIPs)
-    ├── Step 1: ingestion/loader.py      (load B3 tickers)
-    ├── Step 2: ingestion/loader.py      (load CSVs → raw_*)
-    ├── Step 3: transform/normalize.py   (raw_* → *_clean)
-    ├── Step 4: transform/indicators.py  (calcular indicadores)
-    ├── Step 5: ingestion/downloader.py  (download cadastro)
-    ├── Step 6: ingestion/loader.py      (load cadastro)
-    └── Step 7: transform/info_cad.py    (classificar setores)
+    ├── Step: ingestion/downloader.py  (download ZIPs)
+    ├── Step: ingestion/downloader.py  (download cadastro)
+    ├── Step: ingestion/loader.py      (load B3 tickers)
+    ├── Step: ingestion/loader.py      (load cadastro)
+    ├── Step: ingestion/loader.py      (load CSVs → raw_*)
+    └── Step: transform/info_cad.py    (classificar setores)
+    ├── Step: transform/normalize.py   (raw_* → *_clean)
+    ├── Step: transform/indicators.py  (calcular indicadores)
     │
     ▼
 PipelineReport → stdout

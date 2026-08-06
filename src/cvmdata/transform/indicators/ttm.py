@@ -18,6 +18,7 @@ import duckdb
 from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
 from cvmdata.transform.indicators.models import Components
 
+
 # Fórmula TTM completa, com fallback gradual, expressa em SQL:
 #   1. Sem YTD atual   -> retorna FY anterior (ou NULL)
 #   2. Sem FY anterior -> retorna YTD atual (proxy parcial)
@@ -34,7 +35,7 @@ WITH dre_wide AS MATERIALIZED (
         MAX(CASE WHEN ORDEM_EXERC = 'ÚLTIMO' THEN VL_CONTA END) AS ultimo_val,
         MAX(CASE WHEN ORDEM_EXERC = 'PENÚLTIMO' THEN VL_CONTA END) AS penultimo_val
     FROM raw_dre_clean
-    WHERE CD_CONTA IN ({placeholders}) {filter_clause}
+    WHERE CD_CONTA = ANY(?) {filter_clause}
     GROUP BY CNPJ_CIA, DT_REFER, CD_CONTA, source
 ),
 periods AS (
@@ -54,7 +55,7 @@ fy_ref AS (
       ON d.CNPJ_CIA = p.CNPJ_CIA AND d.DT_FIM_EXERC < p.DT_REFER
 ),
 accounts(CD_CONTA) AS (
-    SELECT UNNEST([{placeholders}])
+    SELECT UNNEST(?)
 ),
 grid AS (
     SELECT fy_ref.*, a.CD_CONTA
@@ -96,20 +97,21 @@ def _fetch_all_dre_components(
         ``{(cnpj, dt_refer): {componente_semantico: valor_ttm}}``
     """
     dre_codes = [code for code in ACCOUNT_MAP if code.startswith("3.")]
-    placeholders = ", ".join(f"'{code}'" for code in dre_codes)
     filter_clause = "AND CNPJ_CIA = ?" if cnpj else ""
-    params: list[str] = [cnpj] if cnpj else []
 
-    query = _DRE_TTM_QUERY.format(placeholders=placeholders, filter_clause=filter_clause)
+    query = _DRE_TTM_QUERY.format(filter_clause=filter_clause)
+
+    params: list[object] = [dre_codes]
+    if cnpj:
+        params.append(cnpj)
+    params.append(dre_codes)
+
     rows = conn.execute(query, params).fetchall()
 
     result: Components = {}
     for cnpj_r, dt_r, cd_conta, ttm_valor in rows:
         name = get_component(cd_conta)
         if name:
-            # VL_CONTA é DECIMAL no schema -> o driver retorna decimal.Decimal.
-            # Cast explícito pra float, senão o Decimal se mistura com float
-            # em calc_plan.py (ex: roe faz Decimal / float -> TypeError).
             valor = float(ttm_valor) if ttm_valor is not None else None
             result.setdefault((cnpj_r, dt_r), {})[name] = valor
     return result

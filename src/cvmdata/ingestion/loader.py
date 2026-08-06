@@ -21,8 +21,8 @@ from cvmdata.transform.account_map import ACCOUNT_MAP
 logger = logging.getLogger(__name__)
 
 
-# Contas necessárias para os indicadores — filtragem aplicada no load
-_ACCOUNT_CODES_SQL = ", ".join(f"'{k}'" for k in sorted(ACCOUNT_MAP.keys()))
+_ACCOUNT_CODES: list[str] = sorted(ACCOUNT_MAP.keys())
+
 
 _COLUMNS_SQL_TMPL = """\
     CNPJ_CIA::VARCHAR,
@@ -85,7 +85,7 @@ def _build_demo_insert_sql(csv_path: Path, demo: str, source: str, year: int, sc
         header   = true,
         nullstr  = ''
     )
-    WHERE CD_CONTA::VARCHAR IN ({_ACCOUNT_CODES_SQL});"""
+    WHERE CD_CONTA::VARCHAR = ANY(?);"""
 
 
 def load_csv(
@@ -116,7 +116,7 @@ def load_csv(
 
     with _utf8_csv(csv_path) as safe_path:
         sql = _build_demo_insert_sql(safe_path, demo, source, year, scope)
-        conn.execute(sql)
+        conn.execute(sql, [_ACCOUNT_CODES])
 
     row = conn.execute(
         f"SELECT COUNT(*) FROM {table} WHERE source = ? AND year = ? AND scope = ?",
