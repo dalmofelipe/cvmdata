@@ -20,21 +20,26 @@ def _fetch_all_components(
     Contas de balanço não usam TTM — o valor é o saldo pontual do período.
     """
     balance_codes = [cd for cd in ACCOUNT_MAP if not cd.startswith("3.")]
-    placeholders = ", ".join(f"'{cd}'" for cd in balance_codes)
     filter_clause = "AND CNPJ_CIA = ?" if cnpj else ""
-    params: list[str] = [cnpj, cnpj] if cnpj else []
+
+    params: list[object] = [balance_codes]
+    if cnpj:
+        params.append(cnpj)
+
+    params.append(balance_codes)
+    if cnpj:
+        params.append(cnpj)
 
     rows = conn.execute(
         f"""
         SELECT CNPJ_CIA, DT_REFER::VARCHAR, CD_CONTA, VL_CONTA
         FROM (
             SELECT CNPJ_CIA, DT_REFER, CD_CONTA, VL_CONTA FROM raw_bpa_clean
-            WHERE CD_CONTA IN ({placeholders}) {filter_clause}
+            WHERE CD_CONTA = ANY(?) {filter_clause}
             UNION ALL
             SELECT CNPJ_CIA, DT_REFER, CD_CONTA, VL_CONTA FROM raw_bpp_clean
-            WHERE CD_CONTA IN ({placeholders}) {filter_clause}
+            WHERE CD_CONTA = ANY(?) {filter_clause}
         )
-        ORDER BY CNPJ_CIA, DT_REFER
         """,
         params,
     ).fetchall()
@@ -45,4 +50,5 @@ def _fetch_all_components(
         if name:
             valor = float(vl_conta) if vl_conta is not None else None
             result.setdefault((cnpj_r, dt_r), {})[name] = valor
+
     return result

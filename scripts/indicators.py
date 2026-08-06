@@ -34,7 +34,7 @@ def _b3_tickers_exists(conn: duckdb.DuckDBPyConnection) -> bool:
     result = conn.execute(
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'b3_tickers'"
     ).fetchone()
-    return result[0] > 0
+    return result[0] if result else False
 
 
 def resolve_companies(

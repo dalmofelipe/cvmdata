@@ -74,7 +74,6 @@ SELECT
 FROM ranked r
 JOIN sectors s ON s.cnpj_cia = r.cnpj_cia
 WHERE r.rn = 1
-ORDER BY r.cnpj_cia
 """
 
 # Busca profile_id para um setor_ativ na tabela de governança

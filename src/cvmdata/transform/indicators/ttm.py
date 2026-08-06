@@ -18,35 +18,44 @@ import duckdb
 from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
 from cvmdata.transform.indicators.models import Components
 
+
 # Fórmula TTM completa, com fallback gradual, expressa em SQL:
 #   1. Sem YTD atual   -> retorna FY anterior (ou NULL)
 #   2. Sem FY anterior -> retorna YTD atual (proxy parcial)
 #   3. Sem PENÚLTIMO   -> retorna FY anterior (proxy sem ajuste)
 #   4. Todos presentes -> YTD_atual + (FY_anterior - PENÚLTIMO)
 _DRE_TTM_QUERY = """
-WITH periods AS (
-    SELECT DISTINCT CNPJ_CIA, DT_REFER
+WITH dre_wide AS MATERIALIZED (
+    SELECT
+        CNPJ_CIA,
+        DT_REFER,
+        CD_CONTA,
+        source,
+        MAX(CASE WHEN ORDEM_EXERC = 'ÚLTIMO' THEN DT_FIM_EXERC END) AS fy_dt_fim_exerc,
+        MAX(CASE WHEN ORDEM_EXERC = 'ÚLTIMO' THEN VL_CONTA END) AS ultimo_val,
+        MAX(CASE WHEN ORDEM_EXERC = 'PENÚLTIMO' THEN VL_CONTA END) AS penultimo_val
     FROM raw_dre_clean
-    WHERE CD_CONTA IN ({placeholders}) AND ORDEM_EXERC = 'ÚLTIMO' {filter_clause}
+    WHERE CD_CONTA = ANY(?) {filter_clause}
+    GROUP BY CNPJ_CIA, DT_REFER, CD_CONTA, source
+),
+periods AS (
+    SELECT DISTINCT CNPJ_CIA, DT_REFER
+    FROM dre_wide
+    WHERE ultimo_val IS NOT NULL
 ),
 dfp_periods AS (
-    SELECT DISTINCT CNPJ_CIA, DT_REFER AS fy_dt_refer, DT_FIM_EXERC
-    FROM raw_dre_clean
-    WHERE source = 'dfp' AND ORDEM_EXERC = 'ÚLTIMO'
+    SELECT DISTINCT CNPJ_CIA, DT_REFER AS fy_dt_refer, fy_dt_fim_exerc AS DT_FIM_EXERC
+    FROM dre_wide
+    WHERE source = 'dfp' AND ultimo_val IS NOT NULL
 ),
 fy_ref AS (
     SELECT p.CNPJ_CIA, p.DT_REFER, d.fy_dt_refer
     FROM periods p
-    LEFT JOIN dfp_periods d
+    ASOF LEFT JOIN dfp_periods d
       ON d.CNPJ_CIA = p.CNPJ_CIA AND d.DT_FIM_EXERC < p.DT_REFER
-    QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY p.CNPJ_CIA, p.DT_REFER
-        ORDER BY d.DT_FIM_EXERC DESC
-    ) = 1
 ),
-accounts AS (
-    SELECT DISTINCT CD_CONTA FROM raw_dre_clean
-    WHERE CD_CONTA IN ({placeholders})
+accounts(CD_CONTA) AS (
+    SELECT UNNEST(?)
 ),
 grid AS (
     SELECT fy_ref.*, a.CD_CONTA
@@ -57,28 +66,20 @@ SELECT
     g.DT_REFER::VARCHAR,
     g.CD_CONTA,
     CASE
-        WHEN ytd.VL_CONTA IS NULL THEN fy.VL_CONTA
-        WHEN fy.VL_CONTA  IS NULL THEN ytd.VL_CONTA
-        WHEN penu.VL_CONTA IS NULL THEN fy.VL_CONTA
-        ELSE ytd.VL_CONTA + (fy.VL_CONTA - penu.VL_CONTA)
+        WHEN current.ultimo_val IS NULL THEN fy.ultimo_val
+        WHEN fy.ultimo_val  IS NULL THEN current.ultimo_val
+        WHEN current.penultimo_val IS NULL THEN fy.ultimo_val
+        ELSE current.ultimo_val + (fy.ultimo_val - current.penultimo_val)
     END AS ttm_valor
 FROM grid g
-LEFT JOIN raw_dre_clean ytd
-    ON ytd.CNPJ_CIA = g.CNPJ_CIA 
-    AND ytd.DT_REFER = g.DT_REFER
-    AND ytd.CD_CONTA = g.CD_CONTA 
-    AND ytd.ORDEM_EXERC = 'ÚLTIMO'
-LEFT JOIN raw_dre_clean penu
-    ON penu.CNPJ_CIA = g.CNPJ_CIA 
-    AND penu.DT_REFER = g.DT_REFER
-    AND penu.CD_CONTA = g.CD_CONTA 
-    AND penu.ORDEM_EXERC = 'PENÚLTIMO'
-LEFT JOIN raw_dre_clean fy
-    ON fy.CNPJ_CIA = g.CNPJ_CIA 
+LEFT JOIN dre_wide current
+    ON current.CNPJ_CIA = g.CNPJ_CIA
+    AND current.DT_REFER = g.DT_REFER
+    AND current.CD_CONTA = g.CD_CONTA
+LEFT JOIN dre_wide fy
+    ON fy.CNPJ_CIA = g.CNPJ_CIA
     AND fy.DT_REFER = g.fy_dt_refer
-    AND fy.CD_CONTA = g.CD_CONTA 
-    AND fy.ORDEM_EXERC = 'ÚLTIMO'
-ORDER BY g.CNPJ_CIA, g.DT_REFER, g.CD_CONTA
+    AND fy.CD_CONTA = g.CD_CONTA
 """
 
 
@@ -96,20 +97,21 @@ def _fetch_all_dre_components(
         ``{(cnpj, dt_refer): {componente_semantico: valor_ttm}}``
     """
     dre_codes = [code for code in ACCOUNT_MAP if code.startswith("3.")]
-    placeholders = ", ".join(f"'{code}'" for code in dre_codes)
     filter_clause = "AND CNPJ_CIA = ?" if cnpj else ""
-    params: list[str] = [cnpj] if cnpj else []
 
-    query = _DRE_TTM_QUERY.format(placeholders=placeholders, filter_clause=filter_clause)
+    query = _DRE_TTM_QUERY.format(filter_clause=filter_clause)
+
+    params: list[object] = [dre_codes]
+    if cnpj:
+        params.append(cnpj)
+    params.append(dre_codes)
+
     rows = conn.execute(query, params).fetchall()
 
     result: Components = {}
     for cnpj_r, dt_r, cd_conta, ttm_valor in rows:
         name = get_component(cd_conta)
         if name:
-            # VL_CONTA é DECIMAL no schema -> o driver retorna decimal.Decimal.
-            # Cast explícito pra float, senão o Decimal se mistura com float
-            # em calc_plan.py (ex: roe faz Decimal / float -> TypeError).
             valor = float(ttm_valor) if ttm_valor is not None else None
             result.setdefault((cnpj_r, dt_r), {})[name] = valor
     return result

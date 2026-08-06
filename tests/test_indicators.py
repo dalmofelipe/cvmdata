@@ -577,7 +577,7 @@ _SUMMARY_SQL = """
 def _insert_indicators(db, rows: list[tuple]) -> None:
     """Insere linhas (cnpj_cia, dt_refer, indicador, valor) em indicators."""
     db.executemany(
-        "INSERT OR REPLACE INTO indicators (cnpj_cia, dt_refer, indicador, valor) VALUES (?,?,?,?)",
+        "INSERT INTO indicators (cnpj_cia, dt_refer, indicador, valor) VALUES (?,?,?,?)",
         rows,
     )
 

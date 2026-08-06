@@ -92,4 +92,4 @@ O identificador `CD_CVM` nos arquivos CVM (ex: `1023` para Banco do Brasil) **n�
 
 Foi implementado solução propria, num projeto a parte: [b3-tickers](https://github.com/dalmofelipe/b3-tickers)
 
-Mais informações em [docs/b3_tickers.md](./b3_tickers.md).
+Mais informações em [docs/b3.md](./b3.md).

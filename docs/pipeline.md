@@ -23,6 +23,8 @@ O arquivo `.env` na raiz do projeto é carregado automaticamente.
 | `CVM_DFP_URL_TEMPLATE` | `str` | (URL CVM) | Template URL dos ZIPs DFP |
 | `CVM_CAD_META_URL` | `str` | (URL CVM) | URL do metadata cadastral |
 | `CVM_CAD_CSV_URL` | `str` | (URL CVM) | URL do CSV cadastral |
+| `CVM_DUCKDB_MEMORY_LIMIT` | `str \| None` | `None` | Override do memory_limit do DuckDB. None = heurística nativa (~80% RAM). |
+| `CVM_DUCKDB_THREADS` | `int \| None` | `None` | Override do nº de threads do DuckDB. None = heurística nativa (nº de cores). |
 
 
 ## Fluxo de Execução
@@ -39,14 +41,14 @@ pipeline/__main__.py (entry point)
     ▼
 pipeline/orchestrator.py: run_full()
     │
-    ├── Step 0: ingestion/downloader.py  (download ZIPs)
-    ├── Step 1: ingestion/loader.py      (load B3 tickers)
-    ├── Step 2: ingestion/loader.py      (load CSVs → raw_*)
-    ├── Step 3: transform/normalize.py   (raw_* → *_clean)
-    ├── Step 4: transform/indicators.py  (calcular indicadores)
-    ├── Step 5: ingestion/downloader.py  (download cadastro)
-    ├── Step 6: ingestion/loader.py      (load cadastro)
-    └── Step 7: transform/info_cad.py    (classificar setores)
+    ├── Step: ingestion/downloader.py  (download ZIPs)
+    ├── Step: ingestion/downloader.py  (download cadastro)
+    ├── Step: ingestion/loader.py      (load B3 tickers)
+    ├── Step: ingestion/loader.py      (load cadastro)
+    ├── Step: ingestion/loader.py      (load CSVs → raw_*)
+    └── Step: transform/info_cad.py    (classificar setores)
+    ├── Step: transform/normalize.py   (raw_* → *_clean)
+    ├── Step: transform/indicators.py  (calcular indicadores)
     │
     ▼
 PipelineReport → stdout

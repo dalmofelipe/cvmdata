@@ -24,7 +24,9 @@ import duckdb
 
 logger = logging.getLogger(__name__)
 
-# SQL para BPA e BPP: deduplicação por versão mais alta, descarta PENÚLTIMO
+# SQL para BPA e BPP: deduplicação por versão mais alta, descarta PENÚLTIMO.
+# O filtro ORDEM_EXERC = 'ÚLTIMO' é aplicado antes da window function para
+# reduzir o volume processado pelo ROW_NUMBER (PENÚLTIMO é descartado).
 _NORMALIZE_BALANCE_SQL = """\
 CREATE OR REPLACE TABLE {clean} AS
 SELECT * EXCLUDE (rn)
@@ -34,13 +36,13 @@ FROM (
         TRY_CAST(TRIM(CD_CVM) AS INTEGER) AS CD_CVM
     ),
     ROW_NUMBER() OVER (
-        PARTITION BY CNPJ_CIA, DT_REFER, CD_CONTA, ORDEM_EXERC
+        PARTITION BY CNPJ_CIA, DT_REFER, CD_CONTA
         ORDER BY VERSAO DESC
     ) AS rn
     FROM {table}
+    WHERE ORDEM_EXERC = 'ÚLTIMO'
 )
 WHERE rn = 1
-    AND ORDEM_EXERC = 'ÚLTIMO'
 """
 
 # SQL para DRE: duas diferenças em relação ao balance SQL:
@@ -82,15 +84,6 @@ def normalize_table(table: str, conn: duckdb.DuckDBPyConnection) -> int:
     clean = f"{table}_clean"
     sql = _NORMALIZE_FLOW_SQL if table.endswith("dre") else _NORMALIZE_BALANCE_SQL
     conn.execute(sql.format(table=table, clean=clean))
-
-    # Create indexes for efficient batch queries
-    if table.endswith("dre"):
-        index_cols = "CNPJ_CIA, CD_CONTA, ORDEM_EXERC"
-        conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{clean}_lookup ON {clean} ({index_cols})")
-    else:
-        conn.execute(
-            f"CREATE INDEX IF NOT EXISTS idx_{clean}_lookup ON {clean} (CNPJ_CIA, CD_CONTA)"
-        )
 
     row = conn.execute(f"SELECT COUNT(*) FROM {clean}").fetchone()
     count = row[0] if row else 0

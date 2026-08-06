@@ -13,16 +13,18 @@ from pathlib import Path
 
 import duckdb
 
-from cvmdata.ingestion.catalog import BALANCE_DEMOS, CATALOG, FLOW_DEMOS, DatasetType
+from cvmdata.ingestion.catalog import CATALOG, DatasetType
 from cvmdata.ingestion.db import init_b3_tickers_schema, init_schema
+from cvmdata.ingestion.encoding import _utf8_csv
 from cvmdata.transform.account_map import ACCOUNT_MAP
 
 logger = logging.getLogger(__name__)
 
-# Contas necessárias para os indicadores — filtragem aplicada no load
-_ACCOUNT_CODES_SQL = ", ".join(f"'{k}'" for k in sorted(ACCOUNT_MAP.keys()))
 
-_COMMON_COLS_HEAD = """\
+_ACCOUNT_CODES: list[str] = sorted(ACCOUNT_MAP.keys())
+
+
+_COLUMNS_SQL_TMPL = """\
     CNPJ_CIA::VARCHAR,
     CAST(DT_REFER AS DATE),
     VERSAO::SMALLINT,
@@ -31,28 +33,25 @@ _COMMON_COLS_HEAD = """\
     GRUPO_DFP::VARCHAR,
     MOEDA::VARCHAR,
     ESCALA_MOEDA::VARCHAR,
-    ORDEM_EXERC::VARCHAR,"""
-
-_COMMON_COLS_TAIL = """\
+    ORDEM_EXERC::VARCHAR,
+    {alt_cols}
     CD_CONTA::VARCHAR,
     DS_CONTA::VARCHAR,
     TRY_CAST(VL_CONTA AS DOUBLE),
     ST_CONTA_FIXA::VARCHAR"""
 
-_ALT_COLS: dict[frozenset, str] = {
-    frozenset(BALANCE_DEMOS): "CAST(DT_FIM_EXERC AS DATE),",
-    frozenset(FLOW_DEMOS):    "CAST(DT_INI_EXERC AS DATE), CAST(DT_FIM_EXERC AS DATE),",
-    frozenset({*BALANCE_DEMOS, *FLOW_DEMOS}): (
-        "CAST(DT_INI_EXERC AS DATE), CAST(DT_FIM_EXERC AS DATE), COLUNA_DF::VARCHAR,"
-    ),
+_ALT_COLS: dict[str, str] = {
+    "BPA": "CAST(DT_FIM_EXERC AS DATE),",
+    "BPP": "CAST(DT_FIM_EXERC AS DATE),",
+    "DRE": "CAST(DT_INI_EXERC AS DATE), CAST(DT_FIM_EXERC AS DATE),",
 }
 
 
 def _alt_cols_for(demo: str) -> str:
-    for demos, cols in _ALT_COLS.items():
-        if demo.upper() in demos:
-            return cols
-    raise ValueError(f"Demo desconhecido: {demo!r}")
+    try:
+        return _ALT_COLS[demo.upper()]
+    except KeyError:
+        raise ValueError(f"Demo desconhecido: {demo!r}")
 
 
 def _match_dataset(filename: str) -> tuple[str, DatasetType] | None:
@@ -71,13 +70,7 @@ def _build_demo_insert_sql(csv_path: Path, demo: str, source: str, year: int, sc
     """
     table = f"raw_{demo.lower()}"
     fpath = csv_path.as_posix()
-    alt_cols = _alt_cols_for(demo)
-
-    query = "\n        ".join([
-        _COMMON_COLS_HEAD,
-        alt_cols,
-        _COMMON_COLS_TAIL,
-    ])
+    query = _COLUMNS_SQL_TMPL.format(alt_cols=_alt_cols_for(demo))
 
     return f"""
     INSERT INTO {table}
@@ -90,10 +83,9 @@ def _build_demo_insert_sql(csv_path: Path, demo: str, source: str, year: int, sc
         '{fpath}',
         delim    = ';',
         header   = true,
-        encoding = 'cp1252',
         nullstr  = ''
     )
-    WHERE CD_CONTA::VARCHAR IN ({_ACCOUNT_CODES_SQL});"""
+    WHERE CD_CONTA::VARCHAR = ANY(?);"""
 
 
 def load_csv(
@@ -122,8 +114,9 @@ def load_csv(
         [source, year, scope],
     )
 
-    sql = _build_demo_insert_sql(csv_path, demo, source, year, scope)
-    conn.execute(sql)
+    with _utf8_csv(csv_path) as safe_path:
+        sql = _build_demo_insert_sql(safe_path, demo, source, year, scope)
+        conn.execute(sql, [_ACCOUNT_CODES])
 
     row = conn.execute(
         f"SELECT COUNT(*) FROM {table} WHERE source = ? AND year = ? AND scope = ?",
@@ -158,7 +151,6 @@ def _build_comp_capital_insert_sql(csv_path: Path, source: str, year: int) -> st
         '{fpath}',
         delim    = ';',
         header   = true,
-        encoding = 'cp1252',
         nullstr  = ''
     );"""
 
@@ -175,18 +167,15 @@ def _load_composicao_capital_csv(
     """
     conn.execute("DELETE FROM composicao_capital WHERE source = ? AND year = ?", [source, year])
 
-    sql = _build_comp_capital_insert_sql(csv_path, source, year)
-    conn.execute(sql)
-
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_cc_cnpj ON composicao_capital (CNPJ_CIA)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_cc_source_year ON composicao_capital (source, year)")
+    with _utf8_csv(csv_path) as safe_path:
+        sql = _build_comp_capital_insert_sql(safe_path, source, year)
+        conn.execute(sql)
 
     row = conn.execute(
-        "SELECT COUNT(*) FROM composicao_capital WHERE source = ? AND year = ?", 
+        "SELECT COUNT(*) FROM composicao_capital WHERE source = ? AND year = ?",
         [source, year]
     ).fetchone()
-    assert row is not None
-    count: int = row[0]
+    count: int = row[0] if row else 0
 
     logger.info("  composicao_capital/%s/%s → %d linhas", source, year, count)
     return count
@@ -206,7 +195,7 @@ def load_source_year(
     Retorna dict com "{key}": row_count para os arquivos carregados.
     """
     init_schema(conn)
-    
+
     csv_dir = raw_dir / source / str(year)
     if not csv_dir.exists():
         logger.warning("Diretório não encontrado: %s — rode 'download' primeiro", csv_dir)
@@ -263,44 +252,38 @@ def load_info_cad(
 
     init_info_cad_schema(conn)
 
-    fpath = csv_path.as_posix()
+    with _utf8_csv(csv_path) as safe_path:
+        fpath = safe_path.as_posix()
 
-    # Contar linhas do CSV antes de carregar (SC-001)
-    row = conn.execute(
-        f"SELECT COUNT(*) FROM read_csv('{fpath}', delim=';', header=true, encoding='latin-1')"
-    ).fetchone()
-    csv_count = row[0] if row else 0
+        row = conn.execute(
+            f"SELECT COUNT(*) FROM read_csv('{fpath}', delim=';', header=true)"
+        ).fetchone()
+        csv_count = row[0] if row else 0
 
-    logger.info("CSV cadastral: %d linhas", csv_count)
+        logger.info("CSV cadastral: %d linhas", csv_count)
 
-    # CTAS: CREATE OR REPLACE atomically replaces the table with auto-detected schema.
-    # This preserves all columns from CVM CSV (includes unknown future columns per FR-014).
-    # Wrapped in explicit transaction so a failed SELECT rolls back without leaving
-    # a partial/corrupt table state (T011 rollback guard).
-    conn.execute("BEGIN")
-    try:
-        conn.execute(f"""
-            CREATE OR REPLACE TABLE cad_cia_aberta_raw AS
-            SELECT
-                *,
-                current_timestamp AS loaded_at
-            FROM read_csv(
-                '{fpath}',
-                delim    = ';',
-                header   = true,
-                encoding = 'latin-1',
-                nullstr  = ''
-            )
-        """)
-        row = conn.execute("SELECT COUNT(*) FROM cad_cia_aberta_raw").fetchone()
-        inserted = row[0] if row else 0
-        
-        conn.execute("COMMIT")
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
+        conn.execute("BEGIN")
+        try:
+            conn.execute(f"""
+                CREATE OR REPLACE TABLE cad_cia_aberta_raw AS
+                SELECT
+                    *,
+                    current_timestamp AS loaded_at
+                FROM read_csv(
+                    '{fpath}',
+                    delim    = ';',
+                    header   = true,
+                    nullstr  = ''
+                )
+            """)
+            row = conn.execute("SELECT COUNT(*) FROM cad_cia_aberta_raw").fetchone()
+            inserted = row[0] if row else 0
 
-    # SC-001: validar paridade
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
     if inserted != csv_count:
         logger.warning("SC-001 FAIL: CSV=%d linhas, raw=%d linhas inseridas", csv_count, inserted)
     else:
@@ -362,10 +345,7 @@ def load_b3_tickers(
     conn.execute(sql)
 
     row = conn.execute("SELECT COUNT(*) FROM b3_tickers").fetchone()
-    assert row is not None
-    count: int = row[0]
-
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_b3_tickers_cod_cvm ON b3_tickers (cod_cvm)")
+    count: int = row[0] if row else 0
 
     logger.info("Tickers B3 carregados: %d linhas em b3_tickers", count)
     return count
