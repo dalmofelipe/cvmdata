@@ -9,7 +9,7 @@ class _FakeConn:
 
 
 @contextmanager
-def _fake_connection(db_path):
+def _fake_connection(db_path, memory_limit=None, threads=None):
     yield _FakeConn()
 
 

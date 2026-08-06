@@ -21,7 +21,43 @@ from cvmdata.ingestion.catalog import BALANCE_DEMOS, CATALOG, FLOW_DEMOS, Datase
 
 logger = logging.getLogger(__name__)
 
-# ── DDL ───────────────────────────────────────────────────────────────────────
+
+# ── DB Connection ───────────────────────────────────────────────────────────
+
+def get_connection(
+    *,
+    db_path: Path,
+    memory_limit: str | None = None,
+    threads: int | None = None,
+) -> duckdb.DuckDBPyConnection:
+    """Retorna conexão DuckDB persistente. Cria o arquivo se não existir.
+
+    Por padrão NÃO fixa memory_limit/threads — deixa o DuckDB usar sua
+    heurística nativa (memory_limit ≈ 80% da RAM; threads = nº de cores).
+    Isso favorece cargas grandes (CVM_YEARS amplo) sem exigir tuning manual.
+
+    Os parâmetros memory_limit/threads (default: CVM_DUCKDB_MEMORY_LIMIT /
+    CVM_DUCKDB_THREADS via Settings) permitem override explícito quando
+    necessário.
+    """
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = duckdb.connect(str(db_path))
+
+    if memory_limit:
+        conn.execute(f"SET memory_limit = '{memory_limit}'")
+    if threads:
+        conn.execute(f"SET threads = {int(threads)}")
+
+    logger.debug(
+        "Conectado a %s (memory_limit=%s, threads=%s)",
+        db_path,
+        memory_limit or "default(duckdb)",
+        threads or "default(duckdb)",
+    )
+    return conn
+
+
+# ── DDL ──────────────────────────────────────────────────────────────────
 
 # Grupo A: BPA, BPP — 14 colunas (sem DT_INI_EXERC)
 _BALANCE_DDL = """\
@@ -96,15 +132,6 @@ CREATE TABLE IF NOT EXISTS indicators (
 );"""
 
 
-def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
-    """Retorna conexão DuckDB persistente. Cria o arquivo se não existir."""
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = duckdb.connect(str(db_path))
-    conn.execute("SET memory_limit = '1GB'")
-    logger.debug("Conectado a %s", db_path)
-    return conn
-
-
 def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
     """Cria tabelas do catálogo se ainda não existirem (idempotente)."""
     for key, ds in CATALOG.items():
@@ -125,12 +152,13 @@ def init_indicators_schema(conn: duckdb.DuckDBPyConnection) -> None:
     logger.debug("Schema indicators OK")
 
 
-# ── DDL Cadastral ──────────────────────────────────────────────────────────────
+# ── DDL Cadastral ─────────────────────────────────────────────────────────
 
 _CAD_RAW_DDL = """\
 CREATE TABLE IF NOT EXISTS cad_cia_aberta_raw (
-    -- Schema de referência — na prática a tabela é criada via CTAS em load_info_cad
-    -- com auto_detect para preservar colunas desconhecidas (FR-014).
+    -- Schema de referência — na prática a tabela é criada via CTAS em
+    -- load_info_cad com auto_detect para preservar colunas desconhecidas
+    -- (FR-014).
     CNPJ_CIA      VARCHAR,
     DENOM_CIA     VARCHAR,
     DENOM_COMERC  VARCHAR,
@@ -175,18 +203,6 @@ CREATE TABLE IF NOT EXISTS classification_curation_events (
     PRIMARY KEY (cnpj_cia, event_type)
 );"""
 
-_B3_TICKERS_DDL = """\
-CREATE TABLE IF NOT EXISTS b3_tickers (
-    cod_cvm       INTEGER,
-    ticker_root   VARCHAR,
-    company_name  VARCHAR,
-    trading_name  VARCHAR,
-    cnpj_digits   VARCHAR,
-    status        VARCHAR,
-    segment       VARCHAR,
-    market        VARCHAR
-);"""
-
 # Mapeamentos iniciais de setor para profile (banking e arrendamento mercantil)
 _SETOR_PROFILE_SEED: list[tuple[str, str]] = [
     ("Bancos", "banking"),
@@ -218,6 +234,21 @@ def init_info_cad_schema(conn: duckdb.DuckDBPyConnection) -> None:
         )
 
     logger.info("Schema cadastral OK (4 tabelas)")
+
+
+# ── B3 Tickers ──────────────────────────────────────────────────────────────
+
+_B3_TICKERS_DDL = """\
+CREATE TABLE IF NOT EXISTS b3_tickers (
+    cod_cvm       INTEGER,
+    ticker_root   VARCHAR,
+    company_name  VARCHAR,
+    trading_name  VARCHAR,
+    cnpj_digits   VARCHAR,
+    status        VARCHAR,
+    segment       VARCHAR,
+    market        VARCHAR
+);"""
 
 
 def init_b3_tickers_schema(conn: duckdb.DuckDBPyConnection) -> None:

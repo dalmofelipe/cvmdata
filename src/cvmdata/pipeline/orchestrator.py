@@ -23,6 +23,10 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _coalesce(val, default_factory):
+    return val if val is not None else default_factory()
+
+
 def run_full(
     *,
     years: list[int],
@@ -30,43 +34,48 @@ def run_full(
     cnpj: str | None = None,
     data_dir: Path | None = None,
     db_path: Path | None = None,
+    duckdb_memory_limit: str | None = None,
+    duckdb_threads: int | None = None,
+    b3_tickers_dir: Path | None = None,
 ) -> PipelineReport:
-    """Executa o pipeline completo.
+    """Executa o pipeline completo"""
 
-    Este é o ponto único de orquestração. CLI/cron/scripts devem chamar aqui.
-
-    Observação: idempotência e bulk ops são garantidas pelas funções do core
-    (downloader/loader/normalize/indicators/info_cad). Este orquestrador só
-    define ordem, compõe parâmetros e reporta execução.
-    """
-    years = years or settings.years_list
+    # Resolvendo os fallbacks para as configurações do Settings
+    effective_years = _coalesce(years, lambda: settings.years_list)
+    effective_force = _coalesce(force_download, lambda: settings.force_download)
+    effective_cnpj = _coalesce(cnpj, lambda: settings.cnpj)
+    effective_data_dir = _coalesce(data_dir, lambda: settings.data_dir)
+    effective_db_path = _coalesce(db_path, lambda: settings.db_path)
+    effective_memory = _coalesce(duckdb_memory_limit, lambda: settings.sanitized_duckdb_memory_limit)
+    effective_threads = _coalesce(duckdb_threads, lambda: settings.sanitized_duckdb_threads)
+    effective_b3_dir = _coalesce(b3_tickers_dir, lambda: settings.b3_tickers_dir)
 
     started_at = _now()
     step_reports: list[StepReport] = []
-
-    effective_data_dir = data_dir or settings.data_dir
-    effective_db_path = db_path or settings.db_path
-
     cad_csv_path: Path | None = None
-    b3_tickers_dir = settings.b3_tickers_dir
 
     try:
         # Download financeiro (ITR/DFP)
-        step_reports.append(step_downloads_cvm(years, force_download, effective_data_dir))
+        step_reports.append(step_downloads_cvm(effective_years, effective_force, effective_data_dir))
 
         # Download cadastral
-        cad_csv_path, s2 = step_download_info_cad(force_download, effective_data_dir)
+        cad_csv_path, s2 = step_download_info_cad(effective_force, effective_data_dir)
         step_reports.append(s2)
 
-        with get_connection(effective_db_path) as conn:
+        with get_connection(
+            db_path=effective_db_path, 
+            memory_limit=effective_memory, 
+            threads=effective_threads
+        ) as conn:
+
             # Load opcional de tickers B3
-            step_reports.append(step_load_b3_tickers(conn, b3_tickers_dir))
+            step_reports.append(step_load_b3_tickers(conn, effective_b3_dir))
 
             # Load cadastral
             step_reports.append(step_load_info_cad(conn, cad_csv_path))
 
             # Load financeiro
-            step_reports.append(step_load_cvm(conn, years, effective_data_dir))
+            step_reports.append(step_load_cvm(conn, effective_years, effective_data_dir))
 
             # Classificação cadastral
             step_reports.append(step_classify_info_cad(conn))
@@ -75,7 +84,7 @@ def run_full(
             step_reports.append(step_normalize_financial(conn))
 
             # Indicators
-            step_reports.append(step_calculate_indicators(conn, cnpj))
+            step_reports.append(step_calculate_indicators(conn, effective_cnpj))
 
         # Status global
         statuses = [s.status for s in step_reports]

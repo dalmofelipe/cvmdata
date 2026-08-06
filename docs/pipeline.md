@@ -23,6 +23,8 @@ O arquivo `.env` na raiz do projeto é carregado automaticamente.
 | `CVM_DFP_URL_TEMPLATE` | `str` | (URL CVM) | Template URL dos ZIPs DFP |
 | `CVM_CAD_META_URL` | `str` | (URL CVM) | URL do metadata cadastral |
 | `CVM_CAD_CSV_URL` | `str` | (URL CVM) | URL do CSV cadastral |
+| `CVM_DUCKDB_MEMORY_LIMIT` | `str \| None` | `None` | Override do memory_limit do DuckDB. None = heurística nativa (~80% RAM). |
+| `CVM_DUCKDB_THREADS` | `int \| None` | `None` | Override do nº de threads do DuckDB. None = heurística nativa (nº de cores). |
 
 
 ## Fluxo de Execução

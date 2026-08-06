@@ -9,6 +9,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from cvmdata.utils.database import sanitize_duckdb_memory_limit, sanitize_duckdb_threads
 from cvmdata.utils.years import parse_years
 
 
@@ -19,23 +20,21 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    # Anos a processar (separados por vírgula na env: "2021,2022,2023,2024,2025")
-    # Intervalo válido: 2011 até o ano corrente (ver cvmdata.utils.years).
-    # Valor fora do intervalo NÃO é corrigido silenciosamente — years_list
-    # levanta YearsParseError; quem chama decide o que fazer (o CLI, em
-    # __main__.py, para o pipeline e mostra a mensagem).
+    # ── years ──────────────────────────────────────────────────────────────
+
     years: str = "2021,2022,2023,2024,2025"
 
     @property
     def years_list(self) -> list[int]:
         return parse_years(self.years)
 
-    # Comportamento do pipeline
+
+    # ── Pipeline ──────────────────────────────────────────────────────────────
+
     force_download: bool = False
     verbose: bool = False
     cnpj: str | None = None
 
-    # URLs base dos ZIPs da CVM
     itr_url_template: str = (
         "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/ITR/DADOS/itr_cia_aberta_{year}.zip"
     )
@@ -43,15 +42,32 @@ class Settings(BaseSettings):
         "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/DFP/DADOS/dfp_cia_aberta_{year}.zip"
     )
 
-    # URLs dos arquivos cadastrais da CVM
-    cad_meta_url: str = "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/META/meta_cad_cia_aberta.txt"
-    cad_csv_url: str = "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv"
-
     def itr_url(self, year: int) -> str:
         return self.itr_url_template.format(year=year)
 
     def dfp_url(self, year: int) -> str:
         return self.dfp_url_template.format(year=year)
+
+    # URLs dos arquivos cadastrais da CVM
+    cad_meta_url: str = "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/META/meta_cad_cia_aberta.txt"
+    cad_csv_url: str = "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv"
+
+
+    # ── Database ──────────────────────────────────────────────────────────────
+
+    duckdb_memory_limit: str | None = None
+    duckdb_threads: int | None = None
+
+    @property
+    def sanitized_duckdb_memory_limit(self) -> str | None:
+        return sanitize_duckdb_memory_limit(self.duckdb_memory_limit)
+        
+    @property
+    def sanitized_duckdb_threads(self) -> int | None:
+        return sanitize_duckdb_threads(self.duckdb_threads)
+
+
+    # ── Data Directories ──────────────────────────────────────────────────────────────
 
     # Diretório raiz dos dados (relativo ao CWD ou absoluto)
     data_dir: Path = Path("data")
@@ -76,7 +92,9 @@ class Settings(BaseSettings):
     def db_path(self) -> Path:
         return self.data_dir / "db" / "cvmdata.duckdb"
 
-    # Integração com dados de tickers da B3
+
+    # ── B3 Directories ──────────────────────────────────────────────────────────────
+
     b3_tickers_glob: str = "page_*.json"
 
     @property
