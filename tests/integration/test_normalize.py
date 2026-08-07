@@ -8,6 +8,8 @@ import pytest
 from cvmdata.ingestion.db import init_schema
 from cvmdata.transform.normalize import normalize_all, normalize_table
 
+pytestmark = pytest.mark.integration
+
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 
