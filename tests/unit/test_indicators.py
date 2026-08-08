@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
-from cvmdata.transform.account_map import get_component
+from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
 from cvmdata.transform.calc_plan import (
+    CALC_PLAN,
     cobertura_juros,
     divida_bruta,
     divida_liquida,
@@ -24,6 +27,107 @@ from cvmdata.transform.calc_plan import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+# --- ACCOUNT_MAP --------------------------------------------------------
+
+
+def test_account_map_has_expected_keys():
+    expected_codes = {
+        # BPA
+        "1",
+        "1.01",
+        "1.01.01",
+        "1.01.02",
+        "1.01.04",
+        "1.02",
+        "1.02.01",
+        # BPP
+        "2",
+        "2.01",
+        "2.01.04",
+        "2.02",
+        "2.02.01",
+        "2.03",
+        # DRE
+        "3.01",
+        "3.03",
+        "3.05",
+        "3.06.02",
+        "3.11",
+    }
+    assert set(ACCOUNT_MAP.keys()) == expected_codes
+
+
+def test_account_map_values_are_unique():
+    components = list(ACCOUNT_MAP.values())
+    assert len(components) == len(set(components))
+
+
+def test_account_map_known_mappings():
+    """Spot-check - Uma troca aqui vira erro financeiro silencioso 
+    em divida_bruta/divida_liquida/cobertura_juros."""
+    assert get_component("2.01.04") == "emprestimos_cp"
+    assert get_component("2.02.01") == "emprestimos_lp"
+
+
+# --- CALC_PLAN --------------------------------------------------------
+
+
+_SPECIAL_CASE_INDICATOR = "divida_liquida_pl"
+
+
+def test_calc_plan_indicator_names_are_unique():
+    names = [name for name, _, _ in CALC_PLAN]
+    assert len(names) == len(set(names))
+
+
+def test_calc_plan_arg_names_match_account_map_components():
+    valid_components = set(ACCOUNT_MAP.values())
+
+    for name, _fn, arg_names in CALC_PLAN:
+        if name == _SPECIAL_CASE_INDICATOR:
+            continue
+        unknown = set(arg_names) - valid_components
+        assert not unknown, f"{name}: arg_names desconhecidos {unknown}"
+
+
+def test_calc_plan_arg_count_matches_function_signature():
+    for name, fn, arg_names in CALC_PLAN:
+        if name == _SPECIAL_CASE_INDICATOR:
+            assert fn is None
+            assert arg_names == []
+            continue
+        params = inspect.signature(fn).parameters
+        assert len(arg_names) == len(params), (
+            f"{name}: {len(arg_names)} arg_names vs "
+            f"{len(params)} parâmetros de {fn.__name__}"
+        )
+
+
+def test_calc_plan_has_expected_indicator_names():
+    expected = {
+        "roe",
+        "roa",
+        "margem_bruta",
+        "margem_operacional",
+        "margem_liquida",
+        "giro_ativo",
+        "liquidez_corrente",
+        "liquidez_seca",
+        "liquidez_imediata",
+        "liquidez_geral",
+        "endividamento_geral",
+        "divida_bruta",
+        "divida_liquida",
+        "divida_liquida_pl",
+        "cobertura_juros",
+    }
+    names = {name for name, _, _ in CALC_PLAN}
+    assert names == expected
+
+
+# --- Cálculo dos indicadores e mapeamento de contas. ---
 
 
 def test_get_component_known():

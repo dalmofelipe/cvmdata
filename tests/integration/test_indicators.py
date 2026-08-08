@@ -552,10 +552,11 @@ def test_calculate_all_ttm_correctness(db):
 
     rows = dict(
         db.execute(
-            f"""
-            SELECT indicador, valor FROM indicators
-            WHERE cnpj_cia = '{_TTM_CNPJ}' AND dt_refer = '2024-09-30'
             """
+            SELECT indicador, valor FROM indicators
+            WHERE cnpj_cia = ? AND dt_refer = ?
+            """,
+            [_TTM_CNPJ, '2024-09-30']
         ).fetchall()
     )
 
