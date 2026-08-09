@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from cvmdata.config import settings
-from cvmdata.ingestion.db import get_connection
+from cvmdata.ingestion.database import get_connection
 from cvmdata.pipeline.models import PipelineExecutionError, PipelineReport, StepReport
 from cvmdata.pipeline.steps import (
     step_calculate_indicators,

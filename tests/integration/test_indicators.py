@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from cvmdata.ingestion.db import init_schema
+from cvmdata.ingestion.database import init_schema
 from cvmdata.ingestion.loader import load_csv
 from cvmdata.transform.indicators import _get_ttm_value, calculate_all
 from cvmdata.transform.normalize import normalize_table

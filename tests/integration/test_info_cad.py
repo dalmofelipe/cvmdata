@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from cvmdata.ingestion.db import init_info_cad_schema
+from cvmdata.ingestion.database import init_info_cad_schema
 from cvmdata.ingestion.loader import load_info_cad
 from cvmdata.transform.info_cad import (
     EVENT_AMBIGUOUS,

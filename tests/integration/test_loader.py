@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from cvmdata.ingestion.catalog import DatasetType
-from cvmdata.ingestion.db import init_schema
+from cvmdata.ingestion.database import init_schema
 from cvmdata.ingestion.loader import (
     _match_dataset,
     load_b3_tickers,

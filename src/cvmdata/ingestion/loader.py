@@ -14,7 +14,7 @@ from pathlib import Path
 import duckdb
 
 from cvmdata.ingestion.catalog import CATALOG, DatasetType
-from cvmdata.ingestion.db import init_b3_tickers_schema, init_schema
+from cvmdata.ingestion.database import init_b3_tickers_schema, init_schema
 from cvmdata.ingestion.encoding import _utf8_csv
 from cvmdata.transform.account_map import ACCOUNT_MAP
 
@@ -248,7 +248,7 @@ def load_info_cad(
 
     Valida SC-001: linhas CSV == linhas inseridas.
     """
-    from cvmdata.ingestion.db import init_info_cad_schema
+    from cvmdata.ingestion.database import init_info_cad_schema
 
     init_info_cad_schema(conn)
 
