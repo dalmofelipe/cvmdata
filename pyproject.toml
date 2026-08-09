@@ -39,3 +39,7 @@ select = ["E", "F", "I"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--tb=short"]
+markers = [
+    "unit: fast isolated tests for pure functions and small units",
+    "integration: tests that exercise DuckDB, loaders, normalization, and pipeline steps",
+]

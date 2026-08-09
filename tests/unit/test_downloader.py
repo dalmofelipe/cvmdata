@@ -6,6 +6,8 @@ import pytest
 
 from cvmdata.ingestion.downloader import _should_extract
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.mark.parametrize(
     "filename, expected",

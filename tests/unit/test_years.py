@@ -8,6 +8,8 @@ import pytest
 from cvmdata.config import Settings
 from cvmdata.utils.years import YearsParseError, _max_valid_year, parse_years
 
+pytestmark = pytest.mark.unit
+
 # Data de referência fixa nos testes de parsing — evita testes que dependem
 # do dia em que são rodados (ex: "2024" só ser válido enquanto for <= ano atual).
 _REF_TODAY = date(2026, 7, 21)  # mês >= 6: ano corrente (2026) já disponível
