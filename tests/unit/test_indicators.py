@@ -9,6 +9,7 @@ import pytest
 from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
 from cvmdata.transform.calc_plan import (
     CALC_PLAN,
+    capital_giro,
     cobertura_juros,
     divida_bruta,
     divida_liquida,
@@ -20,8 +21,8 @@ from cvmdata.transform.calc_plan import (
     liquidez_imediata,
     liquidez_seca,
     margem_bruta,
+    margem_ebit,
     margem_liquida,
-    margem_operacional,
     roa,
     roe,
 )
@@ -107,21 +108,22 @@ def test_calc_plan_arg_count_matches_function_signature():
 
 def test_calc_plan_has_expected_indicator_names():
     expected = {
-        "roe",
-        "roa",
-        "margem_bruta",
-        "margem_operacional",
-        "margem_liquida",
+        "capital_giro",
+        "cobertura_juros",
+        "divida_bruta",
+        "divida_liquida_pl",
+        "divida_liquida",
+        "endividamento_geral",
         "giro_ativo",
         "liquidez_corrente",
-        "liquidez_seca",
-        "liquidez_imediata",
         "liquidez_geral",
-        "endividamento_geral",
-        "divida_bruta",
-        "divida_liquida",
-        "divida_liquida_pl",
-        "cobertura_juros",
+        "liquidez_imediata",
+        "liquidez_seca",
+        "margem_bruta",
+        "margem_ebit",
+        "margem_liquida",
+        "roa",
+        "roe",
     }
     names = {name for name, _, _ in CALC_PLAN}
     assert names == expected
@@ -152,8 +154,8 @@ def test_margem_bruta_happy():
     assert margem_bruta(300, 1000) == pytest.approx(30.0)
 
 
-def test_margem_operacional_happy():
-    assert margem_operacional(200, 1000) == pytest.approx(20.0)
+def test_margem_ebit_happy():
+    assert margem_ebit(200, 1000) == pytest.approx(20.0)
 
 
 def test_margem_liquida_happy():
@@ -200,22 +202,26 @@ def test_cobertura_juros_happy():
     assert cobertura_juros(200, 50) == pytest.approx(4.0)
 
 
+def test_capital_giro_happy():
+    assert capital_giro(200, 100) == pytest.approx(100.0)
+
+
 @pytest.mark.parametrize(
     "fn,args",
     [
-        (roe, (100, 0)),
-        (roa, (100, 0)),
-        (margem_bruta, (300, 0)),
-        (margem_operacional, (200, 0)),
-        (margem_liquida, (150, 0)),
+        (cobertura_juros, (200, 0)),
+        (divida_liquida_pl, (500, 0)),
+        (endividamento_geral, (100, 200, 0)),
         (giro_ativo, (1000, 0)),
         (liquidez_corrente, (200, 0)),
-        (liquidez_seca, (200, 50, 0)),
-        (liquidez_imediata, (80, 0)),
         (liquidez_geral, (200, 50, 0, 0)),
-        (endividamento_geral, (100, 200, 0)),
-        (divida_liquida_pl, (500, 0)),
-        (cobertura_juros, (200, 0)),
+        (liquidez_imediata, (80, 0)),
+        (liquidez_seca, (200, 50, 0)),
+        (margem_bruta, (300, 0)),
+        (margem_ebit, (200, 0)),
+        (margem_liquida, (150, 0)),
+        (roa, (100, 0)),
+        (roe, (100, 0)),
     ],
 )
 def test_zero_denominator_returns_none(fn, args):
@@ -225,23 +231,24 @@ def test_zero_denominator_returns_none(fn, args):
 @pytest.mark.parametrize(
     "fn,args",
     [
-        (roe, (None, 500)),
-        (roe, (100, None)),
-        (roa, (None, 2000)),
-        (margem_bruta, (None, 1000)),
-        (margem_operacional, (None, 1000)),
-        (margem_liquida, (None, 1000)),
+        (capital_giro, (None, 100)),
+        (cobertura_juros, (None, 50)),
+        (divida_bruta, (None, 400)),
+        (divida_liquida_pl, (None, 1000)),
+        (divida_liquida, (None, 400, 80, 120)),
+        (endividamento_geral, (None, 200, 1000)),
         (giro_ativo, (None, 2000)),
         (liquidez_corrente, (None, 100)),
-        (liquidez_seca, (None, 50, 100)),
-        (liquidez_seca, (200, None, 100)),
-        (liquidez_imediata, (None, 100)),
         (liquidez_geral, (None, 50, 100, 150)),
-        (endividamento_geral, (None, 200, 1000)),
-        (divida_bruta, (None, 400)),
-        (divida_liquida, (None, 400, 80, 120)),
-        (divida_liquida_pl, (None, 1000)),
-        (cobertura_juros, (None, 50)),
+        (liquidez_imediata, (None, 100)),
+        (liquidez_seca, (200, None, 100)),
+        (liquidez_seca, (None, 50, 100)),
+        (margem_bruta, (None, 1000)),
+        (margem_ebit, (None, 1000)),
+        (margem_liquida, (None, 1000)),
+        (roa, (None, 2000)),
+        (roe, (100, None)),
+        (roe, (None, 500)),
     ],
 )
 def test_none_argument_returns_none(fn, args):

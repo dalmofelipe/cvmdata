@@ -3,6 +3,42 @@
 # ── Rentabilidade ─────────────────────────────────────────────────────────────
 
 
+def giro_ativo(receita_liquida: float | None, ativo_total: float | None) -> float | None:
+    """Receita Líquida / Ativo Total  |  3.01 / 1"""
+    if receita_liquida is None or ativo_total is None:
+        return None
+    if ativo_total == 0:
+        return None
+    return receita_liquida / ativo_total
+
+
+def margem_bruta(resultado_bruto: float | None, receita_liquida: float | None) -> float | None:
+    """Resultado Bruto / Receita Líquida x 100  |  3.03 / 3.01"""
+    if resultado_bruto is None or receita_liquida is None:
+        return None
+    if receita_liquida == 0:
+        return None
+    return resultado_bruto / receita_liquida * 100
+
+
+def margem_ebit(ebit: float | None, receita_liquida: float | None) -> float | None:
+    """EBIT / Receita Líquida x 100  |  3.05 / 3.01"""
+    if ebit is None or receita_liquida is None:
+        return None
+    if receita_liquida == 0:
+        return None
+    return ebit / receita_liquida * 100
+
+
+def margem_liquida(lucro_liquido: float | None, receita_liquida: float | None) -> float | None:
+    """Lucro Líquido / Receita Líquida x 100  |  3.11 / 3.01"""
+    if lucro_liquido is None or receita_liquida is None:
+        return None
+    if receita_liquida == 0:
+        return None
+    return lucro_liquido / receita_liquida * 100
+
+
 def roe(lucro_liquido: float | None, patrimonio_liquido: float | None) -> float | None:
     """Lucro Líquido / Patrimônio Líquido x 100  |  3.11 / 2.03"""
     if lucro_liquido is None or patrimonio_liquido is None:
@@ -21,43 +57,17 @@ def roa(lucro_liquido: float | None, ativo_total: float | None) -> float | None:
     return lucro_liquido / ativo_total * 100
 
 
-def margem_bruta(resultado_bruto: float | None, receita_liquida: float | None) -> float | None:
-    """Resultado Bruto / Receita Líquida x 100  |  3.03 / 3.01"""
-    if resultado_bruto is None or receita_liquida is None:
-        return None
-    if receita_liquida == 0:
-        return None
-    return resultado_bruto / receita_liquida * 100
-
-
-def margem_operacional(ebit: float | None, receita_liquida: float | None) -> float | None:
-    """EBIT / Receita Líquida x 100  |  3.05 / 3.01"""
-    if ebit is None or receita_liquida is None:
-        return None
-    if receita_liquida == 0:
-        return None
-    return ebit / receita_liquida * 100
-
-
-def margem_liquida(lucro_liquido: float | None, receita_liquida: float | None) -> float | None:
-    """Lucro Líquido / Receita Líquida x 100  |  3.11 / 3.01"""
-    if lucro_liquido is None or receita_liquida is None:
-        return None
-    if receita_liquida == 0:
-        return None
-    return lucro_liquido / receita_liquida * 100
-
-
-def giro_ativo(receita_liquida: float | None, ativo_total: float | None) -> float | None:
-    """Receita Líquida / Ativo Total  |  3.01 / 1"""
-    if receita_liquida is None or ativo_total is None:
-        return None
-    if ativo_total == 0:
-        return None
-    return receita_liquida / ativo_total
-
-
 # ── Liquidez ──────────────────────────────────────────────────────────────────
+
+
+def capital_giro(
+    ativo_circulante: float | None, passivo_circulante: float | None
+) -> float | None:
+    """AC - PC  |  1.01 - 2.01"""
+    if ativo_circulante is None or passivo_circulante is None:
+        return None
+    
+    return ativo_circulante - passivo_circulante
 
 
 def liquidez_corrente(
@@ -186,22 +196,25 @@ def calc_divida_liquida_pl(comp: dict[str, float | None]) -> float | None:
 
 # (nome do indicador, função, [nomes dos componentes])
 CALC_PLAN: list[tuple[str, object, list[str]]] = [
-    ("roe", roe, ["lucro_liquido", "patrimonio_liquido"]),
-    ("roa", roa, ["lucro_liquido", "ativo_total"]),
-    ("margem_bruta", margem_bruta, ["resultado_bruto", "receita_liquida"]),
-    ("margem_operacional", margem_operacional, ["ebit", "receita_liquida"]),
-    ("margem_liquida", margem_liquida, ["lucro_liquido", "receita_liquida"]),
+    ("capital_giro", capital_giro, ["ativo_circulante", "passivo_circulante"]),
+    ("cobertura_juros", cobertura_juros, ["ebit", "despesas_financeiras"]),
+    ("divida_bruta", divida_bruta, ["emprestimos_cp", "emprestimos_lp"]),
+    ("divida_liquida", divida_liquida, 
+        ["emprestimos_cp", "emprestimos_lp", "caixa_equivalentes", "aplicacoes_financeiras"]),
+    ("divida_liquida_pl", None, []),
+    ("endividamento_geral", endividamento_geral, 
+        ["passivo_circulante", "passivo_nao_circulante", "ativo_total"]),
     ("giro_ativo", giro_ativo, ["receita_liquida", "ativo_total"]),
+    ("margem_bruta", margem_bruta, ["resultado_bruto", "receita_liquida"]),
+    ("margem_ebit", margem_ebit, ["ebit", "receita_liquida"]),
+    ("margem_liquida", margem_liquida, ["lucro_liquido", "receita_liquida"]),
     ("liquidez_corrente", liquidez_corrente, ["ativo_circulante", "passivo_circulante"]),
     ("liquidez_seca", liquidez_seca, ["ativo_circulante", "estoques", "passivo_circulante"]),
     ("liquidez_imediata", liquidez_imediata, ["caixa_equivalentes", "passivo_circulante"]),
     ("liquidez_geral", liquidez_geral, 
         ["ativo_circulante","realizavel_longo_prazo", "passivo_circulante", "passivo_nao_circulante"]),
-    ("endividamento_geral", endividamento_geral, 
-        ["passivo_circulante", "passivo_nao_circulante", "ativo_total"]),
-    ("divida_bruta", divida_bruta, ["emprestimos_cp", "emprestimos_lp"]),
-    ("divida_liquida", divida_liquida, 
-        ["emprestimos_cp", "emprestimos_lp", "caixa_equivalentes", "aplicacoes_financeiras"]),
-    ("divida_liquida_pl", None, []),
-    ("cobertura_juros", cobertura_juros, ["ebit", "despesas_financeiras"]),
+    ("roa", roa, ["lucro_liquido", "ativo_total"]),
+    ("roe", roe, ["lucro_liquido", "patrimonio_liquido"]),
 ]
+
+EXPECTED_INDICATOR_COUNT = len(CALC_PLAN)

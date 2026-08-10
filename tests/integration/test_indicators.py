@@ -8,6 +8,7 @@ import pytest
 
 from cvmdata.ingestion.database import init_schema
 from cvmdata.ingestion.loader import load_csv
+from cvmdata.transform.calc_plan import EXPECTED_INDICATOR_COUNT
 from cvmdata.transform.indicators import _get_ttm_value, calculate_all
 from cvmdata.transform.normalize import normalize_table
 from tests.support import (
@@ -24,14 +25,14 @@ pytestmark = pytest.mark.integration
 # ── Integração: calculate_all ─────────────────────────────────────────────────
 
 
-def test_calculate_all_inserts_15_indicators(tmp_path: Path, db):
+def test_calculate_all_inserts_indicators(tmp_path: Path, db):
     """calculate_all deve gravar exatamente 15 indicadores por empresa/período."""
     prepare_indicator_pipeline(db, tmp_path, source="itr", year=2024)
     total = calculate_all(db)
 
-    assert total == 15
+    assert total == EXPECTED_INDICATOR_COUNT
     count = db.execute("SELECT COUNT(*) FROM indicators").fetchone()[0]
-    assert count == 15
+    assert count == EXPECTED_INDICATOR_COUNT
 
 
 def test_calculate_all_roe_plausible(tmp_path: Path, db):
@@ -49,13 +50,13 @@ def test_calculate_all_cnpj_filter(tmp_path: Path, db):
     prepare_indicator_pipeline(db, tmp_path, source="itr", year=2024)
 
     total = calculate_all(db, cnpj="00.000.000/0001-91")
-    assert total == 15
+    assert total == EXPECTED_INDICATOR_COUNT
 
     # Filtrando cnpj inexistente → 0
     total_none = calculate_all(db, cnpj="99.999.999/0001-00")
     # A tabela indicators já tem 15 linhas da chamada anterior; nenhuma nova
     count_after = db.execute("SELECT COUNT(*) FROM indicators").fetchone()[0]
-    assert count_after == 15
+    assert count_after == EXPECTED_INDICATOR_COUNT
     assert total_none == 0
 
 
@@ -68,7 +69,7 @@ def test_calculate_all_idempotent(tmp_path: Path, db):
     calculate_all(db)
 
     count = db.execute("SELECT COUNT(*) FROM indicators").fetchone()[0]
-    assert count == 15
+    assert count == EXPECTED_INDICATOR_COUNT
 
 
 def test_calculate_all_empty_clean_tables(db):
@@ -131,7 +132,7 @@ def test_industrial_all_15_indicators_inserted(db):
         FIXTURES_DIR / "sample_industrial_dre.csv",
     )
     count = db.execute("SELECT COUNT(*) FROM indicators").fetchone()[0]
-    assert count == 15
+    assert count == EXPECTED_INDICATOR_COUNT
 
 
 def test_industrial_roe_not_none(db):
@@ -455,7 +456,7 @@ def test_calculate_all_regression_batch(tmp_path: Path, db):
 
     total = calculate_all(db)
 
-    assert total == 15
+    assert total == EXPECTED_INDICATOR_COUNT
     # Sem DFP → fallback YTD; margem_liquida = 500/5000*100 = 10.0
     row = db.execute("SELECT valor FROM indicators WHERE indicador = 'margem_liquida'").fetchone()
     assert row is not None
