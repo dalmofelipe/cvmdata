@@ -139,6 +139,19 @@ def endividamento_geral(
     return (passivo_circulante + passivo_nao_circulante) / ativo_total * 100  # type: ignore[operator]
 
 
+def endividamento_pl(
+    passivo_circulante: float | None,
+    passivo_nao_circulante: float | None,
+    patrimonio_liquido: float | None,
+) -> float | None:
+    """(PC + PNC) / PL x 100  | (2.01 + 2.02) / 2.03 x 100"""
+    if any(v is None for v in (passivo_circulante, passivo_nao_circulante, patrimonio_liquido)):
+        return None
+    if patrimonio_liquido == 0:
+        return None
+    return (passivo_circulante + passivo_nao_circulante) / patrimonio_liquido * 100
+
+
 def divida_bruta(emprestimos_cp: float | None, emprestimos_lp: float | None) -> float | None:
     """Emprést. CP + LP  |  2.01.04 + 2.02.01"""
     if emprestimos_cp is None or emprestimos_lp is None:
@@ -204,6 +217,8 @@ CALC_PLAN: list[tuple[str, object, list[str]]] = [
     ("divida_liquida_pl", None, []),
     ("endividamento_geral", endividamento_geral, 
         ["passivo_circulante", "passivo_nao_circulante", "ativo_total"]),
+    ("endividamento_pl", endividamento_pl, 
+            ["passivo_circulante", "passivo_nao_circulante", "patrimonio_liquido"]),
     ("giro_ativo", giro_ativo, ["receita_liquida", "ativo_total"]),
     ("margem_bruta", margem_bruta, ["resultado_bruto", "receita_liquida"]),
     ("margem_ebit", margem_ebit, ["ebit", "receita_liquida"]),
