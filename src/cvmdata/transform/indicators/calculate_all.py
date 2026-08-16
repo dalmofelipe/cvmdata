@@ -8,7 +8,7 @@ import duckdb
 
 from cvmdata.ingestion.database import init_indicators_schema
 from cvmdata.transform.indicators.balance import _fetch_all_components
-from cvmdata.transform.indicators.build import IndicatorRow, _build_indicator_rows
+from cvmdata.transform.indicators.indicator_rows import IndicatorRow, _build_indicator_rows
 from cvmdata.transform.indicators.ttm import Components, _fetch_all_dre_components
 
 logger = logging.getLogger(__name__)

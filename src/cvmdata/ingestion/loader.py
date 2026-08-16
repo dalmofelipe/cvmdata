@@ -15,7 +15,7 @@ import duckdb
 
 from cvmdata.ingestion.catalog import CATALOG, DatasetType
 from cvmdata.ingestion.database import init_b3_tickers_schema, init_schema
-from cvmdata.ingestion.encoding import _utf8_csv
+from cvmdata.ingestion.encoding import utf8_csv
 from cvmdata.transform.account_map import ACCOUNT_MAP
 
 logger = logging.getLogger(__name__)
@@ -88,47 +88,6 @@ def _build_demo_insert_sql(csv_path: Path, demo: str, source: str, year: int, sc
     WHERE CD_CONTA::VARCHAR = ANY(?);"""
 
 
-def load_csv(
-    conn: duckdb.DuckDBPyConnection,
-    csv_path: Path,
-    demo: str,
-    source: str,
-    year: int,
-    scope: str = "con",
-) -> int:
-    """Carrega um CSV de demonstrativo (BPA, BPP, DRE) na tabela raw_{demo}.
-
-    Idempotente: deleta linhas de (source, year, scope) antes do INSERT.
-
-    Mantida como API pública para testes e compatibilidade.
-    """
-    if scope != "con":
-        raise ValueError(
-            f"load_csv: escopo '{scope}' não suportado — apenas 'con' (consolidado) é aceito. "
-            f"Arquivo: {csv_path.name}"
-        )
-    table = f"raw_{demo.lower()}"
-
-    conn.execute(
-        f"DELETE FROM {table} WHERE source = ? AND year = ? AND scope = ?",
-        [source, year, scope],
-    )
-
-    with _utf8_csv(csv_path) as safe_path:
-        sql = _build_demo_insert_sql(safe_path, demo, source, year, scope)
-        conn.execute(sql, [_ACCOUNT_CODES])
-
-    row = conn.execute(
-        f"SELECT COUNT(*) FROM {table} WHERE source = ? AND year = ? AND scope = ?",
-        [source, year, scope],
-    ).fetchone()
-    assert row is not None
-    count: int = row[0]
-
-    logger.info("  %s/%s/%s/%s → %d linhas", demo, scope, source, year, count)
-    return count
-
-
 def _build_comp_capital_insert_sql(csv_path: Path, source: str, year: int) -> str:
     """Monta o SQL de INSERT para composicao_capital (sem filtro de CD_CONTA)."""
     fpath = csv_path.as_posix()
@@ -167,7 +126,7 @@ def _load_composicao_capital_csv(
     """
     conn.execute("DELETE FROM composicao_capital WHERE source = ? AND year = ?", [source, year])
 
-    with _utf8_csv(csv_path) as safe_path:
+    with utf8_csv(csv_path) as safe_path:
         sql = _build_comp_capital_insert_sql(safe_path, source, year)
         conn.execute(sql)
 
@@ -178,6 +137,47 @@ def _load_composicao_capital_csv(
     count: int = row[0] if row else 0
 
     logger.info("  composicao_capital/%s/%s → %d linhas", source, year, count)
+    return count
+
+
+def load_csv(
+    conn: duckdb.DuckDBPyConnection,
+    csv_path: Path,
+    demo: str,
+    source: str,
+    year: int,
+    scope: str = "con",
+) -> int:
+    """Carrega um CSV de demonstrativo (BPA, BPP, DRE) na tabela raw_{demo}.
+
+    Idempotente: deleta linhas de (source, year, scope) antes do INSERT.
+
+    Mantida como API pública para testes e compatibilidade.
+    """
+    if scope != "con":
+        raise ValueError(
+            f"load_csv: escopo '{scope}' não suportado — apenas 'con' (consolidado) é aceito. "
+            f"Arquivo: {csv_path.name}"
+        )
+    table = f"raw_{demo.lower()}"
+
+    conn.execute(
+        f"DELETE FROM {table} WHERE source = ? AND year = ? AND scope = ?",
+        [source, year, scope],
+    )
+
+    with utf8_csv(csv_path) as safe_path:
+        sql = _build_demo_insert_sql(safe_path, demo, source, year, scope)
+        conn.execute(sql, [_ACCOUNT_CODES])
+
+    row = conn.execute(
+        f"SELECT COUNT(*) FROM {table} WHERE source = ? AND year = ? AND scope = ?",
+        [source, year, scope],
+    ).fetchone()
+    assert row is not None
+    count: int = row[0]
+
+    logger.info("  %s/%s/%s/%s → %d linhas", demo, scope, source, year, count)
     return count
 
 
@@ -252,7 +252,7 @@ def load_info_cad(
 
     init_info_cad_schema(conn)
 
-    with _utf8_csv(csv_path) as safe_path:
+    with utf8_csv(csv_path) as safe_path:
         fpath = safe_path.as_posix()
 
         row = conn.execute(
