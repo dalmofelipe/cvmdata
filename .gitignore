@@ -23,6 +23,7 @@ uv.lock
 htmlcov/
 
 # IDEs
+.devtool
 .vscode/settings.json
 .vscode/
 .idea/

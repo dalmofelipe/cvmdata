@@ -172,14 +172,6 @@ CREATE TABLE IF NOT EXISTS cad_cia_aberta_raw (
     loaded_at     TIMESTAMPTZ
 );"""
 
-_SETOR_PROFILE_MAP_DDL = """\
-CREATE TABLE IF NOT EXISTS setor_profile_map (
-    setor_ativ  VARCHAR PRIMARY KEY,
-    profile_id  VARCHAR NOT NULL,
-    active      BOOLEAN NOT NULL DEFAULT TRUE,
-    updated_at  TIMESTAMPTZ
-);"""
-
 _COMPANY_CLASSIFICATION_DDL = """\
 CREATE TABLE IF NOT EXISTS company_classification (
     cnpj_cia     VARCHAR PRIMARY KEY,
@@ -201,6 +193,14 @@ CREATE TABLE IF NOT EXISTS classification_curation_events (
     created_at  TIMESTAMPTZ,
     updated_at  TIMESTAMPTZ,
     PRIMARY KEY (cnpj_cia, event_type)
+);"""
+
+_SETOR_PROFILE_MAP_DDL = """\
+CREATE TABLE IF NOT EXISTS setor_profile_map (
+    setor_ativ  VARCHAR PRIMARY KEY,
+    profile_id  VARCHAR NOT NULL,
+    active      BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at  TIMESTAMPTZ
 );"""
 
 # Mapeamentos iniciais de setor para profile (banking e arrendamento mercantil)

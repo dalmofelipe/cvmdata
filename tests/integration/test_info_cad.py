@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import pytest
 
-from cvmdata.ingestion.db import init_info_cad_schema
+from cvmdata.ingestion.database import init_info_cad_schema
 from cvmdata.ingestion.loader import load_info_cad
 from cvmdata.transform.info_cad import (
     EVENT_AMBIGUOUS,
     EVENT_EMPTY,
+    EVENT_MISSING_FROM_CADASTRO,
     EVENT_UNMAPPED,
     FALLBACK_PROFILE,
+    STRUCTURAL_CONFIDENCE,
     classify_info_cad,
 )
-from tests.support import make_cad_csv, seed_classification_rows
+from tests.support import make_cad_csv, seed_classification_rows, setup_classify_schema
 
 pytestmark = pytest.mark.integration
 
@@ -289,3 +291,118 @@ def test_classify_returns_correct_counts(db):
     assert counts["total"] == 3
     assert counts["high"] == 1
     assert counts["low"] == 2
+
+
+# ── Classificação estrutural (CNPJ ausente do cadastro, pós-normalize) ────────
+
+
+def _seed_structural_bpa(db, cnpj: str) -> None:
+    """Cria raw_bpa_clean mínimo com assinatura bancária para o CNPJ."""
+    db.execute(
+        """
+        CREATE TABLE raw_bpa_clean (
+            CNPJ_CIA VARCHAR, CD_CONTA VARCHAR, DS_CONTA VARCHAR,
+            CD_CVM VARCHAR, DENOM_CIA VARCHAR
+        )
+        """
+    )
+    db.execute(
+        """
+        INSERT INTO raw_bpa_clean VALUES (?, '1.01', 'Caixa e Equivalentes de Caixa',
+                                          '00123', 'BANCO INTER TESTE')
+        """,
+        [cnpj],
+    )
+
+
+def test_classify_structural_persists_when_absent_from_cadastro(db):
+    """CNPJ com demonstrativos (raw_bpa_clean) mas ausente do cadastro → classificado
+    estruturalmente como banking/medium, persistido em company_classification."""
+    setup_classify_schema(db)
+    # Media cadastral existente, mas sem o CNPJ de interesse
+    seed_classification_rows(db, [{"CNPJ_CIA": "99.999.999/0001-99", "SIT": "ATIVO"}])
+    _seed_structural_bpa(db, "42.737.954/0001-21")
+
+    counts = classify_info_cad(db)
+
+    assert counts["structural"] == 1
+    assert counts["total"] == 2
+
+    row = db.execute(
+        "SELECT profile_id, confidence, cd_cvm, denom_social, denom_comerc, setor_ativ"
+        " FROM company_classification WHERE cnpj_cia = ?",
+        ["42.737.954/0001-21"],
+    ).fetchone()
+    assert row[0] == "banking"
+    assert row[1] == STRUCTURAL_CONFIDENCE
+    # Enriquecimento descritivo a partir de raw_bpa_clean
+    assert row[2] == "00123"
+    assert row[3] == "BANCO INTER TESTE"
+    assert row[4] == "BANCO INTER TESTE"
+    assert row[5] is None
+
+    event = db.execute(
+        "SELECT event_type FROM classification_curation_events WHERE cnpj_cia = ?",
+        ["42.737.954/0001-21"],
+    ).fetchone()
+    assert event is not None
+    assert event[0] == EVENT_MISSING_FROM_CADASTRO
+
+
+def test_classify_structural_skips_cnpjs_in_cadastro(db):
+    """CNPJ presente em cad_cia_aberta_raw (mesmo que não-classificável,
+    ex.: CANCELADA) NÃO recebe classificação estrutural."""
+    seed_classification_rows(
+        db, [{"CNPJ_CIA": "42.737.954/0001-21", "SIT": "CANCELADA", "SETOR_ATIV": ""}]
+    )
+    _seed_structural_bpa(db, "42.737.954/0001-21")
+
+    counts = classify_info_cad(db)
+
+    assert counts["structural"] == 0
+    assert db.execute("SELECT COUNT(*) FROM company_classification").fetchone()[0] == 0
+
+
+def test_classify_structural_skips_already_classified(db):
+    """CNPJ já persistido em company_classification não é re-classificado
+    estruturalmente — a classificação existente tem precedência."""
+    setup_classify_schema(db)
+    seed_classification_rows(db, [{"CNPJ_CIA": "99.999.999/0001-99", "SIT": "ATIVO"}])
+    db.execute(
+        "INSERT INTO company_classification"
+        " (cnpj_cia, profile_id, confidence, rule_applied, updated_at)"
+        " VALUES (?, 'default', 'low', 'unmapped_setor:x:fallback', current_timestamp)",
+        ["42.737.954/0001-21"],
+    )
+    _seed_structural_bpa(db, "42.737.954/0001-21")
+
+    counts = classify_info_cad(db)
+
+    assert counts["structural"] == 0
+    row = db.execute(
+        "SELECT profile_id, confidence FROM company_classification WHERE cnpj_cia = ?",
+        ["42.737.954/0001-21"],
+    ).fetchone()
+    assert row == ("default", "low")
+
+
+def test_classify_structural_idempotent(db):
+    """Rerun não duplica linhas estruturais em company_classification.
+
+    Primeira run classifica estruturalmente (structural=1); a segunda encontra
+    o CNPJ já persistido em company_classification e não re-classifica
+    (structural=0), sem duplicar a linha."""
+    setup_classify_schema(db)
+    seed_classification_rows(db, [{"CNPJ_CIA": "99.999.999/0001-99", "SIT": "ATIVO"}])
+    _seed_structural_bpa(db, "42.737.954/0001-21")
+
+    c1 = classify_info_cad(db)
+    c2 = classify_info_cad(db)
+
+    assert c1["structural"] == 1
+    assert c2["structural"] == 0
+    count = db.execute(
+        "SELECT COUNT(*) FROM company_classification WHERE cnpj_cia = ?",
+        ["42.737.954/0001-21"],
+    ).fetchone()[0]
+    assert count == 1

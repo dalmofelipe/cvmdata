@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 @contextmanager
-def _utf8_csv(csv_path: Path):
+def utf8_csv(csv_path: Path):
     """Garante que `read_csv` do DuckDB receba um arquivo em UTF-8.
 
     Transcodifica com `codecs`/stdlib e entrega UTF-8 puro ao `read_csv`.

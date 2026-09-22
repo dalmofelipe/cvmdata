@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from cvmdata.config import settings
-from cvmdata.ingestion.db import get_connection
+from cvmdata.ingestion.database import get_connection
 from cvmdata.pipeline.models import PipelineExecutionError, PipelineReport, StepReport
 from cvmdata.pipeline.steps import (
     step_calculate_indicators,
@@ -77,11 +77,11 @@ def run_full(
             # Load financeiro
             step_reports.append(step_load_cvm(conn, effective_years, effective_data_dir))
 
-            # Classificação cadastral
-            step_reports.append(step_classify_info_cad(conn))
-
             # Normalize
             step_reports.append(step_normalize_financial(conn))
+
+            # Classificação cadastral
+            step_reports.append(step_classify_info_cad(conn))
 
             # Indicators
             step_reports.append(step_calculate_indicators(conn, effective_cnpj))

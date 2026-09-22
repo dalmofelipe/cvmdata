@@ -1,4 +1,4 @@
-.PHONY: install pipeline test lint lint-fix fmt ci clean destroy
+.PHONY: install pipeline test lint lint-fix ci clean
 
 
 # ── Ambiente ────────────────────────────────────────────────────────────────
@@ -23,8 +23,6 @@ lint:
 
 lint-fix:
 	ruff check src/ tests/ --fix
-
-fix: lint-fix fmt
 
 
 # ── CI ──────────────────────────────────────────────────────────────────────

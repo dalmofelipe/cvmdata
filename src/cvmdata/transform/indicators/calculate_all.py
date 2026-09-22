@@ -6,10 +6,11 @@ import logging
 
 import duckdb
 
-from cvmdata.ingestion.db import init_indicators_schema
-from cvmdata.transform.indicators.balance import _fetch_all_components
-from cvmdata.transform.indicators.build import IndicatorRow, _build_indicator_rows
-from cvmdata.transform.indicators.ttm import Components, _fetch_all_dre_components
+from cvmdata.ingestion.database import init_indicators_schema
+from cvmdata.transform.indicators.balance import fetch_all_balance_components
+from cvmdata.transform.indicators.indicator_rows import IndicatorRow, build_indicator_rows
+from cvmdata.transform.indicators.ttm import Components, fetch_all_dre_components
+from cvmdata.transform.profile import fetch_profiles_from_classification
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +33,36 @@ def _collect_components(
     cnpj: str | None,
     tables: set[str],
 ) -> Components:
-    """Funde componentes de balanço (BPA/BPP) e DRE (TTM) por (cnpj, dt_refer)."""
+    """Funde componentes de balanço (BPA/BPP) e DRE (TTM) por ``ReportingPeriod``"""
+    profiles = fetch_profiles_from_classification(conn, cnpj)
+
     has_balance = bool(tables & {"raw_bpa_clean", "raw_bpp_clean"})
-    balance_comps = _fetch_all_components(conn, cnpj) if has_balance else {}
-    dre_comps = _fetch_all_dre_components(conn, cnpj) if "raw_dre_clean" in tables else {}
+
+    balance_comps = (
+        fetch_all_balance_components(conn, cnpj, profiles)
+        if has_balance
+        else {}
+    )
+    dre_comps = (
+        fetch_all_dre_components(conn, cnpj, profiles)
+        if "raw_dre_clean" in tables
+        else {}
+    )
 
     merged: Components = {}
-    for key in set(balance_comps) | set(dre_comps):
-        merged[key] = {**balance_comps.get(key, {}), **dre_comps.get(key, {})}
+    for period in set(balance_comps) | set(dre_comps):
+        merged[period] = {**balance_comps.get(period, {}), **dre_comps.get(period, {})}
+
+        # Components complementares
+        # lucro_liquido_final: resume continuadas + descontinuadas.
+        # Atualmente, não é consumido por nenhum indicador do CALC_PLAN — existe para validar
+        # que a resolução textual da cauda converge com lucro_liquido (via CD_CONTA 3.11 fixo).
+        # Ver test_collect_components_computes_lucro_liquido_final.
+        continuadas = merged[period].get("resultado_liquido_continuadas")
+        if continuadas is not None:
+            merged[period]["lucro_liquido_final"] = continuadas + (
+                merged[period].get("ajuste_descontinuadas") or 0
+            )
 
     return merged
 
@@ -54,7 +77,7 @@ def _persist_rows(conn: duckdb.DuckDBPyConnection, cnpj: str | None, rows: list[
             conn.execute("TRUNCATE indicators")
 
         if rows:
-            cnpjs, dt_refers, indicadores, valores = zip(*rows)
+            cols = IndicatorRow.to_sql_columns(rows)
             conn.execute(
                 """
                 INSERT INTO indicators (cnpj_cia, dt_refer, indicador, valor)
@@ -62,7 +85,7 @@ def _persist_rows(conn: duckdb.DuckDBPyConnection, cnpj: str | None, rows: list[
                     unnest(?) AS cnpj_cia, unnest(?)::DATE AS dt_refer,
                     unnest(?) AS indicador, unnest(?) AS valor
                 """,
-                [list(cnpjs), list(dt_refers), list(indicadores), list(valores)],
+                [cols.cnpjs, cols.dt_refers, cols.indicadores, cols.valores],
             )
 
         conn.execute("COMMIT")
@@ -74,10 +97,9 @@ def _persist_rows(conn: duckdb.DuckDBPyConnection, cnpj: str | None, rows: list[
 def calculate_all(conn: duckdb.DuckDBPyConnection, cnpj: str | None = None) -> int:
     """Calcula todos os indicadores fundamentalistas para as empresas/períodos disponíveis.
 
-    Usa duas queries batch (``_fetch_all_components`` + ``_fetch_all_dre_components``,
-    a última já com TTM resolvido em SQL) em vez de N round-trips por par
-    (cnpj, dt_refer), e persiste tudo em uma única transação via UNNEST
-    (ver ``_persist_rows``).
+    Usa duas queries batch (``fetch_all_balance_components`` +
+    ``fetch_all_dre_components``, a última já com TTM resolvido em SQL) e persiste tudo 
+    em uma única transação via UNNEST (ver ``_persist_rows``).
 
     Args:
         conn: Conexão DuckDB com as tabelas ``*_clean`` já criadas.
@@ -101,11 +123,17 @@ def calculate_all(conn: duckdb.DuckDBPyConnection, cnpj: str | None = None) -> i
     logger.info("Calculando indicadores para %d empresa/período(s)…", len(components))
 
     all_rows: list[IndicatorRow] = []
-    for (cnpj_cia, dt_refer), comp in components.items():
+    for period, comp in components.items():
         try:
-            all_rows.extend(_build_indicator_rows(cnpj_cia, dt_refer, comp))
+            all_rows.extend(
+                build_indicator_rows(period.cnpj_cia, period.dt_refer, comp)
+            )
         except Exception:
-            logger.exception("Erro ao calcular indicadores para %s %s — pulando", cnpj_cia, dt_refer)
+            logger.exception(
+                "Erro ao calcular indicadores para %s %s — pulando",
+                period.cnpj_cia,
+                period.dt_refer,
+            )
 
     _persist_rows(conn, cnpj, all_rows)
 
