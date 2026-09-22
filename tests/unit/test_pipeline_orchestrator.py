@@ -51,4 +51,5 @@ def test_run_full_reports_b3_tickers_step(monkeypatch, tmp_path):
     assert step_names[0] == "download_financial"
     assert "load_b3_tickers" in step_names
     assert step_names.index("load_b3_tickers") < step_names.index("load_financial")
+    assert step_names.index("normalize_financial") < step_names.index("classify_info_cad")
     assert report.status == "success"

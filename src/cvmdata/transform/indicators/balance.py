@@ -4,51 +4,60 @@ from __future__ import annotations
 
 import duckdb
 
-from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
-from cvmdata.transform.indicators.ttm import Components
+from cvmdata.transform.account_map import ALL_BALANCE_CODES, get_component
+from cvmdata.transform.indicators.models import Components, ReportingPeriod
 
 
-def _fetch_all_components(
+def fetch_all_balance_components(
     conn: duckdb.DuckDBPyConnection,
     cnpj: str | None = None,
+    profiles: dict[str, str] | None = None,
 ) -> Components:
-    """Batch query para BPA/BPP: retorna ``{(cnpj, dt_refer): {componente: valor}}``.
+    """Batch query para BPA/BPP: retorna ``{ReportingPeriod: ComponentValues}``.
 
     Executa uma única query (UNION ALL de raw_bpa_clean + raw_bpp_clean) para
-    todas as empresas/períodos.
-    
-    Contas de balanço não usam TTM — o valor é o saldo pontual do período.
+    todas as empresas/períodos. Contas de balanço não usam TTM — o valor é o
+    saldo pontual do período.
+
+    O perfil por CNPJ vem de ``company_classification`` (resolvido pelo step
+    de classificação cadastral); CNPJs sem classificação persistem o mapeamento 
+    ``default``.
     """
-    balance_codes = [cd for cd in ACCOUNT_MAP if not cd.startswith("3.")]
     filter_clause = "AND CNPJ_CIA = ?" if cnpj else ""
 
-    params: list[object] = [balance_codes]
+    params: list[object] = [ALL_BALANCE_CODES]
     if cnpj:
         params.append(cnpj)
 
-    params.append(balance_codes)
+    params.append(ALL_BALANCE_CODES)
     if cnpj:
         params.append(cnpj)
 
     rows = conn.execute(
         f"""
-        SELECT CNPJ_CIA, DT_REFER::VARCHAR, CD_CONTA, VL_CONTA
+        SELECT CNPJ_CIA, DT_REFER::VARCHAR, CD_CONTA, DS_CONTA, VL_CONTA
         FROM (
-            SELECT CNPJ_CIA, DT_REFER, CD_CONTA, VL_CONTA FROM raw_bpa_clean
+            SELECT CNPJ_CIA, DT_REFER, CD_CONTA, DS_CONTA, VL_CONTA 
+            FROM raw_bpa_clean
             WHERE CD_CONTA = ANY(?) {filter_clause}
             UNION ALL
-            SELECT CNPJ_CIA, DT_REFER, CD_CONTA, VL_CONTA FROM raw_bpp_clean
+            SELECT CNPJ_CIA, DT_REFER, CD_CONTA, DS_CONTA, VL_CONTA 
+            FROM raw_bpp_clean
             WHERE CD_CONTA = ANY(?) {filter_clause}
         )
         """,
         params,
     ).fetchall()
 
+    profiles = profiles or {}
+
     result: Components = {}
-    for cnpj_r, dt_r, cd_conta, vl_conta in rows:
-        name = get_component(cd_conta)
+    for cnpj_r, dt_r, cd_conta, _ds_conta, vl_conta in rows:
+        profile_id = profiles.get(cnpj_r, "default")
+        name = get_component(cd_conta, profile_id)
         if name:
             valor = float(vl_conta) if vl_conta is not None else None
-            result.setdefault((cnpj_r, dt_r), {})[name] = valor
+            period = ReportingPeriod(cnpj_r, dt_r)
+            result.setdefault(period, {})[name] = valor
 
     return result

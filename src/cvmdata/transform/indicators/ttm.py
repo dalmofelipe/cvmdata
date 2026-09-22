@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import duckdb
 
-from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
-from cvmdata.transform.indicators.models import Components
+from cvmdata.transform.account_map import ALL_DRE_CODES, get_component
+from cvmdata.transform.dre_tail_map import get_tail_component
+from cvmdata.transform.indicators.models import Components, ReportingPeriod
 
 # Fórmula TTM completa, com fallback gradual, expressa em SQL:
 #   1. Sem YTD atual   -> retorna FY anterior (ou NULL)
@@ -32,7 +33,8 @@ WITH dre_wide AS MATERIALIZED (
         source,
         MAX(CASE WHEN ORDEM_EXERC = 'ÚLTIMO' THEN DT_FIM_EXERC END) AS fy_dt_fim_exerc,
         MAX(CASE WHEN ORDEM_EXERC = 'ÚLTIMO' THEN VL_CONTA END) AS ultimo_val,
-        MAX(CASE WHEN ORDEM_EXERC = 'PENÚLTIMO' THEN VL_CONTA END) AS penultimo_val
+        MAX(CASE WHEN ORDEM_EXERC = 'PENÚLTIMO' THEN VL_CONTA END) AS penultimo_val,
+        MAX(DS_CONTA) AS ds_conta
     FROM raw_dre_clean
     WHERE CD_CONTA = ANY(?) {filter_clause}
     GROUP BY CNPJ_CIA, DT_REFER, CD_CONTA, source
@@ -69,7 +71,8 @@ SELECT
         WHEN fy.ultimo_val  IS NULL THEN current.ultimo_val
         WHEN current.penultimo_val IS NULL THEN fy.ultimo_val
         ELSE current.ultimo_val + (fy.ultimo_val - current.penultimo_val)
-    END AS ttm_valor
+    END AS ttm_valor,
+    COALESCE(current.ds_conta, fy.ds_conta) AS ds_conta
 FROM grid g
 LEFT JOIN dre_wide current
     ON current.CNPJ_CIA = g.CNPJ_CIA
@@ -82,37 +85,44 @@ LEFT JOIN dre_wide fy
 """
 
 
-def _fetch_all_dre_components(
+def fetch_all_dre_components(
     conn: duckdb.DuckDBPyConnection,
     cnpj: str | None = None,
+    profiles: dict[str, str] | None = None,
 ) -> Components:
     """Batch: calcula o TTM de todas as contas DRE em uma única query.
 
-    O join/CASE que resolve o TTM roda inteiro no DuckDB (ver
-    ``_DRE_TTM_QUERY``) — este código só agrupa o resultado por
-    (cnpj, dt_refer) e traduz CD_CONTA -> componente semântico.
+    O JOIN/CASE que resolve o TTM roda inteiro no DuckDB (ver ``_DRE_TTM_QUERY``) 
+    Este código só agrupa o resultado por (cnpj, dt_refer) e traduz 
+    CD_CONTA -> componente semântico.
 
     Returns:
-        ``{(cnpj, dt_refer): {componente_semantico: valor_ttm}}``
+        ``{ReportingPeriod: ComponentValues}`` — componente_semantico: valor_ttm.
     """
-    dre_codes = [code for code in ACCOUNT_MAP if code.startswith("3.")]
     filter_clause = "AND CNPJ_CIA = ?" if cnpj else ""
 
     query = _DRE_TTM_QUERY.format(filter_clause=filter_clause)
 
-    params: list[object] = [dre_codes]
+    params: list[object] = [ALL_DRE_CODES]
     if cnpj:
         params.append(cnpj)
-    params.append(dre_codes)
+    params.append(ALL_DRE_CODES)
 
     rows = conn.execute(query, params).fetchall()
 
+    profiles = profiles or {}
+
     result: Components = {}
-    for cnpj_r, dt_r, cd_conta, ttm_valor in rows:
-        name = get_component(cd_conta)
+    for cnpj_r, dt_r, cd_conta, ttm_valor, ds_conta in rows:
+        profile_id = profiles.get(cnpj_r, "default")
+        name = get_component(cd_conta, profile_id)
+        if name is None and ds_conta is not None:
+            name = get_tail_component(ds_conta, cd_conta)
         if name:
             valor = float(ttm_valor) if ttm_valor is not None else None
-            result.setdefault((cnpj_r, dt_r), {})[name] = valor
+            period = ReportingPeriod(cnpj_r, dt_r)
+            result.setdefault(period, {})[name] = valor
+    
     return result
 
 
@@ -145,5 +155,5 @@ def _get_ttm_value(
     name = get_component(cd_conta)
     if name is None:
         return None
-    components = _fetch_all_dre_components(conn, cnpj)
-    return components.get((cnpj, dt_refer), {}).get(name)
+    components = fetch_all_dre_components(conn, cnpj)
+    return components.get(ReportingPeriod(cnpj, dt_refer), {}).get(name)

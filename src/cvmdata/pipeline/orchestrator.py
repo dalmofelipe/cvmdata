@@ -77,11 +77,11 @@ def run_full(
             # Load financeiro
             step_reports.append(step_load_cvm(conn, effective_years, effective_data_dir))
 
-            # Classificação cadastral
-            step_reports.append(step_classify_info_cad(conn))
-
             # Normalize
             step_reports.append(step_normalize_financial(conn))
+
+            # Classificação cadastral
+            step_reports.append(step_classify_info_cad(conn))
 
             # Indicators
             step_reports.append(step_calculate_indicators(conn, effective_cnpj))

@@ -193,6 +193,63 @@ def cobertura_juros(ebit: float | None, despesas_financeiras: float | None) -> f
     return ebit / despesas_financeiras
 
 
+# ── Tributos e NOPAT ────────────────────────────────────────────────────────
+
+
+def taxa_efetiva_ir(
+    imposto_renda_csll: float | None,
+    resultado_antes_tributos: float | None,
+) -> float | None:
+    """Taxa efetiva de IR/CSLL, na convenção 'taxa positiva reduz o lucro'.
+
+    imposto_renda_csll segue o sinal de resultado da CVM:
+      negativo = despesa de imposto (~72% das linhas observadas em DFP 2025)
+      positivo = benefício/crédito fiscal líquido (~24% das linhas)
+
+    Por isso o sinal é invertido aqui: despesa (negativo) vira taxa positiva
+    (reduz NOPAT abaixo do EBIT); benefício (positivo) vira taxa negativa
+    (eleva NOPAT acima do EBIT) — ambos economicamente corretos e esperados.
+
+    resultado_antes_tributos <= 0 (prejuízo) não tem taxa efetiva com leitura
+    econômica válida — retorna None.
+    """
+    if imposto_renda_csll is None or resultado_antes_tributos is None:
+        return None
+    if resultado_antes_tributos <= 0:
+        return None
+    return -imposto_renda_csll / resultado_antes_tributos
+
+
+def nopat(ebit: float | None, taxa_efetiva: float | None) -> float | None:
+    """NOPAT = EBIT * (1 - taxa_efetiva).
+
+    Pode superar o EBIT quando taxa_efetiva < 0 (empresa com benefício fiscal
+    líquido no período) — comportamento esperado, não é erro de cálculo.
+    """
+    if ebit is None or taxa_efetiva is None:
+        return None
+    return ebit * (1 - taxa_efetiva)
+
+
+def roic(
+    nopat_val: float | None,
+    patrimonio_liquido: float | None,
+    emprestimos_cp: float | None,
+    emprestimos_lp: float | None,
+) -> float | None:
+    """ROIC = NOPAT / Capital Investido x 100, onde
+    Capital Investido = PL + Empréstimos CP + Empréstimos LP."""
+    if any(
+        v is None
+        for v in (nopat_val, patrimonio_liquido, emprestimos_cp, emprestimos_lp)
+    ):
+        return None
+    capital_investido = patrimonio_liquido + emprestimos_cp + emprestimos_lp
+    if capital_investido == 0:
+        return None
+    return nopat_val / capital_investido * 100
+
+
 # ── Orquestrador ─────────────────────────────────────────────────────────────
 
 
@@ -207,6 +264,29 @@ def calc_divida_liquida_pl(comp: dict[str, float | None]) -> float | None:
     return divida_liquida_pl(dl, comp.get("patrimonio_liquido"))
 
 
+def calc_nopat(comp: dict[str, float | None]) -> float | None:
+    """Calcula NOPAT derivando a taxa efetiva de IR a partir do dict."""
+    taxa = taxa_efetiva_ir(
+        comp.get("imposto_renda_csll"),
+        comp.get("resultado_antes_tributos"),
+    )
+    return nopat(comp.get("ebit"), taxa)
+
+
+def calc_roic(comp: dict[str, float | None]) -> float | None:
+    """Calcula ROIC derivando o NOPAT a partir do dict (padrão de divida_liquida_pl)."""
+    np = calc_nopat(comp)
+    return roic(
+        np,
+        comp.get("patrimonio_liquido"),
+        comp.get("emprestimos_cp"),
+        comp.get("emprestimos_lp"),
+    )
+
+
+# ── CALC PLAN ─────────────────────────────────────────────────────────────
+
+
 # (nome do indicador, função, [nomes dos componentes])
 CALC_PLAN: list[tuple[str, object, list[str]]] = [
     ("capital_giro", capital_giro, ["ativo_circulante", "passivo_circulante"]),
@@ -218,7 +298,7 @@ CALC_PLAN: list[tuple[str, object, list[str]]] = [
     ("endividamento_geral", endividamento_geral, 
         ["passivo_circulante", "passivo_nao_circulante", "ativo_total"]),
     ("endividamento_pl", endividamento_pl, 
-            ["passivo_circulante", "passivo_nao_circulante", "patrimonio_liquido"]),
+        ["passivo_circulante", "passivo_nao_circulante", "patrimonio_liquido"]),
     ("giro_ativo", giro_ativo, ["receita_liquida", "ativo_total"]),
     ("margem_bruta", margem_bruta, ["resultado_bruto", "receita_liquida"]),
     ("margem_ebit", margem_ebit, ["ebit", "receita_liquida"]),
@@ -230,6 +310,23 @@ CALC_PLAN: list[tuple[str, object, list[str]]] = [
         ["ativo_circulante","realizavel_longo_prazo", "passivo_circulante", "passivo_nao_circulante"]),
     ("roa", roa, ["lucro_liquido", "ativo_total"]),
     ("roe", roe, ["lucro_liquido", "patrimonio_liquido"]),
+    ("roic", None, []),
 ]
 
+
 EXPECTED_INDICATOR_COUNT = len(CALC_PLAN)
+
+
+# Indicadores inaplicáveis por perfil.
+INDICATOR_POLICY: dict[str, set[str]] = {
+    "banking": {
+        "liquidez_seca",
+        "liquidez_geral",
+        "margem_ebit",
+        "cobertura_juros",
+        "divida_bruta",
+        "divida_liquida",
+        "divida_liquida_pl",
+        "roic",
+    },
+}
