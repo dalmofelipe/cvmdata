@@ -8,7 +8,7 @@ Etapas internas:
   2. Resolver setor único por CNPJ usando apenas SETOR_ATIV
   3. Lookup profile_id via setor_profile_map
   4. Aplicar fallback default para não-mapeados/ambíguos/vazios
-  5. (Se raw_bpa_clean existir) classificar CNPJs totalmente ausentes do
+  5. (Se bpa_clean existir) classificar CNPJs totalmente ausentes do
      cadastro via assinatura estrutural (SIGNATURE_RULES) e persistir em
      company_classification com confidence='medium'
   6. Persistir company_classification (INSERT OR REPLACE)
@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 
 import duckdb
 
+from cvmdata.ingestion.tables import BPA_CLEAN
 from cvmdata.transform.profile import find_profiles_missing_info_cad
 
 logger = logging.getLogger(__name__)
@@ -116,11 +117,11 @@ DO UPDATE SET
     updated_at = excluded.updated_at
 """
 
-# Enriquecimento descritivo de CNPJs sem cadastro, via raw_bpa_clean
+# Enriquecimento descritivo de CNPJs sem cadastro, via bpa_clean
 # (campos descritivos não existem em cad_cia_aberta_raw para esses CNPJs).
-_SQL_STRUCTURAL_ENRICH = """
+_SQL_STRUCTURAL_ENRICH = f"""
 SELECT CNPJ_CIA, ANY_VALUE(CD_CVM) AS cd_cvm, ANY_VALUE(DENOM_CIA) AS denom
-FROM raw_bpa_clean
+FROM {BPA_CLEAN}
 WHERE CNPJ_CIA = ANY(?) AND CD_CVM IS NOT NULL
 GROUP BY CNPJ_CIA
 """
@@ -141,7 +142,7 @@ def _load_structural_descriptors(
     conn: duckdb.DuckDBPyConnection,
     cnpjs: list[str],
 ) -> dict[str, tuple[str | None, str | None]]:
-    """Busca (cd_cvm, denom) em raw_bpa_clean para CNPJs sem cadastro."""
+    """Busca (cd_cvm, denom) em bpa_clean para CNPJs sem cadastro."""
     if not cnpjs:
         return {}
     rows = conn.execute(_SQL_STRUCTURAL_ENRICH, [cnpjs]).fetchall()
@@ -231,7 +232,7 @@ def classify_info_cad(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
         counts[confidence] += 1
         counts["total"] += 1
 
-    # Fase estrutural: CNPJs com demonstrativos em raw_*_clean mas totalmente
+    # Fase estrutural: CNPJs com demonstrativos em bpa_clean mas totalmente
     # ausentes do cadastro (e de company_classification) — ex.: caso Banco Inter.
     profile_map = find_profiles_missing_info_cad(conn)
     if profile_map:

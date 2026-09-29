@@ -18,12 +18,12 @@ def _seeded_signature(
     cd_conta: str = "1.01",
     ds_conta: str = "Caixa e Equivalentes de Caixa",
 ) -> None:
-    """Cria raw_bpa_clean mínimo com uma linha de assinatura (ou genérica)."""
+    """Cria bpa_clean mínimo com uma linha de assinatura (ou genérica)."""
     db.execute(
-        "CREATE TABLE raw_bpa_clean (CNPJ_CIA VARCHAR, CD_CONTA VARCHAR, DS_CONTA VARCHAR)"
+        "CREATE TABLE bpa_clean (CNPJ_CIA VARCHAR, CD_CONTA VARCHAR, DS_CONTA VARCHAR)"
     )
     db.execute(
-        "INSERT INTO raw_bpa_clean VALUES (?, ?, ?)", [cnpj, cd_conta, ds_conta]
+        "INSERT INTO bpa_clean VALUES (?, ?, ?)", [cnpj, cd_conta, ds_conta]
     )
 
 

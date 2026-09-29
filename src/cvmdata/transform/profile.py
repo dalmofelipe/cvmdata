@@ -16,6 +16,8 @@ from dataclasses import dataclass
 
 import duckdb
 
+from cvmdata.ingestion.tables import BPA_CLEAN
+
 
 def _existing_tables(conn: duckdb.DuckDBPyConnection) -> set[str]:
     return {
@@ -52,7 +54,7 @@ def find_profiles_missing_info_cad(
     do cadastro e de ``company_classification``.
     """
     tables = _existing_tables(conn)
-    if "raw_bpa_clean" not in tables:
+    if BPA_CLEAN not in tables:
         return {}
     not_in_info_cad = (
         "AND CNPJ_CIA NOT IN (SELECT CNPJ_CIA FROM cad_cia_aberta_raw)"
@@ -73,7 +75,7 @@ def find_profiles_missing_info_cad(
         rows = conn.execute(
             f"""
             SELECT DISTINCT CNPJ_CIA
-            FROM raw_bpa_clean
+            FROM {BPA_CLEAN}
             WHERE CD_CONTA = ?
               AND lower(strip_accents(trim(DS_CONTA))) = ?
               {not_in_info_cad}

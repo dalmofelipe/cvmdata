@@ -48,7 +48,7 @@ pipeline/orchestrator.py: run_full()
     ├── Step: ingestion/loader.py      (load CSVs → raw_*)
     └── Step: transform/info_cad.py    (classificar setores)
     ├── Step: transform/normalize.py   (raw_* → *_clean)
-    ├── Step: transform/indicators.py  (calcular indicadores)
+    ├── Step: transform/indicators/    (calcular indicadores)
     │
     ▼
 PipelineReport → stdout
