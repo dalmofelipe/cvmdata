@@ -25,7 +25,7 @@ import logging
 
 import duckdb
 
-from cvmdata.ingestion.tables import clean_table_name
+from cvmdata.ingestion.tables import CLEAN_SUFFIX, RAW_PREFIX, clean_table_name
 
 logger = logging.getLogger(__name__)
 
@@ -110,12 +110,12 @@ def normalize_all(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
         Dict ``{raw_table_name: row_count}`` para cada tabela normalizada.
     """
     rows = conn.execute(
-        """
+        f"""
         SELECT table_name
         FROM information_schema.tables
         WHERE table_schema = 'main'
-          AND table_name LIKE 'raw_%'
-          AND table_name NOT LIKE '%_clean'
+          AND table_name LIKE '{RAW_PREFIX}%'
+          AND table_name NOT LIKE '%{CLEAN_SUFFIX}'
         ORDER BY table_name
         """
     ).fetchall()

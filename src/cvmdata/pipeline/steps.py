@@ -6,6 +6,7 @@ import duckdb
 from cvmdata.config import settings
 from cvmdata.ingestion.downloader import download_info_cad, download_source_year
 from cvmdata.ingestion.loader import load_b3_tickers, load_info_cad, load_source_year
+from cvmdata.ingestion.tables import B3_TICKERS
 from cvmdata.pipeline.models import StepReport
 from cvmdata.transform.indicators import calculate_all
 from cvmdata.transform.info_cad import classify_info_cad
@@ -88,7 +89,7 @@ def step_load_b3_tickers(
         message=(f"{loaded_tickers} linhas carregadas em b3_tickers"),
         metrics={
             "rows_loaded": loaded_tickers,
-            "table": "b3_tickers",
+            "table": B3_TICKERS,
         },
         started_at=started,
         finished_at=_now(),

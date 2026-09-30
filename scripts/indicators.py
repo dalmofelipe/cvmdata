@@ -23,6 +23,7 @@ from rich.console import Console
 from rich.table import Table
 
 from cvmdata.config import settings
+from cvmdata.ingestion.tables import B3_TICKERS, COMPANY_CLASSIFICATION, INDICATORS
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ NAME_MIN_LENGTH = 4  # mínimo de caracteres para --name
 
 def _b3_tickers_exists(conn: duckdb.DuckDBPyConnection) -> bool:
     result = conn.execute(
-        "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'b3_tickers'"
+        f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{B3_TICKERS}'"
     ).fetchone()
     return result[0] if result else False
 
@@ -63,11 +64,11 @@ def resolve_companies(
     params: list[str] = []
 
     select_cols = "cc.cnpj_cia, cc.cd_cvm, cc.denom_comerc"
-    from_clause = "FROM company_classification cc"
+    from_clause = f"FROM {COMPANY_CLASSIFICATION} cc"
 
     if b3_exists:
         select_cols += ", bt.ticker_root"
-        from_clause += " LEFT JOIN b3_tickers bt ON CAST(cc.cd_cvm AS INTEGER) = bt.cod_cvm"
+        from_clause += f" LEFT JOIN {B3_TICKERS} bt ON CAST(cc.cd_cvm AS INTEGER) = bt.cod_cvm"
     else:
         select_cols += ", NULL AS ticker_root"
 
@@ -98,9 +99,9 @@ def fetch_indicators(
     cnpj: str,
     year: int | None = None,
 ) -> list[tuple[str, str, float | None]]:
-    query = """
+    query = f"""
         SELECT dt_refer::VARCHAR, indicador, valor
-        FROM indicators
+        FROM {INDICATORS}
         WHERE cnpj_cia = ?
     """
     params: list[str | int] = [cnpj]

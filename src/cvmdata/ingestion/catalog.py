@@ -2,12 +2,19 @@
 
 Cada entrada no CATALOG define como identificar, extrair e carregar
 um tipo de dado dos ZIPs da CVM (ITR/DFP).
+
+O campo ``CvmDataset.table`` é a fonte da verdade do nome da tabela bruta:
+``ingestion.database.init_schema`` e ``ingestion.loader`` leem dele, em vez de
+derivar o nome por formatação. O nome da tabela normalizada correspondente é
+derivado de ``table`` por ``tables.clean_table_name``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, auto
+
+from cvmdata.ingestion.tables import COMPOSICAO_CAPITAL
 
 
 class DatasetType(Enum):
@@ -44,7 +51,7 @@ CATALOG: dict[str, CvmDataset] = {
     ),
     "COMPOSICAO_CAPITAL": CvmDataset(
         pattern="composicao_capital",
-        table="composicao_capital",
+        table=COMPOSICAO_CAPITAL,
         type=DatasetType.DIRECT_INSERT,
     ),
 }

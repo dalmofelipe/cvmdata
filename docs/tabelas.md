@@ -1,7 +1,7 @@
 # Nomenclatura das tabelas
 
 Este documento registra a convenção de nomes das tabelas DuckDB do `cvmdata` e
-o que fazer com bancos criados antes dela. A lista de nomes canônicos vive em
+o que fazer com bancos criados antes dela. Os nomes canônicos vivem em
 `src/cvmdata/ingestion/tables.py` — este doc explica o **porquê**; o código
 importa as constantes de lá.
 
@@ -79,13 +79,29 @@ O único consumidor do banco fora do pipeline no repositório é
 `b3_tickers` — nenhum nome afetado.
 
 
+## Onde cada nome é declarado
+
+| Família | Declaração | Constantes |
+|---|---|---|
+| `raw_*` | `ingestion/catalog.py` — `CvmDataset.table` | — |
+| `*_clean` | derivado em runtime, por `clean_table_name()` | `BPA_CLEAN`, `BPP_CLEAN`, `DRE_CLEAN` |
+| cadastrais e derivadas | `CREATE TABLE` em `ingestion/database.py` | `CAD_CIA_ABERTA_RAW`, `COMPANY_CLASSIFICATION`, `CLASSIFICATION_CURATION_EVENTS`, `SETOR_PROFILE_MAP`, `INDICATORS`, `B3_TICKERS`, `COMPOSICAO_CAPITAL` |
+
+O campo `CvmDataset.table` do catálogo é a fonte da verdade do nome da tabela
+bruta: `init_schema` e o loader leem dele. Antes ele era declarado e nunca
+lido — o nome real vinha de `f"raw_{demo.lower()}"` em dois módulos, o que
+divergiria do catálogo em silêncio.
+
 ## Regras de aplicação
 
-1. Tabela nova entra em `src/cvmdata/ingestion/tables.py` antes de aparecer em
-   qualquer SQL.
-2. SQL referencia a constante, não o literal — exceto nos testes que criam
-   tabelas à mão, onde o literal é proposital: é o que faz o teste falhar se o
-   código divergir.
-3. `tests/unit/test_tables.py` barra a volta dos nomes antigos: ele varre
-   `src/` e `tests/` e falha se encontrar o padrão `raw_*_clean`. Este arquivo é
-   a única exceção permitida fora de `src/` e `tests/`.
+1. SQL e dados estruturados referenciam a constante, nunca o literal.
+2. O literal permanece no **sítio de declaração**: o `CREATE TABLE` em
+   `database.py` e o `CvmDataset.table` do catálogo.
+3. Docstrings e mensagens de log mantêm o nome por extenso — são prosa, não
+   referência.
+4. Em `tests/`, o literal é proposital: um fixture que declara
+   `CREATE TABLE bpa_clean` com a constante passaria mesmo se o código de
+   produção usasse outro nome. O literal **é** a asserção.
+5. `tests/unit/test_tables.py` guarda as três regras acima: barra a volta dos
+   nomes antigos, barra literal em SQL de produção e confere que toda constante
+   tem onde ser declarada. Este arquivo é a única exceção a `src/` e `tests/`.

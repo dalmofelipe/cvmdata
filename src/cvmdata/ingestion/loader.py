@@ -1,6 +1,6 @@
 """Ingestão de CSVs extraídos dos ZIPs CVM para o DuckDB.
 
-O catálogo em core/catalog.py define quais datasets são processados
+O catálogo em ingestion/catalog.py define quais datasets são processados
 e como cada um é carregado (demonstrativo com filtro de contas vs. tabela direta).
 
 Idempotência: rows existentes para (source, year) são deletadas antes de cada INSERT.
@@ -16,6 +16,7 @@ import duckdb
 from cvmdata.ingestion.catalog import CATALOG, DatasetType
 from cvmdata.ingestion.database import init_b3_tickers_schema, init_schema
 from cvmdata.ingestion.encoding import utf8_csv
+from cvmdata.ingestion.tables import B3_TICKERS, CAD_CIA_ABERTA_RAW, COMPOSICAO_CAPITAL
 from cvmdata.transform.account_map import ALL_ACCOUNT_CODES
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,14 @@ def _alt_cols_for(demo: str) -> str:
         raise ValueError(f"Demo desconhecido: {demo!r}")
 
 
+def _table_for_demo(demo: str) -> str:
+    """Nome da tabela bruta de um demonstrativo, conforme o catálogo."""
+    try:
+        return CATALOG[demo.upper()].table
+    except KeyError:
+        raise ValueError(f"Demo desconhecido: {demo!r}") from None
+
+
 def _match_dataset(filename: str) -> tuple[str, DatasetType] | None:
     """Retorna (key, type) se o filename corresponde a algum dataset do catálogo."""
     fname = filename.lower()
@@ -65,7 +74,7 @@ def _build_demo_insert_sql(csv_path: Path, demo: str, source: str, year: int, sc
     Filtra apenas as linhas cujo CD_CONTA está na união dos perfis do
     ``ACCOUNT_MAP`` + códigos explícitos da cauda (``ALL_ACCOUNT_CODES``).
     """
-    table = f"raw_{demo.lower()}"
+    table = _table_for_demo(demo)
     fpath = csv_path.as_posix()
     query = _COLUMNS_SQL_TMPL.format(alt_cols=_alt_cols_for(demo))
 
@@ -89,7 +98,7 @@ def _build_comp_capital_insert_sql(csv_path: Path, source: str, year: int) -> st
     """Monta o SQL de INSERT para composicao_capital (sem filtro de CD_CONTA)."""
     fpath = csv_path.as_posix()
     return f"""
-    INSERT INTO composicao_capital
+    INSERT INTO {COMPOSICAO_CAPITAL}
     SELECT
         CNPJ_CIA::VARCHAR,
         TRY_CAST(DT_REFER AS DATE),
@@ -121,14 +130,16 @@ def _load_composicao_capital_csv(
 
     Idempotente: deleta linhas de (source, year) antes do INSERT.
     """
-    conn.execute("DELETE FROM composicao_capital WHERE source = ? AND year = ?", [source, year])
+    conn.execute(
+        f"DELETE FROM {COMPOSICAO_CAPITAL} WHERE source = ? AND year = ?", [source, year]
+    )
 
     with utf8_csv(csv_path) as safe_path:
         sql = _build_comp_capital_insert_sql(safe_path, source, year)
         conn.execute(sql)
 
     row = conn.execute(
-        "SELECT COUNT(*) FROM composicao_capital WHERE source = ? AND year = ?",
+        f"SELECT COUNT(*) FROM {COMPOSICAO_CAPITAL} WHERE source = ? AND year = ?",
         [source, year]
     ).fetchone()
     count: int = row[0] if row else 0
@@ -145,7 +156,7 @@ def load_csv(
     year: int,
     scope: str = "con",
 ) -> int:
-    """Carrega um CSV de demonstrativo (BPA, BPP, DRE) na tabela raw_{demo}.
+    """Carrega um CSV de demonstrativo (BPA, BPP, DRE) na tabela do catálogo.
 
     Idempotente: deleta linhas de (source, year, scope) antes do INSERT.
 
@@ -156,7 +167,7 @@ def load_csv(
             f"load_csv: escopo '{scope}' não suportado — apenas 'con' (consolidado) é aceito. "
             f"Arquivo: {csv_path.name}"
         )
-    table = f"raw_{demo.lower()}"
+    table = _table_for_demo(demo)
 
     conn.execute(
         f"DELETE FROM {table} WHERE source = ? AND year = ? AND scope = ?",
@@ -262,7 +273,7 @@ def load_info_cad(
         conn.execute("BEGIN")
         try:
             conn.execute(f"""
-                CREATE OR REPLACE TABLE cad_cia_aberta_raw AS
+                CREATE OR REPLACE TABLE {CAD_CIA_ABERTA_RAW} AS
                 SELECT
                     *,
                     current_timestamp AS loaded_at
@@ -273,7 +284,7 @@ def load_info_cad(
                     nullstr  = ''
                 )
             """)
-            row = conn.execute("SELECT COUNT(*) FROM cad_cia_aberta_raw").fetchone()
+            row = conn.execute(f"SELECT COUNT(*) FROM {CAD_CIA_ABERTA_RAW}").fetchone()
             inserted = row[0] if row else 0
 
             conn.execute("COMMIT")
@@ -296,7 +307,7 @@ def _build_b3_tickers_sql(json_glob: Path) -> str:
     """Monta o SQL de carga da tabela de tickers a partir dos JSONs do B3."""
     fpath = json_glob.as_posix()
     return f"""
-    CREATE OR REPLACE TABLE b3_tickers AS
+    CREATE OR REPLACE TABLE {B3_TICKERS} AS
     SELECT
         TRY_CAST(r.codeCVM AS INTEGER) AS cod_cvm,
         r.issuingCompany::VARCHAR      AS ticker_root,
@@ -341,7 +352,7 @@ def load_b3_tickers(
     sql = _build_b3_tickers_sql(tickers_dir / glob_pattern)
     conn.execute(sql)
 
-    row = conn.execute("SELECT COUNT(*) FROM b3_tickers").fetchone()
+    row = conn.execute(f"SELECT COUNT(*) FROM {B3_TICKERS}").fetchone()
     count: int = row[0] if row else 0
 
     logger.info("Tickers B3 carregados: %d linhas em b3_tickers", count)

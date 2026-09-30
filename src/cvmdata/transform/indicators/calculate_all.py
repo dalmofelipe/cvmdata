@@ -7,7 +7,7 @@ import logging
 import duckdb
 
 from cvmdata.ingestion.database import init_indicators_schema
-from cvmdata.ingestion.tables import BALANCE_CLEAN_TABLES, CLEAN_TABLES, DRE_CLEAN
+from cvmdata.ingestion.tables import BALANCE_CLEAN_TABLES, CLEAN_TABLES, DRE_CLEAN, INDICATORS
 from cvmdata.transform.indicators.balance import fetch_all_balance_components
 from cvmdata.transform.indicators.indicator_rows import IndicatorRow, build_indicator_rows
 from cvmdata.transform.indicators.ttm import Components, fetch_all_dre_components
@@ -71,15 +71,15 @@ def _persist_rows(conn: duckdb.DuckDBPyConnection, cnpj: str | None, rows: list[
     conn.execute("BEGIN")
     try:
         if cnpj:
-            conn.execute("DELETE FROM indicators WHERE cnpj_cia = ?", [cnpj])
+            conn.execute(f"DELETE FROM {INDICATORS} WHERE cnpj_cia = ?", [cnpj])
         else:
-            conn.execute("TRUNCATE indicators")
+            conn.execute(f"TRUNCATE {INDICATORS}")
 
         if rows:
             cols = IndicatorRow.to_sql_columns(rows)
             conn.execute(
-                """
-                INSERT INTO indicators (cnpj_cia, dt_refer, indicador, valor)
+                f"""
+                INSERT INTO {INDICATORS} (cnpj_cia, dt_refer, indicador, valor)
                 SELECT
                     unnest(?) AS cnpj_cia, unnest(?)::DATE AS dt_refer,
                     unnest(?) AS indicador, unnest(?) AS valor

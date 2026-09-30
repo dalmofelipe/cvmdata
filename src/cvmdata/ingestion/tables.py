@@ -1,10 +1,17 @@
 """Nomes canônicos das tabelas DuckDB — fonte única de verdade.
 
-Convenção de nomenclatura:
+Famílias:
 
-- ``raw_*`` — dados brutos como publicados pela CVM (``raw_bpa``, ``raw_bpp``, ``raw_dre``);
-- ``*_clean`` — dados normalizados/deduplicados, derivados de ``raw_*`` 
-    (``bpa_clean``, ``bpp_clean``, ``dre_clean``);
+- ``raw_*`` — dados brutos como publicados pela CVM. Declarados em
+  ``catalog.CATALOG`` (campo ``CvmDataset.table``), não aqui;
+- ``*_clean`` — dados normalizados/deduplicados, derivados de ``raw_*`` por
+  :func:`clean_table_name`;
+- cadastrais e derivadas — declaradas abaixo.
+
+Regra de uso: SQL e dados estruturados referenciam estas constantes. O literal
+fica no sítio de declaração — o ``CREATE TABLE`` em ``ingestion/database.py`` e
+o catálogo. Docstrings e mensagens de log mantêm o nome por extenso, porque são
+prosa, não referência.
 """
 
 from __future__ import annotations
@@ -19,6 +26,19 @@ DRE_CLEAN = "dre_clean"
 CLEAN_TABLES: tuple[str, ...] = (BPA_CLEAN, BPP_CLEAN, DRE_CLEAN)
 BALANCE_CLEAN_TABLES: frozenset[str] = frozenset({BPA_CLEAN, BPP_CLEAN})
 
+# ── Cadastrais ────────────────────────────────────────────────────────────────
+
+CAD_CIA_ABERTA_RAW = "cad_cia_aberta_raw"
+COMPANY_CLASSIFICATION = "company_classification"
+CLASSIFICATION_CURATION_EVENTS = "classification_curation_events"
+SETOR_PROFILE_MAP = "setor_profile_map"
+
+# ── Derivadas ─────────────────────────────────────────────────────────────────
+
+INDICATORS = "indicators"
+B3_TICKERS = "b3_tickers"
+COMPOSICAO_CAPITAL = "composicao_capital"
+
 
 def clean_table_name(raw_table: str) -> str:
     """Deriva o nome da tabela normalizada a partir do nome da tabela bruta.
@@ -31,8 +51,8 @@ def clean_table_name(raw_table: str) -> str:
 
     Raises:
         ValueError: Se ``raw_table`` não tiver o prefixo ``raw_``, ou se o
-            prefixo não deixar nenhum nome de demonstrativo. 
-            Sem essa validação, ``"bpa"`` produziria ``"bpa_clean"`` 
+            prefixo não deixar nenhum nome de demonstrativo.
+            Sem essa validação, ``"bpa"`` produziria ``"bpa_clean"``
             silenciosamente e ``"raw_"`` produziria ``"_clean"``.
     """
     name = raw_table.removeprefix(RAW_PREFIX)
