@@ -8,6 +8,7 @@ import pytest
 
 from cvmdata.ingestion.database import init_schema
 from cvmdata.ingestion.loader import load_csv
+from cvmdata.ingestion.tables import CLEAN_TABLES
 from cvmdata.transform.calc_plan import EXPECTED_INDICATOR_COUNT
 from cvmdata.transform.indicators import _get_ttm_value, calculate_all
 from cvmdata.transform.indicators.balance import fetch_all_balance_components
@@ -238,7 +239,7 @@ def test_inter_end_to_end_structural_banking(db, tmp_path: Path):
     from cvmdata.transform.calc_plan import taxa_efetiva_ir
     from cvmdata.transform.indicators.calculate_all import _collect_components
 
-    tables = {"raw_bpa_clean", "raw_bpp_clean", "raw_dre_clean"}
+    tables = set(CLEAN_TABLES)
     comps = _collect_components(db, "00.000.000/0001-91", tables)
     assert len(comps) == 1
     comp = next(iter(comps.values()))
@@ -274,7 +275,7 @@ def test_collect_components_computes_lucro_liquido_final(tmp_path: Path, db):
     )
     normalize_table("raw_dre", db)
 
-    tables = {"raw_bpa_clean", "raw_bpp_clean", "raw_dre_clean"}
+    tables = set(CLEAN_TABLES)
     comps = _collect_components(db, None, tables)
 
     keys = {k for k, comp in comps.items() if comp.get("resultado_liquido_continuadas")}

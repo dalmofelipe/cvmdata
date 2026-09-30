@@ -297,10 +297,10 @@ def test_classify_returns_correct_counts(db):
 
 
 def _seed_structural_bpa(db, cnpj: str) -> None:
-    """Cria raw_bpa_clean mínimo com assinatura bancária para o CNPJ."""
+    """Cria bpa_clean mínimo com assinatura bancária para o CNPJ."""
     db.execute(
         """
-        CREATE TABLE raw_bpa_clean (
+        CREATE TABLE bpa_clean (
             CNPJ_CIA VARCHAR, CD_CONTA VARCHAR, DS_CONTA VARCHAR,
             CD_CVM VARCHAR, DENOM_CIA VARCHAR
         )
@@ -308,7 +308,7 @@ def _seed_structural_bpa(db, cnpj: str) -> None:
     )
     db.execute(
         """
-        INSERT INTO raw_bpa_clean VALUES (?, '1.01', 'Caixa e Equivalentes de Caixa',
+        INSERT INTO bpa_clean VALUES (?, '1.01', 'Caixa e Equivalentes de Caixa',
                                           '00123', 'BANCO INTER TESTE')
         """,
         [cnpj],
@@ -316,7 +316,7 @@ def _seed_structural_bpa(db, cnpj: str) -> None:
 
 
 def test_classify_structural_persists_when_absent_from_cadastro(db):
-    """CNPJ com demonstrativos (raw_bpa_clean) mas ausente do cadastro → classificado
+    """CNPJ com demonstrativos (bpa_clean) mas ausente do cadastro → classificado
     estruturalmente como banking/medium, persistido em company_classification."""
     setup_classify_schema(db)
     # Media cadastral existente, mas sem o CNPJ de interesse
@@ -335,7 +335,7 @@ def test_classify_structural_persists_when_absent_from_cadastro(db):
     ).fetchone()
     assert row[0] == "banking"
     assert row[1] == STRUCTURAL_CONFIDENCE
-    # Enriquecimento descritivo a partir de raw_bpa_clean
+    # Enriquecimento descritivo a partir de bpa_clean
     assert row[2] == "00123"
     assert row[3] == "BANCO INTER TESTE"
     assert row[4] == "BANCO INTER TESTE"

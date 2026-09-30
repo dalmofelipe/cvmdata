@@ -7,14 +7,13 @@ import logging
 import duckdb
 
 from cvmdata.ingestion.database import init_indicators_schema
+from cvmdata.ingestion.tables import BALANCE_CLEAN_TABLES, CLEAN_TABLES, DRE_CLEAN, INDICATORS
 from cvmdata.transform.indicators.balance import fetch_all_balance_components
 from cvmdata.transform.indicators.indicator_rows import IndicatorRow, build_indicator_rows
 from cvmdata.transform.indicators.ttm import Components, fetch_all_dre_components
 from cvmdata.transform.profile import fetch_profiles_from_classification
 
 logger = logging.getLogger(__name__)
-
-_CLEAN_TABLES = ("raw_bpa_clean", "raw_bpp_clean", "raw_dre_clean")
 
 
 def _tables_available(conn: duckdb.DuckDBPyConnection) -> set[str]:
@@ -23,7 +22,7 @@ def _tables_available(conn: duckdb.DuckDBPyConnection) -> set[str]:
         """
         SELECT table_name FROM information_schema.tables
         WHERE table_schema = 'main' AND table_name IN ({})
-        """.format(", ".join(f"'{t}'" for t in _CLEAN_TABLES))
+        """.format(", ".join(f"'{t}'" for t in CLEAN_TABLES))
     ).fetchall()
     return {r[0] for r in rows}
 
@@ -36,7 +35,7 @@ def _collect_components(
     """Funde componentes de balanço (BPA/BPP) e DRE (TTM) por ``ReportingPeriod``"""
     profiles = fetch_profiles_from_classification(conn, cnpj)
 
-    has_balance = bool(tables & {"raw_bpa_clean", "raw_bpp_clean"})
+    has_balance = bool(tables & BALANCE_CLEAN_TABLES)
 
     balance_comps = (
         fetch_all_balance_components(conn, cnpj, profiles)
@@ -45,7 +44,7 @@ def _collect_components(
     )
     dre_comps = (
         fetch_all_dre_components(conn, cnpj, profiles)
-        if "raw_dre_clean" in tables
+        if DRE_CLEAN in tables
         else {}
     )
 
@@ -72,15 +71,15 @@ def _persist_rows(conn: duckdb.DuckDBPyConnection, cnpj: str | None, rows: list[
     conn.execute("BEGIN")
     try:
         if cnpj:
-            conn.execute("DELETE FROM indicators WHERE cnpj_cia = ?", [cnpj])
+            conn.execute(f"DELETE FROM {INDICATORS} WHERE cnpj_cia = ?", [cnpj])
         else:
-            conn.execute("TRUNCATE indicators")
+            conn.execute(f"TRUNCATE {INDICATORS}")
 
         if rows:
             cols = IndicatorRow.to_sql_columns(rows)
             conn.execute(
-                """
-                INSERT INTO indicators (cnpj_cia, dt_refer, indicador, valor)
+                f"""
+                INSERT INTO {INDICATORS} (cnpj_cia, dt_refer, indicador, valor)
                 SELECT
                     unnest(?) AS cnpj_cia, unnest(?)::DATE AS dt_refer,
                     unnest(?) AS indicador, unnest(?) AS valor

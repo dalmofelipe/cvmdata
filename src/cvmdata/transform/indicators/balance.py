@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import duckdb
 
+from cvmdata.ingestion.tables import BPA_CLEAN, BPP_CLEAN
 from cvmdata.transform.account_map import ALL_BALANCE_CODES, get_component
 from cvmdata.transform.indicators.models import Components, ReportingPeriod
 
@@ -15,7 +16,7 @@ def fetch_all_balance_components(
 ) -> Components:
     """Batch query para BPA/BPP: retorna ``{ReportingPeriod: ComponentValues}``.
 
-    Executa uma única query (UNION ALL de raw_bpa_clean + raw_bpp_clean) para
+    Executa uma única query (UNION ALL de bpa_clean + bpp_clean) para
     todas as empresas/períodos. Contas de balanço não usam TTM — o valor é o
     saldo pontual do período.
 
@@ -38,11 +39,11 @@ def fetch_all_balance_components(
         SELECT CNPJ_CIA, DT_REFER::VARCHAR, CD_CONTA, DS_CONTA, VL_CONTA
         FROM (
             SELECT CNPJ_CIA, DT_REFER, CD_CONTA, DS_CONTA, VL_CONTA 
-            FROM raw_bpa_clean
+            FROM {BPA_CLEAN}
             WHERE CD_CONTA = ANY(?) {filter_clause}
             UNION ALL
-            SELECT CNPJ_CIA, DT_REFER, CD_CONTA, DS_CONTA, VL_CONTA 
-            FROM raw_bpp_clean
+            SELECT CNPJ_CIA, DT_REFER, CD_CONTA, DS_CONTA, VL_CONTA
+            FROM {BPP_CLEAN}
             WHERE CD_CONTA = ANY(?) {filter_clause}
         )
         """,

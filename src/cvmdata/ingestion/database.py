@@ -6,8 +6,9 @@ Tabelas raw_* (BPA, BPP, DRE):
 
 Tabelas diretas (composicao_capital): criadas com DDL própria.
 
-O catálogo central (CATALOG) em core/catalog.py define quais datasets
-são processados; este módulo só fornece as DDLs e init.
+O catálogo central (CATALOG) em ingestion/catalog.py define quais datasets
+são processados e o nome da tabela de cada um; este módulo só fornece as DDLs
+e init.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from pathlib import Path
 import duckdb
 
 from cvmdata.ingestion.catalog import BALANCE_DEMOS, CATALOG, FLOW_DEMOS, DatasetType
+from cvmdata.ingestion.tables import SETOR_PROFILE_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +62,9 @@ def get_connection(
 # ── DDL ──────────────────────────────────────────────────────────────────
 
 # Grupo A: BPA, BPP — 14 colunas (sem DT_INI_EXERC)
+# O nome da tabela vem de CvmDataset.table, no catálogo.
 _BALANCE_DDL = """\
-CREATE TABLE IF NOT EXISTS raw_{demo} (
+CREATE TABLE IF NOT EXISTS {table} (
     CNPJ_CIA      VARCHAR,
     DT_REFER      DATE,
     VERSAO        SMALLINT,
@@ -83,7 +86,7 @@ CREATE TABLE IF NOT EXISTS raw_{demo} (
 
 # Grupo B: DRE — 15 colunas (com DT_INI_EXERC)
 _FLOW_DDL = """\
-CREATE TABLE IF NOT EXISTS raw_{demo} (
+CREATE TABLE IF NOT EXISTS {table} (
     CNPJ_CIA      VARCHAR,
     DT_REFER      DATE,
     VERSAO        SMALLINT,
@@ -136,9 +139,9 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
     """Cria tabelas do catálogo se ainda não existirem (idempotente)."""
     for key, ds in CATALOG.items():
         if key in BALANCE_DEMOS:
-            conn.execute(_BALANCE_DDL.format(demo=key.lower()))
+            conn.execute(_BALANCE_DDL.format(table=ds.table))
         elif key in FLOW_DEMOS:
-            conn.execute(_FLOW_DDL.format(demo=key.lower()))
+            conn.execute(_FLOW_DDL.format(table=ds.table))
         elif ds.type == DatasetType.DIRECT_INSERT:
             conn.execute(_COMPOSICAO_CAPITAL_DDL)
 
@@ -226,8 +229,8 @@ def init_info_cad_schema(conn: duckdb.DuckDBPyConnection) -> None:
     # Semear setor_profile_map apenas onde não existe (INSERT OR IGNORE)
     for setor, profile in _SETOR_PROFILE_SEED:
         conn.execute(
-            """
-            INSERT OR IGNORE INTO setor_profile_map (setor_ativ, profile_id, active, updated_at)
+            f"""
+            INSERT OR IGNORE INTO {SETOR_PROFILE_MAP} (setor_ativ, profile_id, active, updated_at)
             VALUES (?, ?, TRUE, current_timestamp)
             """,
             [setor, profile],

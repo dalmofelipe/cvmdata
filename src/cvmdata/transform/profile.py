@@ -16,6 +16,8 @@ from dataclasses import dataclass
 
 import duckdb
 
+from cvmdata.ingestion.tables import BPA_CLEAN, CAD_CIA_ABERTA_RAW, COMPANY_CLASSIFICATION
+
 
 def _existing_tables(conn: duckdb.DuckDBPyConnection) -> set[str]:
     return {
@@ -52,16 +54,16 @@ def find_profiles_missing_info_cad(
     do cadastro e de ``company_classification``.
     """
     tables = _existing_tables(conn)
-    if "raw_bpa_clean" not in tables:
+    if BPA_CLEAN not in tables:
         return {}
     not_in_info_cad = (
-        "AND CNPJ_CIA NOT IN (SELECT CNPJ_CIA FROM cad_cia_aberta_raw)"
-        if "cad_cia_aberta_raw" in tables
+        f"AND CNPJ_CIA NOT IN (SELECT CNPJ_CIA FROM {CAD_CIA_ABERTA_RAW})"
+        if CAD_CIA_ABERTA_RAW in tables
         else ""
     )
     not_in_classification = (
-        "AND CNPJ_CIA NOT IN (SELECT cnpj_cia FROM company_classification)"
-        if "company_classification" in tables
+        f"AND CNPJ_CIA NOT IN (SELECT cnpj_cia FROM {COMPANY_CLASSIFICATION})"
+        if COMPANY_CLASSIFICATION in tables
         else ""
     )
     filter_clause = "AND CNPJ_CIA = ?" if cnpj else ""
@@ -73,7 +75,7 @@ def find_profiles_missing_info_cad(
         rows = conn.execute(
             f"""
             SELECT DISTINCT CNPJ_CIA
-            FROM raw_bpa_clean
+            FROM {BPA_CLEAN}
             WHERE CD_CONTA = ?
               AND lower(strip_accents(trim(DS_CONTA))) = ?
               {not_in_info_cad}
@@ -103,9 +105,9 @@ def fetch_profiles_from_classification(
     profiles: dict[str, str] = {}
 
     tables = _existing_tables(conn)
-    if "company_classification" in tables:
+    if COMPANY_CLASSIFICATION in tables:
         rows = conn.execute(
-            "SELECT cnpj_cia, profile_id FROM company_classification"
+            f"SELECT cnpj_cia, profile_id FROM {COMPANY_CLASSIFICATION}"
         ).fetchall()
         profiles = {cnpj_cia: profile_id for cnpj_cia, profile_id in rows}
 

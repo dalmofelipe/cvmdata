@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import duckdb
 
+from cvmdata.ingestion.tables import DRE_CLEAN
 from cvmdata.transform.account_map import ALL_DRE_CODES, get_component
 from cvmdata.transform.dre_tail_map import get_tail_component
 from cvmdata.transform.indicators.models import Components, ReportingPeriod
@@ -24,7 +25,7 @@ from cvmdata.transform.indicators.models import Components, ReportingPeriod
 #   2. Sem FY anterior -> retorna YTD atual (proxy parcial)
 #   3. Sem PENÚLTIMO   -> retorna FY anterior (proxy sem ajuste)
 #   4. Todos presentes -> YTD_atual + (FY_anterior - PENÚLTIMO)
-_DRE_TTM_QUERY = """
+_DRE_TTM_QUERY = f"""
 WITH dre_wide AS MATERIALIZED (
     SELECT
         CNPJ_CIA,
@@ -35,8 +36,8 @@ WITH dre_wide AS MATERIALIZED (
         MAX(CASE WHEN ORDEM_EXERC = 'ÚLTIMO' THEN VL_CONTA END) AS ultimo_val,
         MAX(CASE WHEN ORDEM_EXERC = 'PENÚLTIMO' THEN VL_CONTA END) AS penultimo_val,
         MAX(DS_CONTA) AS ds_conta
-    FROM raw_dre_clean
-    WHERE CD_CONTA = ANY(?) {filter_clause}
+    FROM {DRE_CLEAN}
+    WHERE CD_CONTA = ANY(?) {{filter_clause}}
     GROUP BY CNPJ_CIA, DT_REFER, CD_CONTA, source
 ),
 periods AS (
@@ -144,7 +145,7 @@ def _get_ttm_value(
     ``_fetch_all_dre_components`` diretamente.
 
     Args:
-        conn:     Conexão DuckDB com ``raw_dre_clean`` já populado.
+        conn:     Conexão DuckDB com ``dre_clean`` já populado.
         cnpj:     CNPJ da empresa (ex: ``"33.000.167/0001-01"``).
         dt_refer: Data de referência do período (ex: ``"2024-09-30"``).
         cd_conta: Código da conta CVM (ex: ``"3.01"``).

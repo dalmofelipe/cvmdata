@@ -6,6 +6,7 @@ import duckdb
 import pytest
 
 from cvmdata.ingestion.database import init_schema
+from cvmdata.ingestion.tables import CLEAN_SUFFIX, RAW_PREFIX, clean_table_name
 from cvmdata.transform.normalize import normalize_all, normalize_table
 
 pytestmark = pytest.mark.integration
@@ -51,7 +52,7 @@ def test_normalize_dedup_keeps_latest_versao(db: duckdb.DuckDBPyConnection) -> N
     count = normalize_table("raw_bpa", db)
 
     assert count == 1
-    row = db.execute("SELECT VERSAO, VL_CONTA FROM raw_bpa_clean").fetchone()
+    row = db.execute("SELECT VERSAO, VL_CONTA FROM bpa_clean").fetchone()
     assert row[0] == 2
     assert float(row[1]) == pytest.approx(2000.0)
 
@@ -78,7 +79,7 @@ def test_normalize_removes_penultimo(db: duckdb.DuckDBPyConnection) -> None:
 
     normalize_table("raw_bpa", db)
 
-    remaining = db.execute("SELECT ORDEM_EXERC FROM raw_bpa_clean").fetchall()
+    remaining = db.execute("SELECT ORDEM_EXERC FROM bpa_clean").fetchall()
     assert len(remaining) == 1
     assert remaining[0][0] == "ÚLTIMO"
 
@@ -92,7 +93,7 @@ def test_normalize_no_penultimo_in_clean(db: duckdb.DuckDBPyConnection) -> None:
     normalize_table("raw_bpa", db)
 
     count_bad = db.execute(
-        "SELECT COUNT(*) FROM raw_bpa_clean WHERE ORDEM_EXERC != 'ÚLTIMO'"
+        "SELECT COUNT(*) FROM bpa_clean WHERE ORDEM_EXERC != 'ÚLTIMO'"
     ).fetchone()[0]
     assert count_bad == 0
 
@@ -108,7 +109,7 @@ def test_normalize_dt_refer_is_date(db: duckdb.DuckDBPyConnection) -> None:
         """
         SELECT data_type
         FROM information_schema.columns
-        WHERE table_name = 'raw_bpa_clean'
+        WHERE table_name = 'bpa_clean'
           AND column_name = 'DT_REFER'
         """
     ).fetchone()[0]
@@ -126,7 +127,7 @@ def test_normalize_vl_conta_is_decimal(db: duckdb.DuckDBPyConnection) -> None:
         """
         SELECT data_type
         FROM information_schema.columns
-        WHERE table_name = 'raw_bpa_clean'
+        WHERE table_name = 'bpa_clean'
           AND column_name = 'VL_CONTA'
         """
     ).fetchone()[0]
@@ -140,7 +141,7 @@ def test_normalize_cd_cvm_stripped_of_leading_zeros(db: duckdb.DuckDBPyConnectio
 
     normalize_table("raw_bpa", db)
 
-    cd_cvm_val = db.execute("SELECT CD_CVM FROM raw_bpa_clean").fetchone()[0]
+    cd_cvm_val = db.execute("SELECT CD_CVM FROM bpa_clean").fetchone()[0]
     assert cd_cvm_val == 1023
 
 
@@ -151,7 +152,7 @@ def test_normalize_cd_cvm_non_numeric_becomes_null(db: duckdb.DuckDBPyConnection
 
     normalize_table("raw_bpa", db)
 
-    cd_cvm_val = db.execute("SELECT CD_CVM FROM raw_bpa_clean").fetchone()[0]
+    cd_cvm_val = db.execute("SELECT CD_CVM FROM bpa_clean").fetchone()[0]
     assert cd_cvm_val is None
 
 
@@ -164,7 +165,7 @@ def test_normalize_idempotent(db: duckdb.DuckDBPyConnection) -> None:
     normalize_table("raw_bpa", db)
     normalize_table("raw_bpa", db)
 
-    count = db.execute("SELECT COUNT(*) FROM raw_bpa_clean").fetchone()[0]
+    count = db.execute("SELECT COUNT(*) FROM bpa_clean").fetchone()[0]
     assert count == 1
 
 
@@ -177,7 +178,7 @@ def test_normalize_empty_table(db: duckdb.DuckDBPyConnection) -> None:
     assert count == 0
     # A tabela clean deve existir mesmo vazia
     exists = db.execute(
-        "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'raw_bpa_clean'"
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'bpa_clean'"
     ).fetchone()[0]
     assert exists == 1
 
@@ -212,6 +213,48 @@ def test_normalize_all_keys_match_raw_tables(db: duckdb.DuckDBPyConnection) -> N
 
     # init_schema cria raw_bpa, raw_bpp, raw_dre
     assert set(results.keys()) == {"raw_bpa", "raw_bpp", "raw_dre"}
+
+
+def test_normalize_all_creates_the_three_clean_tables(db: duckdb.DuckDBPyConnection) -> None:
+    """BPA, BPP e DRE geram exatamente bpa_clean, bpp_clean e dre_clean."""
+    init_schema(db)
+    _insert_bpa(db)
+
+    normalize_all(db)
+
+    tables = {
+        r[0]
+        for r in db.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+        ).fetchall()
+    }
+    assert {"bpa_clean", "bpp_clean", "dre_clean"} <= tables
+    assert clean_table_name("raw_bpa") == "bpa_clean"
+
+
+def test_normalize_ignores_pre_rename_clean_tables(db: duckdb.DuckDBPyConnection) -> None:
+    """Bancos criados antes da padronização não são renomeados — são ignorados.
+
+    Não há migração: as tabelas legadas ficam órfãs e inertes. O que importa é
+    que ``normalize_all`` as ignore (não as trate como fonte nem as renomeie) e
+    que só o fluxo atual produza dados. Ver ``docs/tabelas.md``.
+    """
+    init_schema(db)
+    _insert_bpa(db)
+
+    legacy = f"{RAW_PREFIX}bpa{CLEAN_SUFFIX}"
+    db.execute(f"CREATE TABLE {legacy} (VL_CONTA DOUBLE)")
+    db.execute(f"INSERT INTO {legacy} VALUES (999.0)")
+
+    results = normalize_all(db)
+
+    # Só a tabela raw_ é normalizada; a legada não entra no resultado.
+    assert set(results.keys()) == {"raw_bpa", "raw_bpp", "raw_dre"}
+    # A legada segue intacta e não foi lida como fonte.
+    assert db.execute(f"SELECT VL_CONTA FROM {legacy}").fetchall() == [(999.0,)]
+    assert float(
+        db.execute("SELECT VL_CONTA FROM bpa_clean WHERE CD_CONTA = '1.01'").fetchone()[0]
+    ) == pytest.approx(1000.0)
 
 
 # ── Helpers DRE ──────────────────────────────────────────────────────────────
@@ -265,7 +308,7 @@ def test_normalize_dre_retains_ytd(db: duckdb.DuckDBPyConnection) -> None:
 
     YTD tem DT_INI_EXERC mais antigo (2024-01-01) e vale 369M.
     Trimestral tem DT_INI_EXERC mais recente (2024-07-01) e vale 129M.
-    Após normalização, raw_dre_clean deve ter apenas a linha com VL_CONTA=369.
+    Após normalização, dre_clean deve ter apenas a linha com VL_CONTA=369.
     """
     init_schema(db)
     # Linha YTD (DT_INI mais antigo — deve vencer)
@@ -276,13 +319,13 @@ def test_normalize_dre_retains_ytd(db: duckdb.DuckDBPyConnection) -> None:
     count = normalize_table("raw_dre", db)
 
     assert count == 1
-    row = db.execute("SELECT VL_CONTA FROM raw_dre_clean WHERE ORDEM_EXERC = 'ÚLTIMO'").fetchone()
+    row = db.execute("SELECT VL_CONTA FROM dre_clean WHERE ORDEM_EXERC = 'ÚLTIMO'").fetchone()
     assert row is not None
     assert float(row[0]) == pytest.approx(369.561)
 
 
 def test_normalize_dre_preserves_penultimo(db: duckdb.DuckDBPyConnection) -> None:
-    """T007 — PENÚLTIMO deve estar presente em raw_dre_clean após normalização DRE."""
+    """T007 — PENÚLTIMO deve estar presente em dre_clean após normalização DRE."""
     init_schema(db)
     _insert_dre(db, ordem_exerc="ÚLTIMO", vl_conta=369.561, dt_ini_exerc="2024-01-01")
     _insert_dre(db, ordem_exerc="PENÚLTIMO", vl_conta=377.736, dt_ini_exerc="2023-01-01")
@@ -290,7 +333,7 @@ def test_normalize_dre_preserves_penultimo(db: duckdb.DuckDBPyConnection) -> Non
     count = normalize_table("raw_dre", db)
 
     assert count == 2
-    ordens = {r[0] for r in db.execute("SELECT DISTINCT ORDEM_EXERC FROM raw_dre_clean").fetchall()}
+    ordens = {r[0] for r in db.execute("SELECT DISTINCT ORDEM_EXERC FROM dre_clean").fetchall()}
     assert "ÚLTIMO" in ordens
     assert "PENÚLTIMO" in ordens
 
@@ -305,7 +348,7 @@ def test_normalize_dre_non_january_fiscal_year(db: duckdb.DuckDBPyConnection) ->
 
     normalize_table("raw_dre", db)
 
-    row = db.execute("SELECT VL_CONTA FROM raw_dre_clean WHERE ORDEM_EXERC = 'ÚLTIMO'").fetchone()
+    row = db.execute("SELECT VL_CONTA FROM dre_clean WHERE ORDEM_EXERC = 'ÚLTIMO'").fetchone()
     assert row is not None
     assert float(row[0]) == pytest.approx(200.0)
 
@@ -318,10 +361,10 @@ def test_normalize_balance_still_filters_penultimo(db: duckdb.DuckDBPyConnection
 
     normalize_table("raw_bpa", db)
 
-    count = db.execute("SELECT COUNT(*) FROM raw_bpa_clean").fetchone()[0]
+    count = db.execute("SELECT COUNT(*) FROM bpa_clean").fetchone()[0]
     assert count == 1
 
-    ordem = db.execute("SELECT ORDEM_EXERC FROM raw_bpa_clean").fetchone()[0]
+    ordem = db.execute("SELECT ORDEM_EXERC FROM bpa_clean").fetchone()[0]
     assert ordem == "ÚLTIMO"
 
 
@@ -340,5 +383,5 @@ def test_normalize_dre_q1_single_line(db: duckdb.DuckDBPyConnection) -> None:
     count = normalize_table("raw_dre", db)
 
     assert count == 1
-    row = db.execute("SELECT VL_CONTA FROM raw_dre_clean").fetchone()
+    row = db.execute("SELECT VL_CONTA FROM dre_clean").fetchone()
     assert float(row[0]) == pytest.approx(90.0)

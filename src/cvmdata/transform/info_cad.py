@@ -8,7 +8,7 @@ Etapas internas:
   2. Resolver setor único por CNPJ usando apenas SETOR_ATIV
   3. Lookup profile_id via setor_profile_map
   4. Aplicar fallback default para não-mapeados/ambíguos/vazios
-  5. (Se raw_bpa_clean existir) classificar CNPJs totalmente ausentes do
+  5. (Se bpa_clean existir) classificar CNPJs totalmente ausentes do
      cadastro via assinatura estrutural (SIGNATURE_RULES) e persistir em
      company_classification com confidence='medium'
   6. Persistir company_classification (INSERT OR REPLACE)
@@ -23,6 +23,13 @@ from datetime import datetime, timezone
 
 import duckdb
 
+from cvmdata.ingestion.tables import (
+    BPA_CLEAN,
+    CAD_CIA_ABERTA_RAW,
+    CLASSIFICATION_CURATION_EVENTS,
+    COMPANY_CLASSIFICATION,
+    SETOR_PROFILE_MAP,
+)
 from cvmdata.transform.profile import find_profiles_missing_info_cad
 
 logger = logging.getLogger(__name__)
@@ -46,7 +53,7 @@ STRUCTURAL_RULE = "structural_heuristic:1.01_caixa_direto:"
 # Lê todas as linhas ATIVO do bruto, escolhendo campos descritivos
 # pela linha mais recente (DT_INI_SIT DESC, CD_CVM ASC, DENOM_SOCIAL ASC).
 # Retorna (cnpj_cia, cd_cvm, denom_social, denom_comerc, setor_ativ, n_setores_distintos)
-_SQL_ACTIVE_CLASSIFICATION = """
+_SQL_ACTIVE_CLASSIFICATION = f"""
 WITH ranked AS (
     SELECT
         CNPJ_CIA                    AS cnpj_cia,
@@ -61,7 +68,7 @@ WITH ranked AS (
                 CD_CVM ASC,
                 DENOM_SOCIAL ASC
         ) AS rn
-    FROM cad_cia_aberta_raw
+    FROM {CAD_CIA_ABERTA_RAW}
     WHERE SIT = 'ATIVO'
 ),
 sectors AS (
@@ -70,7 +77,7 @@ sectors AS (
         COUNT(DISTINCT SETOR_ATIV) AS n_setores_distintos,
         MAX(CASE WHEN SETOR_ATIV IS NOT NULL AND TRIM(SETOR_ATIV) != '' THEN SETOR_ATIV END) 
             AS setor_unico
-    FROM cad_cia_aberta_raw
+    FROM {CAD_CIA_ABERTA_RAW}
     WHERE SIT = 'ATIVO'
     GROUP BY CNPJ_CIA
 )
@@ -88,17 +95,17 @@ WHERE r.rn = 1
 """
 
 # Busca profile_id para um setor_ativ na tabela de governança
-_SQL_PROFILE_LOOKUP = """
+_SQL_PROFILE_LOOKUP = f"""
 SELECT profile_id
-FROM setor_profile_map
+FROM {SETOR_PROFILE_MAP}
 WHERE setor_ativ = ?
     AND active = TRUE
 LIMIT 1
 """
 
 # Upsert em company_classification (INSERT OR REPLACE)
-_SQL_UPSERT_CLASSIFICATION = """
-INSERT OR REPLACE INTO company_classification(
+_SQL_UPSERT_CLASSIFICATION = f"""
+INSERT OR REPLACE INTO {COMPANY_CLASSIFICATION}(
     cnpj_cia, cd_cvm, denom_social, denom_comerc, setor_ativ, profile_id, confidence, 
     rule_applied, updated_at
 )
@@ -107,8 +114,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 
 # Upsert idempotente em classification_curation_events
 # Usa ON CONFLICT para atualizar details/updated_at sem duplicar
-_SQL_UPSERT_CURATION_EVENT = """
-INSERT INTO classification_curation_events(cnpj_cia, event_type, details, created_at, updated_at)
+_SQL_UPSERT_CURATION_EVENT = f"""
+INSERT INTO {CLASSIFICATION_CURATION_EVENTS}(cnpj_cia, event_type, details, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?)
 ON CONFLICT (cnpj_cia, event_type)
 DO UPDATE SET
@@ -116,11 +123,11 @@ DO UPDATE SET
     updated_at = excluded.updated_at
 """
 
-# Enriquecimento descritivo de CNPJs sem cadastro, via raw_bpa_clean
+# Enriquecimento descritivo de CNPJs sem cadastro, via bpa_clean
 # (campos descritivos não existem em cad_cia_aberta_raw para esses CNPJs).
-_SQL_STRUCTURAL_ENRICH = """
+_SQL_STRUCTURAL_ENRICH = f"""
 SELECT CNPJ_CIA, ANY_VALUE(CD_CVM) AS cd_cvm, ANY_VALUE(DENOM_CIA) AS denom
-FROM raw_bpa_clean
+FROM {BPA_CLEAN}
 WHERE CNPJ_CIA = ANY(?) AND CD_CVM IS NOT NULL
 GROUP BY CNPJ_CIA
 """
@@ -132,7 +139,7 @@ GROUP BY CNPJ_CIA
 def _load_profile_map(conn: duckdb.DuckDBPyConnection) -> dict[str, str]:
     """Carrega mapa setor_ativ -> profile_id ativo em memória."""
     rows = conn.execute(
-        "SELECT setor_ativ, profile_id FROM setor_profile_map WHERE active = TRUE"
+        f"SELECT setor_ativ, profile_id FROM {SETOR_PROFILE_MAP} WHERE active = TRUE"
     ).fetchall()
     return {row[0]: row[1] for row in rows}
 
@@ -141,7 +148,7 @@ def _load_structural_descriptors(
     conn: duckdb.DuckDBPyConnection,
     cnpjs: list[str],
 ) -> dict[str, tuple[str | None, str | None]]:
-    """Busca (cd_cvm, denom) em raw_bpa_clean para CNPJs sem cadastro."""
+    """Busca (cd_cvm, denom) em bpa_clean para CNPJs sem cadastro."""
     if not cnpjs:
         return {}
     rows = conn.execute(_SQL_STRUCTURAL_ENRICH, [cnpjs]).fetchall()
@@ -163,8 +170,10 @@ def classify_info_cad(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
             "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
         ).fetchall()
     }
-    if "cad_cia_aberta_raw" not in tables:
-        raise RuntimeError("Tabela cad_cia_aberta_raw não encontrada — rode 'load-cad' primeiro")
+    if CAD_CIA_ABERTA_RAW not in tables:
+        raise RuntimeError(
+            f"Tabela {CAD_CIA_ABERTA_RAW} não encontrada — rode 'load-cad' primeiro"
+        )
 
     # Carregar mapa de perfis em memória (evita query por CNPJ)
     profile_map = _load_profile_map(conn)
@@ -231,7 +240,7 @@ def classify_info_cad(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
         counts[confidence] += 1
         counts["total"] += 1
 
-    # Fase estrutural: CNPJs com demonstrativos em raw_*_clean mas totalmente
+    # Fase estrutural: CNPJs com demonstrativos em bpa_clean mas totalmente
     # ausentes do cadastro (e de company_classification) — ex.: caso Banco Inter.
     profile_map = find_profiles_missing_info_cad(conn)
     if profile_map:

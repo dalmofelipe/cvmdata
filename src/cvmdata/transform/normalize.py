@@ -1,6 +1,9 @@
 """Normalização e deduplicação das tabelas raw_*.
 
-Cria tabelas {table}_clean com:
+Cria a tabela normalizada de cada demonstrativo: 
+— ``raw_bpa`` → ``bpa_clean``,
+— ``raw_bpp`` → ``bpp_clean``, 
+— ``raw_dre`` → ``dre_clean`` — com:
   - Deduplicação via ROW_NUMBER particionado por
     (CNPJ_CIA, DT_REFER, CD_CONTA, ORDEM_EXERC):
     - BPA/BPP: ORDER BY VERSAO DESC — filtro ORDEM_EXERC = 'ÚLTIMO' descarta
@@ -21,6 +24,8 @@ from __future__ import annotations
 import logging
 
 import duckdb
+
+from cvmdata.ingestion.tables import CLEAN_SUFFIX, RAW_PREFIX, clean_table_name
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +72,7 @@ WHERE rn = 1
 
 
 def normalize_table(table: str, conn: duckdb.DuckDBPyConnection) -> int:
-    """Cria ou substitui `{table}_clean` com dados deduplicados e tipados.
+    """Cria ou substitui a tabela normalizada de ``table`` com dados deduplicados e tipados.
 
     Seleciona o template SQL adequado conforme o tipo de demonstrativo:
     - DRE (``table.endswith('dre')``): usa ``_NORMALIZE_FLOW_SQL`` que preserva
@@ -80,8 +85,11 @@ def normalize_table(table: str, conn: duckdb.DuckDBPyConnection) -> int:
 
     Returns:
         Número de linhas gravadas na tabela limpa.
+
+    Raises:
+        ValueError: Se ``table`` não tiver o prefixo ``raw_``.
     """
-    clean = f"{table}_clean"
+    clean = clean_table_name(table)
     sql = _NORMALIZE_FLOW_SQL if table.endswith("dre") else _NORMALIZE_BALANCE_SQL
     conn.execute(sql.format(table=table, clean=clean))
 
@@ -99,15 +107,15 @@ def normalize_all(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
     funciona independentemente dos anos ou demonstrativos já carregados.
 
     Returns:
-        Dict ``{table_name: row_count}`` para cada tabela normalizada.
+        Dict ``{raw_table_name: row_count}`` para cada tabela normalizada.
     """
     rows = conn.execute(
-        """
+        f"""
         SELECT table_name
         FROM information_schema.tables
         WHERE table_schema = 'main'
-          AND table_name LIKE 'raw_%'
-          AND table_name NOT LIKE '%_clean'
+          AND table_name LIKE '{RAW_PREFIX}%'
+          AND table_name NOT LIKE '%{CLEAN_SUFFIX}'
         ORDER BY table_name
         """
     ).fetchall()
