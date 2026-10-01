@@ -12,7 +12,7 @@ importa as constantes de lá.
 |---|---|---|---|
 | Brutas | `raw_*` | `raw_bpa` | Dados como publicados pela CVM, sem nenhum tratamento. |
 | Normalizadas | `*_clean` | `bpa_clean` | Resultado do `normalize`: deduplicado, tipado e convertido para Reais. |
-| Cadastrais | — | `cad_cia_aberta_raw` | Cadastro CVM e sua curadoria. |
+| Cadastrais | — | `cad_cia_aberta_raw` | Cadastro CVM e o perfil resolvido por empresa. |
 | Derivadas | — | `indicators` | Saídas calculadas e dados de apoio. |
 
 O prefixo `raw_` é **reservado ao dado bruto**. Uma tabela normalizada que
@@ -40,9 +40,12 @@ tabelas limpas chamavam-se `raw_bpa_clean`, `raw_bpp_clean` e `raw_dre_clean`.
 | Tabela | Papel |
 |---|---|
 | `cad_cia_aberta_raw` | Cadastro bruto da CVM — único `raw_` que não é demonstrativo. |
-| `company_classification` | Perfil resolvido por CNPJ. |
-| `classification_curation_events` | Trilha de curadoria da classificação. |
-| `setor_profile_map` | Setor → perfil. |
+| `company_classification` | Perfil resolvido por CNPJ, com `rule_applied` explicando a decisão. |
+| `setor_profile_map` | Setor → perfil. **Nasce vazia**: é o ponto de override manual, não uma fonte de classificação. |
+
+A classificação é estrutural (assinatura de layout nas tabelas `*_clean`), não
+setorial. Ver [banking_profile.md](banking_profile.md) para a assinatura e
+[setor_profile.md](setor_profile.md) para a precedência.
 
 ### Derivadas
 | Tabela | Papel |
@@ -78,6 +81,27 @@ O único consumidor do banco fora do pipeline no repositório é
 `scripts/indicators.py`, e ele lê apenas `indicators`, `company_classification` e
 `b3_tickers` — nenhum nome afetado.
 
+## Bancos com classificação anterior
+
+As tabelas `*_clean` não precisam de migração (são `CREATE OR REPLACE`), mas as
+cadastrais sim: `CREATE TABLE IF NOT EXISTS` não altera tabela existente. A
+classificação estrutural mudou três coisas, e `init_info_cad_schema` reconcilia
+as três, idempotentemente, em toda execução:
+
+1. `company_classification` perde a coluna `confidence` — o perfil passou a ser
+   asserção estrutural (os dois layouts concordam), não inferência
+   probabilística, e `classify_info_cad` faz `INSERT` por lista explícita de
+   colunas: sem o `ALTER`, o `INSERT` falharia em banco não migrado.
+2. As linhas de `setor_profile_map` que o seed antigo criou (`Bancos`,
+   `Arrendamento Mercantil`, `Intermediacao Financeira` → `banking`) são
+   apagadas. **Só elas** — overrides manuais em outros setores permanecem.
+3. `classification_curation_events` é descartada; ela registrava as curation
+   events da versão anterior do classificador.
+
+Não é preciso remover o banco por causa disso, e a reconciliação não roda
+`DROP` em `bpa_clean`/`bpp_clean`/`dre_clean`: a reclassificação é feita por
+`classify_info_cad`, que reconstrói `company_classification` em transação.
+
 
 ## Onde cada nome é declarado
 
@@ -85,7 +109,7 @@ O único consumidor do banco fora do pipeline no repositório é
 |---|---|---|
 | `raw_*` | `ingestion/catalog.py` — `CvmDataset.table` | — |
 | `*_clean` | derivado em runtime, por `clean_table_name()` | `BPA_CLEAN`, `BPP_CLEAN`, `DRE_CLEAN` |
-| cadastrais e derivadas | `CREATE TABLE` em `ingestion/database.py` | `CAD_CIA_ABERTA_RAW`, `COMPANY_CLASSIFICATION`, `CLASSIFICATION_CURATION_EVENTS`, `SETOR_PROFILE_MAP`, `INDICATORS`, `B3_TICKERS`, `COMPOSICAO_CAPITAL` |
+| cadastrais e derivadas | `CREATE TABLE` em `ingestion/schema.py` | `TB_CAD_CIA_ABERTA_RAW`, `TB_COMPANY_CLASSIFICATION`, `TB_SETOR_PROFILE_MAP`, `TB_INDICATORS`, `TB_B3_TICKERS`, `TB_COMPOSICAO_CAPITAL` |
 
 O campo `CvmDataset.table` do catálogo é a fonte da verdade do nome da tabela
 bruta: `init_schema` e o loader leem dele. Antes ele era declarado e nunca
@@ -96,7 +120,7 @@ divergiria do catálogo em silêncio.
 
 1. SQL e dados estruturados referenciam a constante, nunca o literal.
 2. O literal permanece no **sítio de declaração**: o `CREATE TABLE` em
-   `database.py` e o `CvmDataset.table` do catálogo.
+   `schema.py` e o `CvmDataset.table` do catálogo.
 3. Docstrings e mensagens de log mantêm o nome por extenso — são prosa, não
    referência.
 4. Em `tests/`, o literal é proposital: um fixture que declara

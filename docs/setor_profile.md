@@ -1,79 +1,88 @@
-# Setor Profile
+# Perfil de Empresa
 
 ## Objetivo
-Definir uma arquitetura de perfis setoriais para calcular indicadores de forma correta por tipo de empresa (ex.: industrial, bancos) sem quebrar performance do pipeline em lote.
+Calcular indicadores com a semântica contábil correta por tipo de empresa
+(`default`, `banking`) sem quebrar o pipeline em lote.
 
-## Problema atual
-- Um unico `ACCOUNT_MAP` e aplicado a todas as empresas.
-- Empresas financeiras usam contas CVM diferentes.
-- Resultado: indicadores nulos ou semanticamente incorretos em alguns setores.
+Este documento descreve o que está implementado. A análise que deu origem à
+assinatura estrutural está em [banking_profile.md](banking_profile.md).
 
-## Principios
-- Perfil por empresa deve ser deterministico e auditavel.
-- Regras devem ser extensivas sem alterar o core a cada novo setor.
-- Fallback seguro para `default`.
-- Performance em batch deve ser preservada.
+## Problema
+Um `ACCOUNT_MAP` único, orientado a perfil industrial, aplicado a todas as
+empresas. Instituições financeiras reportam estrutura diferente, o que gerava
+indicadores nulos (ou errados) em bancos e holdings de crédito.
 
-## Entidades conceituais
-### 1) Profile
-Conjunto de regras de calculo para um grupo de empresas.
+## Como o perfil é decidido: layout, não setor
 
-Campos recomendados:
-- `profile_id` (ex.: `default`, `banking`)
-- `description`
-- `account_map` (componente -> lista ordenada de contas CVM)
-- `indicator_policy` (enabled, disabled, alt_formula)
-- `version`
+O perfil vem da **assinatura estrutural** do demonstrativo, lida das tabelas
+`*_clean`. O setor de atividade é apenas override manual.
 
-### 2) Resolver de profile
-Funcao que determina `profile_id` por empresa, usando dados cadastrais e regras.
+O motivo é que `SETOR_ATIV` não é discriminador de layout:
+- bancos reportam o layout padrão (`1.01` = "Ativo Circulante"), não o financeiro;
+- holdings de crédito (`Intermediacao Financeira`, `Securitizacao`) podem
+  reportar o layout financeiro;
+- holdings de participações em bancos (Celgpar, SUL 116, Oliveira Trust) usam o
+  layout financeiro em poucos períodos e o padrão nos mais recentes.
 
-## Cadeia de decisao (precedencia)
-1. Regra explicita por CNPJ (override)
-2. Regra por `SETOR_ATIV`
-3. Regra por `CD_CVM` (se aplicavel)
-4. Heuristica por denominacao social/comercial
-5. Fallback para `default`
+Classificar por setor erra nos dois sentidos. A assinatura lê o que a empresa de
+fato reportou.
 
-## confidence e rule_version
-- `confidence`: confianca da classificacao (`high`, `medium`, `low`).
-- `rule_version`: versao do ruleset usado na decisao.
+### Assinatura `banking`
+Exige os dois sinais, no mesmo conjunto de períodos:
+- `bpa_clean`: `CD_CONTA = '1.01'` com `DS_CONTA` normalizado = "Caixa e Equivalentes de Caixa";
+- `bpp_clean`: `CD_CONTA = '2.01'` com `DS_CONTA` começando com "Passivos Financeiros".
 
-Esses campos sao obrigatorios para governanca e auditoria.
+Ambos juntos é o que separa banco de não-banco: a empresa que concorda nas duas
+pontas usa o layout financeiro.
 
-## Estrategia de calculo por profile
-### Industrial (padrao)
-- Mantem formulas e contas atuais.
+`rule_applied` registra a decisão, ex.: `structure:banking:bpa.1.01+bpp.2.01`.
 
-### Banking
-- Usa contas e semantica proprias para bancos.
-- Alguns indicadores industriais podem ser desativados ou substituidos.
+## Cadeia de decisão (precedência)
+1. **Assinatura estrutural** — `bpa.1.01` + `bpp.2.01` concordando → `banking`.
+2. **Override setorial explícito** — linha em `setor_profile_map` com
+   `active = TRUE`.
+3. **Fallback** → `default`.
 
-## Politica de indicadores
-Cada profile deve declarar para cada indicador:
-- `enabled`: calcula normalmente
-- `disabled`: nao aplicavel ao perfil
-- `alt_formula`: formula alternativa para o setor
+A assinatura vence o override: se a estrutura prova o layout financeiro, ela
+decide (e vice-versa).
 
-## Performance (requisito nao funcional)
-- Resolver profile em batch por CNPJ antes do loop de calculo.
-- Evitar query por linha (empresa/periodo).
-- Preservar abordagem de duas queries grandes + calculo em memoria.
+## Entidades
+- **Perfil** (`profile_id`): um dicionário em `transform/account_map.py`
+  mapeando `CD_CONTA` → componente semântico, mais a política de cálculo
+  (indicadores não aplicáveis ficam `None` por falta de componente honesto).
+- **Classificação** (`company_classification`): uma linha por CNPJ, com
+  `profile_id`, `rule_applied`, descritores e `updated_at`.
+- **Override setorial** (`setor_profile_map`): `SETOR_ATIV` → `profile_id`,
+  `active`. **Nasce vazia** e não é populada pelo pipeline.
 
-## Observacao importante sobre ingestao
-Se o loader filtrar estritamente contas por mapa industrial, contas setoriais novas podem ser descartadas antes da analise.
+Não há `confidence` nem `rule_version`: o perfil é uma asserção determinística
+sobre o layout, não uma inferência probabilística. A auditabilidade vem de
+`rule_applied`, que diz *por quê*, não de *quão confiante*.
 
-Diretriz:
-- prever modo de descoberta/evolucao de perfil para nao perder contas relevantes.
+## Resolução do patrimônio líquido (por rótulo)
 
-## Roadmap sugerido
-1. Fase 1: `default` + `banking`.
-2. Fase 2: `insurance` e `securitization` (se necessario por evidencia).
-3. Fase 3: consolidar matriz de aplicabilidade de indicadores por setor.
+O PL não tem posição estável, e o código não o identifica:
 
-## Criterios de aceite (planejamento)
-- Perfil aplicado por CNPJ de forma deterministica.
-- Resultado do calculo registra `profile_id` utilizado.
-- Empresas industriais sem regressao.
-- Bancos com reducao de nulos indevidos e semantica melhorada.
-- Inclusao de novos perfis sem refatoracao ampla do core.
+| `CD_CONTA` | Layout padrão | Layout financeiro (2026) |
+|---|---|---|
+| `2.03` | Patrimônio Líquido | Provisões (19 bancos) / Passivos ao Custo Amortizado (16) |
+| `2.07` | — | Patrimônio Líquido Consolidado |
+| `2.08` | — | Patrimônio Líquido Consolidado (Itaú) |
+
+Mapear qualquer código fixaria o PL errado (Provisões virando patrimônio,
+passivos virando patrimônio). Por isso `resolve_pl` (`transform/text_map.py`)
+resolve o PL pelo **rótulo normalizado** (`startswith("patrimonio liquido")`),
+que é estável entre e dentro dos perfis. O mesmo vale para a cauda do DRE
+(`resolve_tail`).
+
+`2.03`, `2.07` e `2.08` entram no fetch (`BPP_PL_CODES`) mesmo fora do
+`ACCOUNT_MAP`, só para o resolvedor textual poder ver o rótulo.
+
+## Batch
+- Perfil resolvido uma vez, em SQL, por CNPJ (`fetch_profiles`).
+- Sem query por linha/período no laço de cálculo.
+
+## Onde o perfil é persistido
+`classify_info_cad` (step do pipeline, pós-normalize) reconstrói
+`company_classification` em transação, sobre o universo das `*_clean`, sem
+filtrar `SIT` (empresa cancelada que reporta continuava sendo classificada).

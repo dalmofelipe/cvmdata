@@ -8,8 +8,18 @@ Famílias:
   :func:`clean_table_name`;
 - cadastrais e derivadas — declaradas abaixo.
 
+Convenções deste módulo:
+
+- prefixo ``TB_`` marca **nome de tabela**. As constantes sem prefixo
+  (``RAW_PREFIX``, ``CLEAN_SUFFIX``, ``CLEAN_TABLES``, ``BALANCE_CLEAN_TABLES``)
+  são regras de nomenclatura ou recortes, não tabelas — é essa distinção que
+  mantém legível um SQL interpolado como ``FROM {TB_BPP_CLEAN}``;
+- um derivado cujo nome se descritor vem de outro locus: as ``*_clean`` são
+  criadas em runtime por :func:`clean_table_name`, as demais por ``CREATE TABLE``
+  em ``ingestion/schema.py``.
+
 Regra de uso: SQL e dados estruturados referenciam estas constantes. O literal
-fica no sítio de declaração — o ``CREATE TABLE`` em ``ingestion/database.py`` e
+fica no sítio de declaração — o ``CREATE TABLE`` em ``ingestion/schema.py`` e
 o catálogo. Docstrings e mensagens de log mantêm o nome por extenso, porque são
 prosa, não referência.
 """
@@ -19,25 +29,24 @@ from __future__ import annotations
 RAW_PREFIX = "raw_"
 CLEAN_SUFFIX = "_clean"
 
-BPA_CLEAN = "bpa_clean"
-BPP_CLEAN = "bpp_clean"
-DRE_CLEAN = "dre_clean"
+TB_BPA_CLEAN = "bpa_clean"
+TB_BPP_CLEAN = "bpp_clean"
+TB_DRE_CLEAN = "dre_clean"
 
-CLEAN_TABLES: tuple[str, ...] = (BPA_CLEAN, BPP_CLEAN, DRE_CLEAN)
-BALANCE_CLEAN_TABLES: frozenset[str] = frozenset({BPA_CLEAN, BPP_CLEAN})
+CLEAN_TABLES: tuple[str, ...] = (TB_BPA_CLEAN, TB_BPP_CLEAN, TB_DRE_CLEAN)
+BALANCE_CLEAN_TABLES: frozenset[str] = frozenset({TB_BPA_CLEAN, TB_BPP_CLEAN})
 
 # ── Cadastrais ────────────────────────────────────────────────────────────────
 
-CAD_CIA_ABERTA_RAW = "cad_cia_aberta_raw"
-COMPANY_CLASSIFICATION = "company_classification"
-CLASSIFICATION_CURATION_EVENTS = "classification_curation_events"
-SETOR_PROFILE_MAP = "setor_profile_map"
+TB_CAD_CIA_ABERTA_RAW = "cad_cia_aberta_raw"
+TB_COMPANY_CLASSIFICATION = "company_classification"
+TB_SETOR_PROFILE_MAP = "setor_profile_map"
 
 # ── Derivadas ─────────────────────────────────────────────────────────────────
 
-INDICATORS = "indicators"
-B3_TICKERS = "b3_tickers"
-COMPOSICAO_CAPITAL = "composicao_capital"
+TB_INDICATORS = "indicators"
+TB_B3_TICKERS = "b3_tickers"
+TB_COMPOSICAO_CAPITAL = "composicao_capital"
 
 
 def clean_table_name(raw_table: str) -> str:

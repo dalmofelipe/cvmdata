@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
 
-from cvmdata.ingestion.tables import COMPOSICAO_CAPITAL
+from cvmdata.ingestion.tables import TB_COMPOSICAO_CAPITAL
 
 
 class DatasetType(Enum):
@@ -49,9 +49,9 @@ CATALOG: dict[str, CvmDataset] = {
         type=DatasetType.STATEMENT,
         has_con_scope=True,
     ),
-    "COMPOSICAO_CAPITAL": CvmDataset(
+    "TB_COMPOSICAO_CAPITAL": CvmDataset(
         pattern="composicao_capital",
-        table=COMPOSICAO_CAPITAL,
+        table=TB_COMPOSICAO_CAPITAL,
         type=DatasetType.DIRECT_INSERT,
     ),
 }

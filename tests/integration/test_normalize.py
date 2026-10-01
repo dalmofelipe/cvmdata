@@ -5,7 +5,7 @@ from __future__ import annotations
 import duckdb
 import pytest
 
-from cvmdata.ingestion.database import init_schema
+from cvmdata.ingestion.schema import init_schema
 from cvmdata.ingestion.tables import CLEAN_SUFFIX, RAW_PREFIX, clean_table_name
 from cvmdata.transform.normalize import normalize_all, normalize_table
 

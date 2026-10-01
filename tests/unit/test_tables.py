@@ -18,20 +18,19 @@ import pytest
 
 from cvmdata.ingestion.catalog import CATALOG
 from cvmdata.ingestion.tables import (
-    B3_TICKERS,
     BALANCE_CLEAN_TABLES,
-    BPA_CLEAN,
-    BPP_CLEAN,
-    CAD_CIA_ABERTA_RAW,
-    CLASSIFICATION_CURATION_EVENTS,
     CLEAN_SUFFIX,
     CLEAN_TABLES,
-    COMPANY_CLASSIFICATION,
-    COMPOSICAO_CAPITAL,
-    DRE_CLEAN,
-    INDICATORS,
     RAW_PREFIX,
-    SETOR_PROFILE_MAP,
+    TB_B3_TICKERS,
+    TB_BPA_CLEAN,
+    TB_BPP_CLEAN,
+    TB_CAD_CIA_ABERTA_RAW,
+    TB_COMPANY_CLASSIFICATION,
+    TB_COMPOSICAO_CAPITAL,
+    TB_DRE_CLEAN,
+    TB_INDICATORS,
+    TB_SETOR_PROFILE_MAP,
     clean_table_name,
 )
 
@@ -48,21 +47,20 @@ LEGACY_DOC_ALLOWLIST = {"docs/tabelas.md"}
 # Nomes que passam a ser centralizados. O literal só é aceito no CREATE TABLE
 # que o declara — em qualquer outro SQL, o nome vem da constante.
 CENTRALIZED_NAMES = (
-    CAD_CIA_ABERTA_RAW,
-    COMPANY_CLASSIFICATION,
-    CLASSIFICATION_CURATION_EVENTS,
-    SETOR_PROFILE_MAP,
-    INDICATORS,
-    B3_TICKERS,
-    COMPOSICAO_CAPITAL,
-    BPA_CLEAN,
-    BPP_CLEAN,
-    DRE_CLEAN,
+    TB_CAD_CIA_ABERTA_RAW,
+    TB_COMPANY_CLASSIFICATION,
+    TB_SETOR_PROFILE_MAP,
+    TB_INDICATORS,
+    TB_B3_TICKERS,
+    TB_COMPOSICAO_CAPITAL,
+    TB_BPA_CLEAN,
+    TB_BPP_CLEAN,
+    TB_DRE_CLEAN,
 )
 
-# database.py é o único módulo de produção com DDL (CREATE TABLE) — lá o literal
+# schema.py é o único módulo de produção com DDL (CREATE TABLE) — lá o literal
 # é o sítio de declaração e deve permanecer.
-DECLARATION_SITES = {"src/cvmdata/ingestion/database.py"}
+DECLARATION_SITES = {"src/cvmdata/ingestion/schema.py"}
 
 # O guard vale para código de produção. Em tests/ o literal é proposital: um
 # fixture que declara `CREATE TABLE bpa_clean` com a constante passaria mesmo
@@ -103,9 +101,9 @@ def _scan(relative_dir: str) -> list[tuple[str, int, str]]:
 @pytest.mark.parametrize(
     ("raw_table", "expected"),
     [
-        ("raw_bpa", BPA_CLEAN),
-        ("raw_bpp", BPP_CLEAN),
-        ("raw_dre", DRE_CLEAN),
+        ("raw_bpa", TB_BPA_CLEAN),
+        ("raw_bpp", TB_BPP_CLEAN),
+        ("raw_dre", TB_DRE_CLEAN),
     ],
 )
 def test_clean_table_name_derives_expected_names(raw_table: str, expected: str) -> None:
@@ -131,8 +129,8 @@ def test_clean_table_name_rejects_prefix_without_statement() -> None:
 def test_clean_tables_hold_the_canonical_names() -> None:
     """Contrato de nomenclatura — se isto mudar, a padronização foi desfeita."""
     assert CLEAN_TABLES == ("bpa_clean", "bpp_clean", "dre_clean")
-    assert BALANCE_CLEAN_TABLES == frozenset({BPA_CLEAN, BPP_CLEAN})
-    assert BPA_CLEAN != BPP_CLEAN and BPA_CLEAN != DRE_CLEAN
+    assert BALANCE_CLEAN_TABLES == frozenset({TB_BPA_CLEAN, TB_BPP_CLEAN})
+    assert TB_BPA_CLEAN != TB_BPP_CLEAN and TB_BPA_CLEAN != TB_DRE_CLEAN
 
 
 def test_clean_tables_are_not_prefixed_as_raw() -> None:
@@ -146,7 +144,7 @@ def test_catalog_is_the_source_of_truth_for_raw_table_names() -> None:
     """O DDL de init_schema deve criar exatamente as tabelas do catálogo."""
     import duckdb
 
-    from cvmdata.ingestion.database import init_schema
+    from cvmdata.ingestion.schema import init_schema
 
     conn = duckdb.connect(":memory:")
     try:
@@ -241,13 +239,13 @@ def test_every_centralized_name_has_a_declaration() -> None:
 
     Duas vias de declaração distintas:
 
-    - as tabelas de esquema têm ``CREATE TABLE`` em ``ingestion/database.py``;
+    - as tabelas de esquema têm ``CREATE TABLE`` em ``ingestion/schema.py``;
     - as ``*_clean`` são derivadas em runtime, por ``CREATE OR REPLACE TABLE``
       nos templates de ``transform/normalize.py``.
 
     Fecha o buraco de centralizar um nome que nenhuma DDL cria.
     """
-    ddl = (ROOT / "src/cvmdata/ingestion/database.py").read_text(encoding="utf-8")
+    ddl = (ROOT / "src/cvmdata/ingestion/schema.py").read_text(encoding="utf-8")
     declared = {
         m.group(1)
         for m in re.finditer(

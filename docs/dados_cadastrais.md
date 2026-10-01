@@ -7,11 +7,19 @@ Este documento define como os dados cadastrais da CVM devem entrar no projeto pa
 - Meta (descricao das colunas): `https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/META/meta_cad_cia_aberta.txt`
 - CSV cadastral: `https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv`
 
-## Por que isso e necessario
-- O projeto hoje calcula indicadores com um mapa de contas unico, adequado para empresas industriais.
-- Instituicoes financeiras (ex.: bancos) usam estrutura contabil diferente.
-- Sem cadastro, a classificacao setorial fica fragil e dificulta evolucao para novos perfis.
-- Com cadastro historico no DuckDB, a decisao de perfil fica auditavel e reprodutivel.
+## Como o cadastro e usado hoje
+O perfil **nao** vem do setor. A classificacao e estrutural: a assinatura de
+layout e lida das tabelas `*_clean`, e o cadastro entra como Cadastro (descritores
+e `setor_ativ`) e como override manual em `setor_profile_map`. Ver
+[setor_profile.md](setor_profile.md).
+
+O que o cadastro ainda garante:
+- uma empresa ausente do cadastro e mesmo assim classificada, pela assinatura;
+- uma empresa com `SIT = 'CANCELADA'` que ainda reporta demonstrativo continua
+  classificada (o filtro `SIT` foi removido: e um estado regulatorio, nao um fato
+  sobre quem reportou);
+- `denom_social` como fallback de `denom_comerc`, que vem vazio para as
+  estrangeiras (Nu, Inter & Co, XP, ...).
 
 ## Escopo de armazenamento
 Armazenar o arquivo completo no DuckDB, sem filtrar apenas empresas ativas.
@@ -37,8 +45,11 @@ Motivo:
   - `denom_comerc`
   - `setor_ativ`
   - `profile_id`
-  - `confidence` (opcional; usar quando houver ambiguidade)
+  - `rule_applied` (ex.: `structure:banking:bpa.1.01+bpp.2.01`)
   - `updated_at`
+
+Nao ha `confidence`: o perfil e uma asercao estrutural, e `rule_applied` diz
+qual regra decidiu.
 
 ### 3 - Tabela de regras
 `setor_profile_map`
@@ -49,14 +60,12 @@ Motivo:
   - `active`
 
 ## Regras de elegibilidade temporal
-Para armazenamento historico em `cad_cia_aberta_raw`, manter todas as linhas (ativas e canceladas).
+Manter todas as linhas em `cad_cia_aberta_raw`, ativas e canceladas.
 
-Para classificacao setorial operacional (definir `profile_id` para calculo), usar somente linhas com:
-- `SIT = 'ATIVO'`
-
-Observacao:
-- O historico continua preservado na camada bruta.
-- A camada de classificacao de setor foca no estado atual ativo da empresa.
+Para a classificacao (definir `profile_id` para calculo), **nao** ha filtro por
+`SIT`: a elegibilidade vem da existencia de demonstrativo nas `*_clean`. Uma
+empresa cancelada que ainda reporta continua classificada — o oposto do filtro
+anterior, que descartava bancos que reportam.
 
 ## Consideracoes de ingestao
 - Encoding esperado: `latin-1`.
@@ -75,8 +84,8 @@ Validacao no `data/cad_cia_aberta.csv` (linhas ativas):
 
 Diretriz adotada para setor:
 - manter 100% das linhas na camada bruta.
-- para classificacao setorial, filtrar `SIT = 'ATIVO'`.
-- entre linhas ativas duplicadas do mesmo CNPJ, considerar apenas `SETOR_ATIV`.
+- a classificacao nao filtra `SIT`: o que decide e o layout reportado nas `*_clean`.
+- entre linhas duplicadas do mesmo CNPJ, vale a de `DT_INI_SIT` mais recente.
 
 Racional:
 - `TP_MERC` varia para empresa ativa (ex.: `BOLSA` e `BALCAO ORGANIZADO`) e nao muda o setor economico.
@@ -163,33 +172,31 @@ Total identificado: `71` valores distintos.
 ## Regras operacionais recomendadas
 
 ### 1 - Regra de selecao por CNPJ
-Para classificar setor por CNPJ:
-1. Filtrar apenas `SIT = 'ATIVO'`.
-2. Se existir um unico `SETOR_ATIV` entre as linhas ativas, usar esse valor.
-3. Se existirem multiplos `SETOR_ATIV` ativos para o mesmo CNPJ, marcar `confidence = low` e enviar para curadoria.
+Para descrever setor por CNPJ:
+1. Entre as linhas do CNPJ, usar a de `DT_INI_SIT` mais recente (descritor
+   vigente).
+2. O `SETOR_ATIV` resultante e um descritor e um override — nao a fonte da
+   classificacao.
 
 Observacao:
-- Na validacao atual, esse caso nao ocorreu (`0` CNPJs).
+- CNPJs com multiplos `SETOR_ATIV` ativos existem (`90` no arquivo validado),
+  porem a linha mais recente resolve o descritor vigente.
 
 ### 2 - Relevancia de `TP_MERC` e `CATEG_REG`
 - `TP_MERC` nao sera usado para definir setor.
 - `CATEG_REG` nao sera usado para definir setor.
 - Ambos permanecem armazenados na camada bruta para auditoria e uso futuro.
 
-### 3 - Matriz inicial `SETOR_ATIV -> profile_id`
-Criar uma tabela de governanca (`setor_profile_map`) com mapeamento explicito.
-
-Sugestao inicial de profiles:
-- `Bancos`, `Arrendamento Mercantil`, `Intermediacao Financeira` -> `banking` (prioridade)
-- `Seguradoras e Corretoras` -> `insurance` (futuro)
-- `Securitizacao de Recebiveis` -> `securitization` (futuro)
-- Demais setores -> `default` (fallback)
+### 3 - Governanca `SETOR_ATIV -> profile_id`
+`setor_profile_map` e o ponto de override manual. A tabela **nasce vazia** — o
+seed antigo (`Bancos`, `Arrendamento Mercantil`, `Intermediacao Financeira` ->
+`banking`) foi removido porque mapeava por setor o que a estrutura resolve melhor.
+O seed e legivel por hook `init_info_cad_schema`, que o apaga de bancos antigos.
 
 ### 4 - Politica para vazios e desconhecidos
-Se `SETOR_ATIV` vier vazio ou nao mapeado:
-- aplicar `profile_id = default`
-- gravar `confidence = low`
-- registrar evento para revisao manual (fila de curadoria)
+Se `SETOR_ATIV` vier vazio, nao mapeado, ou a assinatura nao casar, o perfil e
+`default` e `rule_applied` registra `default:setor_vazio` (ou o setor). Nao ha
+fila de curadoria: a decisao e reproduzivel a partir do layout reportado.
 
 ## Uso no pipeline
 Fluxo alvo (conceitual):
@@ -198,8 +205,8 @@ Fluxo alvo (conceitual):
 3. Resolucao de perfil por empresa.
 4. Calculo de indicadores respeitando profile.
 
-## Criterios de aceite (planejamento)
-- Cadastro completo disponivel no DuckDB.
+## Criterios de aceite (implementados)
+- Cadastro completo disponivel no DuckDB (universo sem filtro `SIT`).
 - Consulta historica por CNPJ funcionando.
-- Classificacao de empresa reprodutivel (`rule_version`) e auditavel (`confidence`).
-- Sem regressao para empresas industriais.
+- Classificacao reproduzivel e auditavel (`rule_applied` por CNPJ).
+- Sem regressao para empresas industriais (perfil `default` inalterado).

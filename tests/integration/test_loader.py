@@ -5,13 +5,13 @@ from __future__ import annotations
 import pytest
 
 from cvmdata.ingestion.catalog import DatasetType
-from cvmdata.ingestion.database import init_schema
 from cvmdata.ingestion.loader import (
     _match_dataset,
     load_b3_tickers,
     load_csv,
     load_source_year,
 )
+from cvmdata.ingestion.schema import init_schema
 from tests.support import make_b3_tickers_json, make_balance_csv, make_flow_csv
 
 pytestmark = pytest.mark.integration
@@ -23,8 +23,8 @@ pytestmark = pytest.mark.integration
         ("itr_cia_aberta_BPA_con_2024.csv", "BPA", DatasetType.STATEMENT),
         ("itr_cia_aberta_DRE_con_2024.csv", "DRE", DatasetType.STATEMENT),
         ("dfp_cia_aberta_BPP_con_2021.csv", "BPP", DatasetType.STATEMENT),
-        ("itr_cia_aberta_composicao_capital_2024.csv", "COMPOSICAO_CAPITAL", DatasetType.DIRECT_INSERT),
-        ("dfp_cia_aberta_composicao_capital_2024.csv", "COMPOSICAO_CAPITAL", DatasetType.DIRECT_INSERT),
+        ("itr_cia_aberta_composicao_capital_2024.csv", "TB_COMPOSICAO_CAPITAL", DatasetType.DIRECT_INSERT),
+        ("dfp_cia_aberta_composicao_capital_2024.csv", "TB_COMPOSICAO_CAPITAL", DatasetType.DIRECT_INSERT),
     ],
 )
 def test_match_dataset_valid(filename, expected_key, expected_type):
@@ -128,7 +128,7 @@ def test_load_source_year_loads_composicao_capital(tmp_path, db):
     results = load_source_year(db, "itr", 2024, tmp_path)
 
     assert "BPA" in results
-    assert "COMPOSICAO_CAPITAL" in results
+    assert "TB_COMPOSICAO_CAPITAL" in results
     cc_count = db.execute(
         "SELECT COUNT(*) FROM composicao_capital WHERE source='itr' AND year=2024"
     ).fetchone()[0]

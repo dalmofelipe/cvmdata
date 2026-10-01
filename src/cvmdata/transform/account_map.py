@@ -40,11 +40,10 @@ ACCOUNT_MAP: dict[str, dict[str, str]] = {
         "1.01": "caixa_equivalentes",
         "1.02": "ativo_nao_circulante",
         # BPP — 2.01/2.02 com semântica de mensuração (valor justo / custo
-        # amortizado), não de prazo; PL vive na cauda (2.07)
+        # amortizado), não de prazo
         "2": "passivo_total",
         "2.01": "passivo_circulante",
         "2.02": "passivo_nao_circulante",
-        "2.07": "patrimonio_liquido",
         # DRE — 3.02 remapeado: despesa de intermediação financeira
         "3.01": "receita_liquida",
         "3.03": "resultado_bruto",
@@ -52,12 +51,19 @@ ACCOUNT_MAP: dict[str, dict[str, str]] = {
         "3.11": "lucro_liquido",
         # Ausentes (sem equivalente em banking): aplicacoes_financeiras, estoques,
         # realizavel_longo_prazo, emprestimos_cp, emprestimos_lp, ebit.
+        #
+        # O patrimônio líquido também é ausente de propósito, nos dois layouts
+        # financeiros ele fica em 2.07 ou 2.08 e em 2.03 nos híbridos — resolver
+        # por código exigiria mapear os três, e 2.03 no banking é "Provisões" em
+        # 19 bancos e "Passivos Financeiros ao Custo Amortizado" em 16. O PL é
+        # resolvido por rótulo em text_map.resolve_pl.
     },
 }
 
-# Códigos da cauda de resultado e de patrimônio líquido. Não pertencem ao
-# ACCOUNT_MAP: a posição desliza por empresa. São carregados explicitamente 
-# para ficarem disponíveis ao fetch e resolvidos por texto normalizado (dre_tail_map).
+# Códigos de cauda de resultado e de patrimônio líquido. Não pertencem ao
+# ACCOUNT_MAP porque a posição desliza — entre perfis e até entre anos da mesma
+# empresa. São carregados explicitamente para ficarem disponíveis ao fetch e
+# resolvidos por texto normalizado (text_map).
 DRE_TAIL_CODES: list[str] = [
     "3.05",
     "3.06",
@@ -69,13 +75,19 @@ DRE_TAIL_CODES: list[str] = [
     "3.11",
 ]
 
-BPP_TAIL_CODES: list[str] = [
+BPP_PL_CODES: list[str] = [
+    "2.03",
     "2.07",
-    "2.08"
+    "2.08",
 ]
 
+# Contas de balanço que o fetch precisa carregar. Inclui BPP_PL_CODES mesmo
+# estando fora do ACCOUNT_MAP: o PL é resolvido por rótulo (text_map.resolve_pl),
+# e cada código entra no fetch por causa de um período em que ele é o PL —
+# 2.03 nos híbrido (Celgpar, SUL 116, Oliveira Trust), 2.07/2.08 nos bancos.
 ALL_BALANCE_CODES: list[str] = sorted(
     {cd for profile in ACCOUNT_MAP.values() for cd in profile if not cd.startswith("3.")}
+    | set(BPP_PL_CODES)
 )
 
 ALL_DRE_CODES: list[str] = sorted(
@@ -84,7 +96,20 @@ ALL_DRE_CODES: list[str] = sorted(
 )
 
 ALL_ACCOUNT_CODES: list[str] = sorted(
-    set(ALL_BALANCE_CODES) | set(ALL_DRE_CODES) | set(BPP_TAIL_CODES)
+    set(ALL_BALANCE_CODES) | set(ALL_DRE_CODES) | set(BPP_PL_CODES)
+)
+
+PL_COMPONENT = "patrimonio_liquido"
+
+# Perfis em que o patrimônio líquido já resolve pelo CD_CONTA. Nesses perfis o
+# fallback textual precisa ficar desligado: no default, 2.03 resolve PL por
+# código e 2.07 ainda casaria o rótulo, de modo que as duas contas escreveriam no
+# mesmo componente e a última lida sobrescreveria o valor — "Provisões" virando
+# patrimônio em 2.03 apagado pelo PL real em 2.07.
+PL_BY_CODE_PROFILES: frozenset[str] = frozenset(
+    profile_id
+    for profile_id, profile_map in ACCOUNT_MAP.items()
+    if PL_COMPONENT in profile_map.values()
 )
 
 

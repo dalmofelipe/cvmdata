@@ -14,9 +14,9 @@ from pathlib import Path
 import duckdb
 
 from cvmdata.ingestion.catalog import CATALOG, DatasetType
-from cvmdata.ingestion.database import init_b3_tickers_schema, init_schema
 from cvmdata.ingestion.encoding import utf8_csv
-from cvmdata.ingestion.tables import B3_TICKERS, CAD_CIA_ABERTA_RAW, COMPOSICAO_CAPITAL
+from cvmdata.ingestion.schema import init_b3_tickers_schema, init_schema
+from cvmdata.ingestion.tables import TB_B3_TICKERS, TB_CAD_CIA_ABERTA_RAW, TB_COMPOSICAO_CAPITAL
 from cvmdata.transform.account_map import ALL_ACCOUNT_CODES
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ def _build_comp_capital_insert_sql(csv_path: Path, source: str, year: int) -> st
     """Monta o SQL de INSERT para composicao_capital (sem filtro de CD_CONTA)."""
     fpath = csv_path.as_posix()
     return f"""
-    INSERT INTO {COMPOSICAO_CAPITAL}
+    INSERT INTO {TB_COMPOSICAO_CAPITAL}
     SELECT
         CNPJ_CIA::VARCHAR,
         TRY_CAST(DT_REFER AS DATE),
@@ -131,7 +131,7 @@ def _load_composicao_capital_csv(
     Idempotente: deleta linhas de (source, year) antes do INSERT.
     """
     conn.execute(
-        f"DELETE FROM {COMPOSICAO_CAPITAL} WHERE source = ? AND year = ?", [source, year]
+        f"DELETE FROM {TB_COMPOSICAO_CAPITAL} WHERE source = ? AND year = ?", [source, year]
     )
 
     with utf8_csv(csv_path) as safe_path:
@@ -139,7 +139,7 @@ def _load_composicao_capital_csv(
         conn.execute(sql)
 
     row = conn.execute(
-        f"SELECT COUNT(*) FROM {COMPOSICAO_CAPITAL} WHERE source = ? AND year = ?",
+        f"SELECT COUNT(*) FROM {TB_COMPOSICAO_CAPITAL} WHERE source = ? AND year = ?",
         [source, year]
     ).fetchone()
     count: int = row[0] if row else 0
@@ -256,7 +256,7 @@ def load_info_cad(
 
     Valida SC-001: linhas CSV == linhas inseridas.
     """
-    from cvmdata.ingestion.database import init_info_cad_schema
+    from cvmdata.ingestion.schema import init_info_cad_schema
 
     init_info_cad_schema(conn)
 
@@ -273,7 +273,7 @@ def load_info_cad(
         conn.execute("BEGIN")
         try:
             conn.execute(f"""
-                CREATE OR REPLACE TABLE {CAD_CIA_ABERTA_RAW} AS
+                CREATE OR REPLACE TABLE {TB_CAD_CIA_ABERTA_RAW} AS
                 SELECT
                     *,
                     current_timestamp AS loaded_at
@@ -284,7 +284,7 @@ def load_info_cad(
                     nullstr  = ''
                 )
             """)
-            row = conn.execute(f"SELECT COUNT(*) FROM {CAD_CIA_ABERTA_RAW}").fetchone()
+            row = conn.execute(f"SELECT COUNT(*) FROM {TB_CAD_CIA_ABERTA_RAW}").fetchone()
             inserted = row[0] if row else 0
 
             conn.execute("COMMIT")
@@ -307,7 +307,7 @@ def _build_b3_tickers_sql(json_glob: Path) -> str:
     """Monta o SQL de carga da tabela de tickers a partir dos JSONs do B3."""
     fpath = json_glob.as_posix()
     return f"""
-    CREATE OR REPLACE TABLE {B3_TICKERS} AS
+    CREATE OR REPLACE TABLE {TB_B3_TICKERS} AS
     SELECT
         TRY_CAST(r.codeCVM AS INTEGER) AS cod_cvm,
         r.issuingCompany::VARCHAR      AS ticker_root,
@@ -352,7 +352,7 @@ def load_b3_tickers(
     sql = _build_b3_tickers_sql(tickers_dir / glob_pattern)
     conn.execute(sql)
 
-    row = conn.execute(f"SELECT COUNT(*) FROM {B3_TICKERS}").fetchone()
+    row = conn.execute(f"SELECT COUNT(*) FROM {TB_B3_TICKERS}").fetchone()
     count: int = row[0] if row else 0
 
     logger.info("Tickers B3 carregados: %d linhas em b3_tickers", count)
