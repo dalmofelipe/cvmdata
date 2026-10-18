@@ -32,9 +32,11 @@ htmlcov/
 .DS_Store
 Thumbs.db
 *.tmp
+/scripts/report.csv
 
 # dist / build
 dist/
 build/
 *.egg-info/
 specs/
+TODO
