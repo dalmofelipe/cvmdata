@@ -11,6 +11,7 @@ literal aqui faria o teste acusar a si mesmo.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -30,7 +31,6 @@ from cvmdata.ingestion.tables import (
     TB_COMPOSICAO_CAPITAL,
     TB_DRE_CLEAN,
     TB_INDICATORS,
-    TB_SETOR_PROFILE_MAP,
     clean_table_name,
 )
 
@@ -49,7 +49,6 @@ LEGACY_DOC_ALLOWLIST = {"docs/tabelas.md"}
 CENTRALIZED_NAMES = (
     TB_CAD_CIA_ABERTA_RAW,
     TB_COMPANY_CLASSIFICATION,
-    TB_SETOR_PROFILE_MAP,
     TB_INDICATORS,
     TB_B3_TICKERS,
     TB_COMPOSICAO_CAPITAL,
@@ -186,12 +185,39 @@ def test_legacy_clean_names_only_documented_in_tables_doc() -> None:
     )
 
 
+def _docstring_lines(source: str) -> set[int]:
+    """Números de linha ocupados por docstrings.
+
+    Um exemplo de SQL em docstring mostra o literal de propósito — é o SQL que
+    sai, não código. Sem esta exclusão o guard acusaria a documentação, e o
+    conserto seria escrever ``{bpa_clean}``, que é menos legível e não é o SQL.
+    """
+    lines: set[int] = set()
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return lines
+    for node in ast.walk(tree):
+        if not isinstance(
+            node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
+        ):
+            continue
+        if not node.body:
+            continue
+        first = node.body[0]
+        if ast.get_docstring(node, clean=False) is None or not isinstance(first, ast.Expr):
+            continue
+        lines.update(range(first.lineno, (first.end_lineno or first.lineno) + 1))
+    return lines
+
+
 def test_centralized_names_are_not_hardcoded_in_sql() -> None:
     """Em código de produção, SQL referencia a constante — não o literal.
 
-    Cobre ``src/`` e ``scripts/``. Duas exceções, ambas declaration sites:
-    o ``CREATE TABLE`` em database.py, que é onde a tabela é declarada. Em
-    ``tests/`` o literal é intencional (ver ``_GUARDED_DIRS``).
+    Cobre ``src/`` e ``scripts/``. A exceção é o declaration site de DDL
+    (``ingestion/schema.py``), onde o literal é onde a tabela é declarada. Em
+    ``tests/`` o literal é intencional (ver ``_GUARDED_DIRS``), e em docstring
+    também — ver :func:`_docstring_lines`.
     """
     violations: list[str] = []
 
@@ -202,7 +228,11 @@ def test_centralized_names_are_not_hardcoded_in_sql() -> None:
             rel = path.relative_to(ROOT).as_posix()
             if rel in DECLARATION_SITES:
                 continue
-            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            source = path.read_text(encoding="utf-8")
+            skip = _docstring_lines(source)
+            for lineno, line in enumerate(source.splitlines(), 1):
+                if lineno in skip:
+                    continue
                 for match in _SQL_RE.finditer(line):
                     if match.group("name") in CENTRALIZED_NAMES:
                         violations.append(f"  {rel}:{lineno}: {line.strip()}")
@@ -211,6 +241,31 @@ def test_centralized_names_are_not_hardcoded_in_sql() -> None:
         "nomes de tabela escritos à mão em SQL; use cvmdata.ingestion.tables:\n"
         + "\n".join(violations)
     )
+
+
+def test_guard_ignores_docstrings_but_not_code() -> None:
+    """A exclusão de docstring não pode abrir brecha para código real.
+
+    O mesmo nome aparece no exemplo (docstring, tolerado) e numa linha de código
+    (violação). Se o guard parasse de varrer o arquivo inteiro, os dois casos
+    passariam limpos.
+    """
+    source = (
+        '"""Módulo.\n'
+        "\n"
+        "    Exemplo:\n"
+        "\n"
+        "        SELECT 1 FROM company_classification\n"
+        '"""\n'
+        "\n"
+        "QUERY = \"SELECT 1 FROM company_classification\"\n"
+    )
+    skip = _docstring_lines(source)
+
+    in_docstring = 5 in skip
+    in_code = 7 not in skip
+
+    assert in_docstring and in_code
 
 
 @pytest.mark.parametrize(

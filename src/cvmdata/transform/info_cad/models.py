@@ -6,13 +6,7 @@ from typing import TypedDict
 
 
 class ClassificationCounts(TypedDict):
-    """Métricas de :func:`cvmdata.transform.info_cad.classify_info_cad`.
-
-    ``by_profile`` e ``by_rule`` são dicionários livres de propósito: os perfis
-    e as regras evoluem com o projeto, e um TypedDict fechado exigiria editar
-    este contrato a cada regra nova sem dar nenhuma garantia ao consumidor —
-    que só faz ``get`` e soma.
-    """
+    """Métricas de :func:`cvmdata.transform.info_cad.classify_info_cad`."""
 
     total: int
     by_profile: dict[str, int]
@@ -20,14 +14,8 @@ class ClassificationCounts(TypedDict):
 
 
 class MissingCleanTablesError(RuntimeError):
-    """Uma ou mais ``*_clean`` não existem — o universo está incompleto.
+    """Uma ou mais ``*_clean`` não existem — o universo está incompleto."""
 
-    Erro de uso, não de dado: classificar exige demonstrativo normalizado e não
-    pode deduzir o universo de outra fonte. Cobre tanto "nenhuma clean existe"
-    quanto "falta uma das três" — nos dois casos o conserto é rodar
-    ``normalize``, e o perfil cairia no ``default`` por ausência de dado em vez
-    de layout padrão, o que é pior que falhar.
 
-    Distinto de uma clean existente e vazia: essa classifica um universo vazio
-    sem erro, porque o universo está completo e genuinamente sem empresas.
-    """
+class MissingCadCiaAbertaTableError(RuntimeError):
+    """``cad_cia_aberta_raw`` não existe — a classificação perderia os descritores."""

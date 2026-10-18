@@ -1,7 +1,8 @@
 # Banking Profile
 
 ## Objetivo
-Documentar a analise dos codigos CVM usados por bancos e explicar por que o `ACCOUNT_MAP` orientado a perfil industrial gerava indicadores nulos (ou errados) para instituicoes financeiras.
+
+Documentar a analise dos codigos CVM usados por bancos e explicar por que o `ACCOUNT_MAP` orientado a perfil `default` gerava indicadores nulos (ou errados) para instituicoes financeiras.
 
 O perfil `banking` esta implementado. As secoes "Proposta" e " proximos passos" sao o registro do raciocinio que levou a ele; o estado atual esta em [setor_profile.md](setor_profile.md).
 
@@ -16,7 +17,7 @@ O perfil `banking` esta implementado. As secoes "Proposta" e " proximos passos" 
 - `data/raw/itr/2025/itr_cia_aberta_DRE_con_2025.csv` (CNPJ `60.872.504/0001-23`)
 
 ## Resumo executivo
-- O mapa atual assume contas industriais para divida (`2.01.04`, `2.02.01`) e lucro liquido (`3.11`).
+- O mapa atual assume contas default para divida (`2.01.04`, `2.02.01`) e lucro liquido (`3.11`).
 - Em bancos, essas contas podem nao existir, ou ter semantica diferente.
 - Evidencia real (Itau 2025 ITR) mostra ausencia de:
   - `1.01.01` (caixa)
@@ -56,7 +57,7 @@ Observacao: o fixture ajuda na reproducao de pipeline, mas nao cobre toda variac
 ## Evidencias de dados reais (Itau, ITR 2025)
 CNPJ analisado: `60.872.504/0001-23`.
 
-Cobertura dos codigos industriais no ITR 2025:
+Cobertura dos codigos default no ITR 2025:
 
 ### BPA
 - Presente: `1`, `1.01`, `1.02`, `1.02.01`
@@ -120,17 +121,31 @@ Abaixo, proposta inicial de correspondencia por componente semantico.
 ## Decisoes que substituíram o plano inicial
 - **Precedencia por `SETOR_ATIV` foi descartada.** O setor nao e discriminador de
   layout: bancos reportam layout padrao, e holdings reportam o financeiro. A
-  assinatura estrutural (`bpa.1.01` + `bpp.2.01`) classifica as 562 empresas do
-  universo real em 29 `banking` / 533 `default`, sem filtro `SIT`.
+  assinatura estrutural (`bpa.1.01` + `bpp.2.01`) classifica as 558 empresas do
+  universo real em 29 `banking` / 529 `default`, sem filtro `SIT`.
 - **`confidence` foi removido.** O perfil e uma asercao estrutural; `rule_applied`
   registra a origem da decisao.
 - **PL por codigo foi descartado.** Resolvido por rotulo normalizado.
 
 ## Riscos e pontos em abertos
-- **Hibridos**: 5 dos 29 `banking` (Celgpar, GP Investments, Oliveira Trust,
-  SUL 116, Inter&Co) reportam o layout financeiro em poucos periodos e o padrao
-  nos mais recentes — a assinatura e por empresa, nao por periodo, entao o perfil
-  e o mesmo para todo o historico. Componentes que dependem do layout (caixa,
-  EBIT) podem divergir nos periodos do outro layout.
+- **Periodo a periodo**: a assinatura e avaliada por empresa, nao por periodo, e
+  o perfil vale para todo o historico. No universo validado nao ha hibrido: os
+  29 `banking` casam a assinatura em **todos** os 9 a 22 periodos que reportam.
+  Ainda assim, uma empresa que migre de layout receberia `banking` em todo o
+  historico, e componentes que dependem do layout (caixa, EBIT) divergiriam nos
+  periodos do outro. Reclassificar exigiria decisao por periodo, que nao existe.
 - O significado de `3.06.02` ainda varia entre companhias.
 - Bancos com operacoes de seguridade/previdencia podem misturar estruturas de conta.
+
+
+
+
+### Observações
+
+- plataformas externas 
+  - https://statusinvest.com.br/acoes/bbas3
+  - https://investidor10.com.br/acoes/bbas3/
+  - https://www.fundamentus.com.br/detalhes.php?papel=BBAS3
+  - https://www.dadosdemercado.com.br/acoes/bbas3
+- `BMEB3 17.184.037/0001-10	1325	BANCO MERCANTIL BRASIL SA` calcula corretamente (roe, roa, margem bruta e liquida, giro ativo), futuramente os demais serão filtrados pelo indicator policy.
+- `BBSA3 00.000.000/0001-91	BANCO DO BRASIL SA` calcula indicadores com valores bem aproximados, comparado a maioria das plataformas externas. 

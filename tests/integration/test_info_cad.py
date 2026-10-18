@@ -11,8 +11,11 @@ from __future__ import annotations
 import pytest
 
 from cvmdata.ingestion.loader import load_info_cad
-from cvmdata.ingestion.schema import init_info_cad_schema
-from cvmdata.transform.info_cad import MissingCleanTablesError, classify_info_cad
+from cvmdata.transform.info_cad import (
+    MissingCadCiaAbertaTableError,
+    MissingCleanTablesError,
+    classify_info_cad,
+)
 from cvmdata.transform.profile import FALLBACK_PROFILE
 from tests.support import make_cad_csv, seed_classification_rows, setup_classify_schema
 
@@ -40,8 +43,11 @@ def _clean_schema(db, *tables: str) -> None:
 
     Sem argumento, cria as três; com argumento, só as nomeadas, para exercitar
     universo incompleto.
+
+    `cad_cia_aberta_raw` sai vazia: a classificação exige que ela exista, e
+    "cadastro vazio" é diferente de "cadastro ausente".
     """
-    init_info_cad_schema(db)
+    setup_classify_schema(db)
     for table in tables or ("bpa_clean", "bpp_clean", "dre_clean"):
         db.execute(
             f"""
@@ -180,8 +186,8 @@ def test_load_cadastro_preserves_cancelled_rows(tmp_path, db):
 
 def test_classify_raises_without_clean_tables(db):
     """Sem clean não existe universo — e sem universo não há classificação."""
-    init_info_cad_schema(db)
-    with pytest.raises(MissingCleanTablesError, match="Clean faltando"):
+    setup_classify_schema(db)
+    with pytest.raises(MissingCleanTablesError, match="clean faltando"):
         classify_info_cad(db)
 
 
@@ -193,7 +199,6 @@ def test_classify_raises_with_partial_clean_tables(db):
     classificaria, se deixasse, seria pior que o erro: o CNPJ entraria sem o BPA
     que decide o perfil e cairia no ``default`` por ausência de dado.
     """
-    init_info_cad_schema(db)
     _clean_schema(db, "bpp_clean", "dre_clean")
     with pytest.raises(MissingCleanTablesError, match=r"faltando \(bpa_clean\)"):
         classify_info_cad(db)
@@ -244,18 +249,35 @@ def test_classify_classifies_cancelled_company(db):
     assert _classify_row(db, CNPJ_BANCO)[0] == "banking"
 
 
-def test_classify_without_cadastro_table(db):
-    """Cadastro ausente não impede classificar: perde-se o descritivo, não o
-    perfil."""
+def test_classify_without_cadastro_table_raises(db):
+    """Cadastro ausente interrompe: o perfil sairia certo (a assinatura é lida
+    das clean), mas `denom_comerc` e `setor_ativ` ficariam NULL e todo default
+    cairia em `sem_cadastro` — indicador sem nome de empresa. Melhor falhar."""
     _clean_schema(db)
     _seed_layout_financeiro(db, CNPJ_BANCO)
+    db.execute("DROP TABLE cad_cia_aberta_raw")
+
+    with pytest.raises(MissingCadCiaAbertaTableError, match="load_info_cad"):
+        classify_info_cad(db)
+
+    assert _snapshot(db) == []
+
+
+def test_classify_with_empty_cadastro_keeps_clean_descriptors(db):
+    """Cadastro vazio não é cadastro ausente: classifica, e o descritor vem da
+    clean (`CD_CVM`/`DENOM_CIA`). `denom_comerc` e `setor_ativ` ficam NULL porque
+    só o cadastro os tem — e não são fabricados."""
+    _clean_schema(db)
     _seed_layout_padrao(db, CNPJ_IND)
 
     counts = classify_info_cad(db)
 
-    assert counts["by_profile"] == {"default": 1, "banking": 1}
-    assert _classify_row(db, CNPJ_BANCO)[1].startswith("structure:")
-    assert _classify_row(db, CNPJ_IND)[1] == "default:sem_cadastro:sem_assinatura"
+    assert counts["by_profile"] == {"default": 1}
+    row = _classify_row(db, CNPJ_IND)
+    assert row[1] == "default:sem_cadastro:sem_assinatura"
+    assert row[3] == "00123"          # cd_cvm veio da clean
+    assert row[4] == "EMPRESA TESTE"  # denom_social veio da clean
+    assert row[5] is None             # denom_comerc só existe no cadastro
 
 
 # ── assinatura estrutural ─────────────────────────────────────────────────────
@@ -321,64 +343,64 @@ def test_intermediacao_financeira_is_not_banking(db):
     counts = classify_info_cad(db)
 
     assert counts["by_profile"] == {FALLBACK_PROFILE: 1}
-    assert _classify_row(db, CNPJ_IND)[1] == "default:setor_nao_mapeado:Intermediacao Financeira"
+    assert _classify_row(db, CNPJ_IND)[1] == "default:setor:Intermediacao Financeira"
 
 
-# ── override setorial ─────────────────────────────────────────────────────────
+# ── setor não decide ──────────────────────────────────────────────────────────
 
 
-def test_override_sector_applies_when_signature_absent(db):
-    """setor_profile_map é o ponto de override: sem assinatura, a estrutura não
-    tem como cobrir o perfil e o mapeamento explícito assume."""
+def test_sector_alone_does_not_grant_banking(db):
+    """Seguradora que reporta layout padrão é ``default``, mesmo com o setor que
+    o seed antigo mandava para banking.
+
+    O perfil existe para ler o demonstrativo, e o demonstrativo da seguradora é
+    padrão. Um override setorial aqui colocaria no mapa financeiro uma empresa
+    cujos rótulos não são financeiros — foi o erro que motivou a assinatura.
+    """
     seed_classification_rows(
         db, [{"CNPJ_CIA": CNPJ_BANCO, "SIT": "ATIVO", "SETOR_ATIV": "Seguradoras"}]
     )
     _clean_schema(db)
     _seed_layout_padrao(db, CNPJ_BANCO)
-    db.execute(
-        "INSERT INTO setor_profile_map (setor_ativ, profile_id, active, updated_at)"
-        " VALUES ('Seguradoras', 'banking', TRUE, current_timestamp)"
+
+    classify_info_cad(db)
+
+    assert _classify_row(db, CNPJ_BANCO)[0] == FALLBACK_PROFILE
+
+
+def test_sector_label_is_recorded_on_default(db):
+    """O setor entra no ``rule_applied`` do default — é o que permite auditar
+    *qual* empresa caiu no default e em que setor ela estava."""
+    seed_classification_rows(
+        db, [{"CNPJ_CIA": CNPJ_BANCO, "SIT": "ATIVO", "SETOR_ATIV": "Seguradoras"}]
     )
+    _clean_schema(db)
+    _seed_layout_padrao(db, CNPJ_BANCO)
+
+    classify_info_cad(db)
+
+    assert _classify_row(db, CNPJ_BANCO)[1] == "default:setor:Seguradoras"
+
+
+def test_bank_outside_banking_sector_is_banking_by_signature(db):
+    """O inverso do caso do setor: empresa com layout financeiro em setor não
+    bancário é ``banking``, porque quem decide é o layout.
+
+    Regressão do seed antigo, que só pegaria quem estivesse em "Bancos" e deixaria
+    estas no perfil errado.
+    """
+    seed_classification_rows(
+        db,
+        [{"CNPJ_CIA": CNPJ_BANCO, "SIT": "ATIVO", "SETOR_ATIV": "Securitização de Recebíveis"}],
+    )
+    _clean_schema(db)
+    _seed_layout_financeiro(db, CNPJ_BANCO)
 
     classify_info_cad(db)
 
     row = _classify_row(db, CNPJ_BANCO)
     assert row[0] == "banking"
-    assert row[1] == "override:setor:Seguradoras"
-
-
-def test_signature_wins_over_sector_override(db):
-    """Override cobre o que a estrutura não vê; onde a estrutura vê, ela decide
-    — senão um mapeamento setorial enviesado contaminaria a classificação."""
-    seed_classification_rows(
-        db, [{"CNPJ_CIA": CNPJ_BANCO, "SIT": "ATIVO", "SETOR_ATIV": "Bancos"}]
-    )
-    _clean_schema(db)
-    _seed_layout_financeiro(db, CNPJ_BANCO)
-    db.execute(
-        "INSERT INTO setor_profile_map (setor_ativ, profile_id, active, updated_at)"
-        " VALUES ('Bancos', 'banking', TRUE, current_timestamp)"
-    )
-
-    classify_info_cad(db)
-
-    assert _classify_row(db, CNPJ_BANCO)[1] == "structure:banking:bpa.1.01+bpp.2.01"
-
-
-def test_inactive_override_is_ignored(db):
-    seed_classification_rows(
-        db, [{"CNPJ_CIA": CNPJ_BANCO, "SIT": "ATIVO", "SETOR_ATIV": "Bancos"}]
-    )
-    _clean_schema(db)
-    _seed_layout_padrao(db, CNPJ_BANCO)
-    db.execute(
-        "INSERT INTO setor_profile_map (setor_ativ, profile_id, active, updated_at)"
-        " VALUES ('Bancos', 'banking', FALSE, current_timestamp)"
-    )
-
-    classify_info_cad(db)
-
-    assert _classify_row(db, CNPJ_BANCO)[0] == FALLBACK_PROFILE
+    assert row[1] == "structure:banking:bpa.1.01+bpp.2.01"
 
 
 # ── campos descritivos ────────────────────────────────────────────────────────
@@ -507,7 +529,7 @@ def test_multi_denom_cia_in_clean_picks_most_recent(db):
     "setor_ativ, esperado",
     [
         ("", "default:setor_vazio"),
-        ("Alimentos", "default:setor_nao_mapeado:Alimentos"),
+        ("Alimentos", "default:setor:Alimentos"),
     ],
 )
 def test_rule_applied_for_default(db, setor_ativ, esperado):
@@ -580,116 +602,3 @@ def test_classify_returns_counts_by_profile_and_rule(db):
     assert counts["by_profile"] == {"default": 1, "banking": 1}
     assert counts["by_rule"]["structure:banking:bpa.1.01+bpp.2.01"] == 1
     assert counts["by_rule"]["default:setor_vazio"] == 1
-
-
-# ── Migração de bancos criados antes da classificação estrutural ──────────────
-#
-# `CREATE TABLE IF NOT EXISTS` não altera tabela existente: sem a reconciliação,
-# um banco legado manteria a coluna `confidence` (que ninguém mais escreve) e o
-# seed setorial (que sobreporia a assinatura estrutural).
-
-
-def _make_legacy_db(db) -> None:
-    """Reproduz o schema anterior: company_classification com confidence, o seed
-    setorial de 3 setores e a tabela de curation events."""
-    # init primeiro: garante setor_profile_map existir (o DDL atual é IF NOT EXISTS
-    # e, aqui, ainda não foi rodado); depois reconstrói company_classification com
-    # a coluna confidence que o legado tinha.
-    init_info_cad_schema(db)
-    db.execute("DROP TABLE IF EXISTS company_classification")
-    db.execute(
-        """
-        CREATE TABLE company_classification (
-            cnpj_cia     VARCHAR PRIMARY KEY,
-            cd_cvm       VARCHAR,
-            denom_social VARCHAR,
-            denom_comerc VARCHAR,
-            setor_ativ   VARCHAR,
-            profile_id   VARCHAR NOT NULL,
-            rule_applied VARCHAR,
-            confidence   DECIMAL,
-            updated_at   TIMESTAMPTZ
-        )
-        """
-    )
-    db.execute(
-        """
-        INSERT INTO setor_profile_map (setor_ativ, profile_id, active)
-        VALUES ('Bancos', 'banking', TRUE),
-               ('Arrendamento Mercantil', 'banking', TRUE),
-               ('Intermediacao Financeira', 'banking', TRUE),
-               ('Oil & Gas', 'banking', TRUE)
-        """
-    )
-    db.execute(
-        """
-        CREATE TABLE classification_curation_events (
-            id             BIGINT,
-            cnpj_cia       VARCHAR,
-            old_profile_id VARCHAR,
-            new_profile_id VARCHAR,
-            reason         VARCHAR,
-            created_at     TIMESTAMPTZ
-        )
-        """
-    )
-
-
-def test_migration_drops_confidence_column(db):
-    _make_legacy_db(db)
-    assert "confidence" in _columns(db, "company_classification")
-
-    init_info_cad_schema(db)
-
-    assert "confidence" not in _columns(db, "company_classification")
-
-
-def test_migration_removes_only_the_legacy_sector_seed(db):
-    """O override manual ('Oil & Gas' → banking) sobrevive; o seed antigo não."""
-    _make_legacy_db(db)
-
-    init_info_cad_schema(db)
-
-    restantes = db.execute("SELECT setor_ativ FROM setor_profile_map").fetchall()
-    assert [r[0] for r in restantes] == ["Oil & Gas"]
-
-
-def test_migration_drops_curation_events_table(db):
-    _make_legacy_db(db)
-
-    init_info_cad_schema(db)
-
-    assert not db.execute(
-        "SELECT count(*) FROM duckdb_tables() WHERE table_name = 'classification_curation_events'"
-    ).fetchone()[0]
-
-
-def test_migration_is_idempotent(db):
-    _make_legacy_db(db)
-
-    init_info_cad_schema(db)
-    init_info_cad_schema(db)
-    init_info_cad_schema(db)
-
-    assert "confidence" not in _columns(db, "company_classification")
-    assert [r[0] for r in db.execute("SELECT setor_ativ FROM setor_profile_map").fetchall()] == [
-        "Oil & Gas"
-    ]
-
-
-def test_classify_runs_on_migrated_legacy_db(db):
-    """Fim a fim: o INSERT de classify_info_cad passaria a falhar com a coluna
-    confidence NOT NULL num banco não migrado."""
-    _make_legacy_db(db)
-    _clean_schema(db)
-    _seed_layout_financeiro(db, CNPJ_BANCO)
-    seed_classification_rows(db, [{"CNPJ_CIA": CNPJ_BANCO, "SETOR_ATIV": "Bancos"}])
-
-    init_info_cad_schema(db)
-    counts = classify_info_cad(db)
-
-    assert counts["by_profile"] == {"banking": 1}
-    assert db.execute(
-        "SELECT profile_id, rule_applied FROM company_classification WHERE cnpj_cia = ?",
-        [CNPJ_BANCO],
-    ).fetchone() == ("banking", "structure:banking:bpa.1.01+bpp.2.01")

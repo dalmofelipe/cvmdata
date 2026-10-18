@@ -123,6 +123,11 @@ def test_resolve_pl_returns_none_for_other_accounts(ds_conta, cd_conta):
     assert resolve_pl(ds_conta, cd_conta) is None
 
 
+def test_resolve_pl_rejects_codes_outside_bpp_pl_codes():
+    assert resolve_pl("Patrimônio Líquido Consolidado", "2.01") is None
+    assert resolve_pl("Patrimônio Líquido Consolidado", "2.07.01") is None
+
+
 @pytest.mark.parametrize(
     "ds_conta",
     ["Patrimônio Líquido Ajustado", "Patrimônio Líquido Total", "PATRIMÔNIO LÍQUIDO"],
@@ -132,13 +137,6 @@ def test_resolve_pl_accepts_any_patrimonio_liquido_variant(ds_conta):
     "Patrimônio Líquido" é patrimônio — o risco do prefixo seria capturar um
     conceito vizinho, e esse não existe no plano de contas."""
     assert resolve_pl(ds_conta, "2.03") == "patrimonio_liquido"
-
-
-def test_resolve_pl_has_no_depth_limit():
-    """PL fica em contas de um ponto, mas a resolução por rótulo não ganha
-    restringir profundidade — o guard de max_depth é tuning empírico do ruído
-    3+ da cauda da DRE."""
-    assert resolve_pl("Patrimônio Líquido Consolidado", "2.07.01") == "patrimonio_liquido"
 
 
 def test_resolve_pl_map_keys_are_normalized():

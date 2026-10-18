@@ -1,27 +1,6 @@
 """Nomes canônicos das tabelas DuckDB — fonte única de verdade.
 
-Famílias:
-
-- ``raw_*`` — dados brutos como publicados pela CVM. Declarados em
-  ``catalog.CATALOG`` (campo ``CvmDataset.table``), não aqui;
-- ``*_clean`` — dados normalizados/deduplicados, derivados de ``raw_*`` por
-  :func:`clean_table_name`;
-- cadastrais e derivadas — declaradas abaixo.
-
-Convenções deste módulo:
-
-- prefixo ``TB_`` marca **nome de tabela**. As constantes sem prefixo
-  (``RAW_PREFIX``, ``CLEAN_SUFFIX``, ``CLEAN_TABLES``, ``BALANCE_CLEAN_TABLES``)
-  são regras de nomenclatura ou recortes, não tabelas — é essa distinção que
-  mantém legível um SQL interpolado como ``FROM {TB_BPP_CLEAN}``;
-- um derivado cujo nome se descritor vem de outro locus: as ``*_clean`` são
-  criadas em runtime por :func:`clean_table_name`, as demais por ``CREATE TABLE``
-  em ``ingestion/schema.py``.
-
-Regra de uso: SQL e dados estruturados referenciam estas constantes. O literal
-fica no sítio de declaração — o ``CREATE TABLE`` em ``ingestion/schema.py`` e
-o catálogo. Docstrings e mensagens de log mantêm o nome por extenso, porque são
-prosa, não referência.
+Referência: docs/tabelas.md
 """
 
 from __future__ import annotations
@@ -40,7 +19,6 @@ BALANCE_CLEAN_TABLES: frozenset[str] = frozenset({TB_BPA_CLEAN, TB_BPP_CLEAN})
 
 TB_CAD_CIA_ABERTA_RAW = "cad_cia_aberta_raw"
 TB_COMPANY_CLASSIFICATION = "company_classification"
-TB_SETOR_PROFILE_MAP = "setor_profile_map"
 
 # ── Derivadas ─────────────────────────────────────────────────────────────────
 

@@ -1,99 +1,83 @@
 # Dados Cadastrais CVM
 
 ## Objetivo
-Este documento define como os dados cadastrais da CVM devem entrar no projeto para suportar classificacao de empresas, rastreabilidade historica e calculo de indicadores por perfil setorial.
+
+Documentar observações feitas no arquivo `cad_cia_aberta.csv`, além decisões sobre as tabelas `cia_cad_aberta_raw` e `company_classification`.
 
 ## Fontes oficiais
+
 - Meta (descricao das colunas): `https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/META/meta_cad_cia_aberta.txt`
 - CSV cadastral: `https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv`
 
-## Como o cadastro e usado hoje
-O perfil **nao** vem do setor. A classificacao e estrutural: a assinatura de
-layout e lida das tabelas `*_clean`, e o cadastro entra como Cadastro (descritores
-e `setor_ativ`) e como override manual em `setor_profile_map`. Ver
-[setor_profile.md](setor_profile.md).
-
-O que o cadastro ainda garante:
-- uma empresa ausente do cadastro e mesmo assim classificada, pela assinatura;
-- uma empresa com `SIT = 'CANCELADA'` que ainda reporta demonstrativo continua
-  classificada (o filtro `SIT` foi removido: e um estado regulatorio, nao um fato
-  sobre quem reportou);
-- `denom_social` como fallback de `denom_comerc`, que vem vazio para as
-  estrangeiras (Nu, Inter & Co, XP, ...).
-
 ## Escopo de armazenamento
-Armazenar o arquivo completo no DuckDB, sem filtrar apenas empresas ativas.
 
-Motivo:
-- Empresas hoje canceladas podem ter divulgacoes validas em anos anteriores.
-- A analise historica (2021-2025 e futuros anos) precisa preservar contexto regulatorio do periodo.
+O arquivo `cad_cia_aberta.csv` é completamente carregada se transoformando na tabela `cia_cad_aberta_raw`. Qualquer reprocessamento, pode ser utilizada de imediato, sem novo loader. Custo de carga baixissimo para duckdb, possui menos de 3000 linhas.
 
-## Modelo de dados proposto
-### 1 - Tabela bruta
-`cad_cia_aberta_raw`
-- Espelho do CSV oficial (sem perda de colunas).
-- Carregamento por recarga total (drop/truncate + insert do zero em cada execucao completa do pipeline).
-- Sem merge incremental nesta fase, para evitar comportamento fora do dominio conhecido.
+Tanto `cia_cad_aberta_raw` quanto o **universo de empresas** detectado pela classificação (tabelas *_clean), formam a tabela `company_classification`
 
-### 2 - Tabela de classificacao
-`company_classification`
-- Uma linha por empresa (CNPJ) com classificacao efetiva para uso no calculo.
-- Colunas recomendadas:
-  - `cnpj_cia`
-  - `cd_cvm`
-  - `denom_social`
-  - `denom_comerc`
-  - `setor_ativ`
-  - `profile_id`
-  - `rule_applied` (ex.: `structure:banking:bpa.1.01+bpp.2.01`)
-  - `updated_at`
+Assim que classificado, `company_classification` representa o universo de empresa/cnpj que terão indicadores calculados, além de armazenar associação de um CNPJ a um `profile` de contas.
 
-Nao ha `confidence`: o perfil e uma asercao estrutural, e `rule_applied` diz
-qual regra decidiu.
+## Observações
 
-### 3 - Tabela de regras
-`setor_profile_map`
-- Mapeamento direto de `SETOR_ATIV` para `profile_id`.
-- Colunas recomendadas:
-  - `setor_ativ`
-  - `profile_id`
-  - `active`
+- Empresas hoje canceladas podem ter divulgacoes validas em anos anteriores. Esta diretamente relacionado a configuração do período executado pelo pipeline, ex: desde 2011.
+- `company_classification` é um espelho do universo detectado das tabelas *_clean, é obrigatória apenas para complementar dados que faltam entre os arquivos reportados a CVM (BPA, BPP e DRE) e `cad_cia_aberta.csv`. Ela não tem influência sob qual empresa terá indicadores calculados, quem decide isso é a classificação do universo.
+- **IMPORTANTE**: podem existir empresas nos resultados da CVM que não aparecem em dados cadastrais `cad_cia_aberta.csv`.
+- `cad_cia_aberta.csv` uma empresa pode ter multiplos registros variando `TP_MERC`. Atualmente, a regra de seleção é pegar a linha mais recente de `DT_INI_SIT` para cada CNPJ durante a classificação.
 
-## Regras de elegibilidade temporal
-Manter todas as linhas em `cad_cia_aberta_raw`, ativas e canceladas.
 
-Para a classificacao (definir `profile_id` para calculo), **nao** ha filtro por
-`SIT`: a elegibilidade vem da existencia de demonstrativo nas `*_clean`. Uma
-empresa cancelada que ainda reporta continua classificada — o oposto do filtro
-anterior, que descartava bancos que reportam.
+## Colunas
 
-## Consideracoes de ingestao
-- Encoding esperado: `latin-1`.
-- O CSV pode ter duplicidade por CNPJ.
-- Para determinacao de setor, usar somente `SETOR_ATIV` em linhas ativas.
-- `TP_MERC` e `CATEG_REG` nao entram na regra de setor nesta fase.
-- Validar campos-chave: CNPJ, CD_CVM, datas e status.
+Descrição e tipagem completa é formalizada em `meta_cad_cia_aberta.txt`
 
-## Duplicidade por CNPJ
-Na pratica, ha CNPJs com mais de uma linha no cadastro.
 
-Validacao no `data/cad_cia_aberta.csv` (linhas ativas):
-- `cnpjs_ativos_com_multiplos_setores = 0`
-- `ativos_setor_vazio = 0` (em `772` linhas ativas)
-- `cnpjs_ativos_duplicados_mesmo_setor_por_tpmerc_cat = 90`
+### Coluna `DT_INI_SIT`
 
-Diretriz adotada para setor:
-- manter 100% das linhas na camada bruta.
-- a classificacao nao filtra `SIT`: o que decide e o layout reportado nas `*_clean`.
-- entre linhas duplicadas do mesmo CNPJ, vale a de `DT_INI_SIT` mais recente.
+Data de início da situação da empresa. Representa a data em que a empresa entrou em uma determinada situação (ex: ATIVO, CANCELADO, etc.). Não possui valor nulo.
 
-Racional:
-- `TP_MERC` varia para empresa ativa (ex.: `BOLSA` e `BALCAO ORGANIZADO`) e nao muda o setor economico.
-- `CATEG_REG` (A/B/vazio) representa categoria regulatoria, nao setor.
+Atualmente é a unica coluna usada para determinar a o registro mais recente de cada empresa/CNPJ, quando existem múltiplos registros para o mesmo CNPJ.
 
-## Valores possiveis de `SETOR_ATIV`
-Levantamento completo no arquivo atual `data/cad_cia_aberta.csv` (inclui vazio).
-Total identificado: `71` valores distintos.
+
+### Coluna `SIT`
+
+Situação cadastral da empresa. Possíveis valores: `ATIVO`, `CANCELADO` e `SUSPENSO(A) - DECISÃO ADM`. Não possui valor nulo.
+
+Não tem influência sobre a classificação de setor ou calculos de indicadores. Todas empresas registradas nas tabelas *_clean são elegíveis para calculos, em qualquer situação.
+
+
+### Coluna `TP_MERC`
+
+Tipo de mercado da empresa. Possíveis valores: `BOLSA`, `BALCAO ORGANIZADO`, `BALCAO NÃO ORGANIZADO` e `NULL`.
+
+- `BOLSA (Bolsa de Valores)`: Sistema centralizado e multilateral de negociação operado por uma entidade administradora autorizada (no Brasil, a B3).
+
+Exige regras rígidas de governança e transparência, livro de ofertas público e aberto em tempo real (Home Broker), formação de preços por leilão/ofertas e atuação obrigatória de uma contraparte central (clearing house) que garante a liquidação das operações.
+
+***Exemplo***: Ações de grandes empresas como Vale (VALE3), Petrobras (PETR4) e Itaú (ITUB4).
+
+- `BALCÃO ORGANIZADO (Over-The-Counter Organizado - OTC)`: Sistema eletrônico de negociação ou registro mantido por uma entidade administradora autorizada pela CVM (como o segmento de Balcão Organizado da B3, o antigo SOMA FIX ou a BEE4).
+
+Regras de admissão e governança mais flexíveis e menos burocráticas do que a bolsa tradicional. Ideal para negociação de títulos de dívida corporativa (como debêntures e notas comerciais) e ações de pequenas e médias empresas (PMEs). As negociações podem ocorrer de forma bilateral entre instituições financeiras credenciadas ou por leilões específicos, sem a necessidade de exibição pública contínua de livros de ofertas.
+
+***Exemplo***: Debêntures corporativas de empresas de capital aberto (como a Unidas/OVSA), emissões privadas e notas comerciais.
+
+
+- `BALCÃO NÃO ORGANIZADO`: Negociações realizadas diretamente entre as partes (comprador e vendedor), podendo ter a intermediação de uma corretora ou distribuidora, sem a intermediação de um sistema ou entidade administradora de mercado.
+
+Não possui livro de ofertas, ambiente eletrônico centralizado nem garantias da bolsa. As condições da operação (preço, quantidade e liquidação) são livremente pactuadas entre as partes. A CVM exige apenas que os intermediários registrem a operação posteriormente em um depositário central autorizado para fins de controle e transparência regulatória.
+
+
+### Coluna `CATEG_REG`
+
+Categoria regulatória da empresa. Possíveis valores: `Categoria A`, `Categoria B` e `NULL`.
+
+- `Categoria A`: Autoriza a negociação de QUALQUER valor mobiliário, incluindo Ações, BDRs, Debêntures e Notas Comerciais. (Ex: Vale, Petrobras, Itaú).
+
+- `Categoria B`: Autoriza a negociação APENAS de títulos de dívida/renda fixa (Debêntures, Notas Comerciais, CRIs/CRAs). Empresas Categoria B NÃO PODEM ter Ações ou BDRs negociados em bolsa/balcão. 
+
+
+### Coluna `SETOR_ATIV`
+
+Levantamento completo no arquivo atual `data/cad_cia_aberta.csv` (inclui vazio). Total identificado: `71` valores distintos. Ultima atualização: `14/07/2026`.
 
 | SETOR_ATIV | Ocorrencias |
 | --- | ---: |
@@ -168,45 +152,3 @@ Total identificado: `71` valores distintos.
 | Servicos Transporte e Logistica | 151 |
 | Telecomunicacoes | 80 |
 | Textil e Vestuario | 122 |
-
-## Regras operacionais recomendadas
-
-### 1 - Regra de selecao por CNPJ
-Para descrever setor por CNPJ:
-1. Entre as linhas do CNPJ, usar a de `DT_INI_SIT` mais recente (descritor
-   vigente).
-2. O `SETOR_ATIV` resultante e um descritor e um override — nao a fonte da
-   classificacao.
-
-Observacao:
-- CNPJs com multiplos `SETOR_ATIV` ativos existem (`90` no arquivo validado),
-  porem a linha mais recente resolve o descritor vigente.
-
-### 2 - Relevancia de `TP_MERC` e `CATEG_REG`
-- `TP_MERC` nao sera usado para definir setor.
-- `CATEG_REG` nao sera usado para definir setor.
-- Ambos permanecem armazenados na camada bruta para auditoria e uso futuro.
-
-### 3 - Governanca `SETOR_ATIV -> profile_id`
-`setor_profile_map` e o ponto de override manual. A tabela **nasce vazia** — o
-seed antigo (`Bancos`, `Arrendamento Mercantil`, `Intermediacao Financeira` ->
-`banking`) foi removido porque mapeava por setor o que a estrutura resolve melhor.
-O seed e legivel por hook `init_info_cad_schema`, que o apaga de bancos antigos.
-
-### 4 - Politica para vazios e desconhecidos
-Se `SETOR_ATIV` vier vazio, nao mapeado, ou a assinatura nao casar, o perfil e
-`default` e `rule_applied` registra `default:setor_vazio` (ou o setor). Nao ha
-fila de curadoria: a decisao e reproduzivel a partir do layout reportado.
-
-## Uso no pipeline
-Fluxo alvo (conceitual):
-1. Download de ITR/DFP e cadastro.
-2. Carga de demonstrativos e carga do cadastro.
-3. Resolucao de perfil por empresa.
-4. Calculo de indicadores respeitando profile.
-
-## Criterios de aceite (implementados)
-- Cadastro completo disponivel no DuckDB (universo sem filtro `SIT`).
-- Consulta historica por CNPJ funcionando.
-- Classificacao reproduzivel e auditavel (`rule_applied` por CNPJ).
-- Sem regressao para empresas industriais (perfil `default` inalterado).

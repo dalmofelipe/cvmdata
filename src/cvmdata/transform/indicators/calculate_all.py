@@ -66,7 +66,11 @@ def _collect_components(
     return merged
 
 
-def _persist_rows(conn: duckdb.DuckDBPyConnection, cnpj: str | None, rows: list[IndicatorRow]) -> None:
+def _persist_rows(
+    conn: duckdb.DuckDBPyConnection,
+    cnpj: str | None,
+    rows: list[IndicatorRow]
+) -> None:
     """Substitui as linhas de ``indicators`` (do cnpj filtrado, ou todas) em uma transação."""
     conn.execute("BEGIN")
     try:

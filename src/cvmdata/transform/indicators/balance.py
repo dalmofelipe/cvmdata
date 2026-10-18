@@ -27,23 +27,11 @@ def fetch_all_balance_components(
 
     Cada conta passa por duas tentativas, nesta ordem:
 
-    1. ``account_map`` pelo ``CD_CONTA`` e perfil — resolve o caso comum;
-    2. se não resolveu, a linha é do BPP e o perfil não tem PL por código,
-       ``text_map.resolve_pl`` pelo rótulo.
+    1. ``account_map`` pelo ``CD_CONTA`` e perfil — resolve o caso padrão/default;
+    2. Se não resolveu, a linha é do BPP e o perfil não tem PL por código, então tenta
+       resolver por texto via  ``text_map.resolve_pl``.
 
-    O passo 2 existe porque o patrimônio líquido tem posição instável: 2.03 no
-    layout padrão, 2.07/2.08 no financeiro, e 2.03 no financeiro significa ainda
-    "Provisões" em 19 bancos e "Passivos Financeiros ao Custo Amortizado" em 16.
-    Só o rótulo separa.
-
-    A ordem importa. Como o ACCOUNT_MAP de ``banking`` não mapeia 2.03, uma
-    linha "Provisões" cai no texto, não casa com o mapa de PL e é descartada.
-    Invertido, "Provisões" entraria no patrimônio. E o passo 2 é desligado nos
-    perfis que já resolvem PL por código — ver ``PL_BY_CODE_PROFILES``.
-
-    O perfil por CNPJ vem de ``company_classification`` (resolvido pelo step
-    de classificação cadastral); CNPJs sem classificação persistem o mapeamento
-    ``default``.
+    Referências: docs/account_map.md, docs/text_map.md, docs/baking_profile.md
     """
     filter_clause = "AND CNPJ_CIA = ?" if cnpj else ""
 

@@ -1,60 +1,9 @@
-"""Persistência de ``company_classification``.
-
-A tabela é do subdomínio classificação, e portanto mora aqui: ``profile`` é quem
-diz o que um perfil significa, ``info_cad`` é quem alimenta a tabela. Por isso o
-``DELETE`` + ``INSERT`` de reconstrução também fica aqui, e não no consumidor.
-"""
-
 from __future__ import annotations
-
-import logging
 
 import duckdb
 
 from cvmdata.ingestion.tables import TB_COMPANY_CLASSIFICATION
-
-logger = logging.getLogger(__name__)
-
-
-def table_exists(conn: duckdb.DuckDBPyConnection, table: str) -> bool:
-    """Se ``table`` existe no schema ``main``."""
-    return table in existing_tables(conn)
-
-
-def existing_tables(conn: duckdb.DuckDBPyConnection) -> set[str]:
-    """Nomes de todas as tabelas do schema ``main``."""
-    return {
-        r[0]
-        for r in conn.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-        ).fetchall()
-    }
-
-
-def rebuild(
-    conn: duckdb.DuckDBPyConnection,
-    sql: str,
-    params: list[object],
-) -> None:
-    """Reconstrói ``company_classification`` inteira, em transação.
-
-    A reconstrução — e não um ``INSERT OR REPLACE`` — é o que garante que a
-    classificação não carrega linha obsoleta: um CNPJ que saiu do universo no
-    ano corrente precisa sumir.
-
-    Args:
-        conn: Conexão DuckDB.
-        sql: Statement ``INSERT`` de classificação já renderizado.
-        params: Params do ``sql``, na mesma ordem.
-    """
-    conn.execute("BEGIN")
-    try:
-        conn.execute(f"DELETE FROM {TB_COMPANY_CLASSIFICATION}")
-        conn.execute(sql, params)
-        conn.execute("COMMIT")
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
+from cvmdata.utils.database import table_exists
 
 
 def fetch_profiles(
@@ -63,27 +12,29 @@ def fetch_profiles(
 ) -> dict[str, str]:
     """Batch: perfil por CNPJ persistido em ``company_classification``.
 
-    Args:
+    ### Args
         conn: Conexão DuckDB.
         cnpj: Se informado, filtra o resultado para um CNPJ.
 
-    Returns:
-        ``profiles``: dict ``cnpj -> profile_id`` trazendo apenas CNPJs com
-        classificação persistida.
+    ### Returns
+        profiles: ``dict[str, str]`` com o mapeamento ``cnpj_cia -> profile_id``.
 
-    Tabela ``company_classification`` ausente (pipeline só de indicadores) →
-    dict vazio: o cálculo resolve tudo como ``default``.
+    ### Example
+    
+        >>> fetch_profiles(conn)                    # doctest: +SKIP
+        {'42.737.954/0001-21': 'banking', '33.000.167/0001-01': 'default'}
     """
     profiles: dict[str, str] = {}
 
     if table_exists(conn, TB_COMPANY_CLASSIFICATION):
-        rows = conn.execute(
-            f"SELECT cnpj_cia, profile_id FROM {TB_COMPANY_CLASSIFICATION}"
-        ).fetchall()
-        profiles = {cnpj_cia: profile_id for cnpj_cia, profile_id in rows}
+        query = f"SELECT cnpj_cia, profile_id FROM {TB_COMPANY_CLASSIFICATION}"
+        params: list[object] = []
+        if cnpj is not None:
+            query += " WHERE cnpj_cia = ?"
+            params.append(cnpj)
 
-    if cnpj is not None:
-        profiles = {k: v for k, v in profiles.items() if k == cnpj}
+        rows = conn.execute(query, params,).fetchall()
+        profiles = {cnpj_cia: profile_id for cnpj_cia, profile_id in rows}
 
     return profiles
 
@@ -91,7 +42,7 @@ def fetch_profiles(
 def count_by_profile_and_rule(
     conn: duckdb.DuckDBPyConnection,
 ) -> tuple[dict[str, int], dict[str, int]]:
-    """Conta as linhas persistidas, agrupadas por perfil e por ``rule_applied``."""
+    """Conta as linhas persistidas, agrupadas por ``profile_id`` e por ``rule_applied``."""
     rows = conn.execute(
         f"""
         SELECT profile_id, rule_applied, count(*) AS n

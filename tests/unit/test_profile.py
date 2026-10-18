@@ -1,38 +1,41 @@
 """Testes unitários da resolução estrutural de perfil.
 
-Nível: renderização de SQL e metadados das regras. O comportamento —
+Nível: metadados das regras e o SQL que elas renderizam. O comportamento —
 qual empresa cai em qual perfil — é coberto em
 ``tests/integration/test_info_cad.py``, contra as clean.
+
+O SQL vive em :mod:`cvmdata.transform.info_cad.sql`; o que se testa aqui é que
+a regra vira ``EXISTS ... AND ...`` na ordem certa e que os params acompanham.
 """
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from cvmdata.ingestion.tables import TB_BPA_CLEAN, TB_BPP_CLEAN
+from cvmdata.transform.info_cad.sql import (
+    classification_sql,
+    rule_conditions_sql,
+    rule_matches_sql,
+)
 from cvmdata.transform.profile import (
     FALLBACK_PROFILE,
-    SIGNATURE_RULES,
-    SignatureRule,
-    SignatureSignal,
-    classification_sql,
-    signature_flags_sql,
-    signature_predicate,
+    STRUCTURAL_RULES,
+    RuleCondition,
+    StructuralRule,
 )
 
 pytestmark = pytest.mark.unit
 
-BANKING_RULE = SIGNATURE_RULES[0]
+BANKING_RULE = STRUCTURAL_RULES[0]
 
 
 def _params_and_flags(rules=None):
     params: list[object] = []
-    flags, aliases = signature_flags_sql(
-        rules if rules is not None else SIGNATURE_RULES,
-        cnpj_expr="u.CNPJ_CIA",
-        params=params,
-    )
-    return params, flags, aliases
+    flags = rule_matches_sql(rules if rules is not None else STRUCTURAL_RULES, params)
+    return params, flags
 
 
 # ── metadados da regra ────────────────────────────────────────────────────────
@@ -41,9 +44,9 @@ def _params_and_flags(rules=None):
 def test_banking_rule_requires_both_sides():
     """A regra de banco precisa dos dois sinais: cada um sozinho tem falso
     positivo (BPP financeiro com BPA padrão é layout híbrido real)."""
-    tables = [s.table for s in BANKING_RULE.signals]
+    tables = [s.clean_table for s in BANKING_RULE.conditions]
     assert tables == [TB_BPA_CLEAN, TB_BPP_CLEAN]
-    assert [s.cd_conta for s in BANKING_RULE.signals] == ["1.01", "2.01"]
+    assert [s.cd_conta for s in BANKING_RULE.conditions] == ["1.01", "2.01"]
     assert BANKING_RULE.profile_id == "banking"
 
 
@@ -51,16 +54,16 @@ def test_rule_applied_is_stable_identifier():
     assert BANKING_RULE.rule_applied == "structure:banking:bpa.1.01+bpp.2.01"
 
 
-def test_signals_are_immutable():
+def test_conditions_are_immutable():
     with pytest.raises(Exception):
-        BANKING_RULE.signals[0].cd_conta = "9.99"  # type: ignore[misc]
+        BANKING_RULE.conditions[0].cd_conta = "9.99"  # type: ignore[misc]
 
 
 # ── predicate ─────────────────────────────────────────────────────────────────
 
 
 def test_predicate_conjoins_one_exists_per_signal():
-    predicate = signature_predicate(BANKING_RULE, "u.CNPJ_CIA", [])
+    predicate = rule_conditions_sql(BANKING_RULE, [])
 
     assert predicate.count("EXISTS") == 2
     assert " AND " in predicate
@@ -68,8 +71,10 @@ def test_predicate_conjoins_one_exists_per_signal():
     assert f"FROM {TB_BPP_CLEAN}" in predicate
 
 
-def test_predicate_correlates_signals_by_cnpj():
-    predicate = signature_predicate(BANKING_RULE, "u.CNPJ_CIA", [])
+def test_predicate_correlates_conditions_by_cnpj():
+    """O alias `u` não é configuração: é o contrato com a CTE `sig` de
+    `SQL_CLASSIFY`. Este teste fixa o contrato dos dois lados."""
+    predicate = rule_conditions_sql(BANKING_RULE, [])
 
     assert predicate.count("= u.CNPJ_CIA") == 2
 
@@ -77,16 +82,16 @@ def test_predicate_correlates_signals_by_cnpj():
 def test_predicate_normalizes_label_like_python_side():
     """A classificação roda em SQL e o fetch roda em Python; as duas
     normalizações precisam ser a mesma Regra, em ponto."""
-    predicate = signature_predicate(BANKING_RULE, "u.CNPJ_CIA", [])
+    predicate = rule_conditions_sql(BANKING_RULE, [])
 
     assert predicate.count("lower(strip_accents(trim(") == 2
 
 
 def test_exact_signal_uses_equality():
-    signal = SignatureSignal(table=TB_BPA_CLEAN, cd_conta="1.01", ds_conta_normalized="caixa")
+    signal = RuleCondition(clean_table=TB_BPA_CLEAN, cd_conta="1.01", ds_conta_normalized="caixa")
     params: list[object] = []
 
-    predicate = signature_predicate(SignatureRule("p", (signal,)), "c", params)
+    predicate = rule_conditions_sql(StructuralRule("p", (signal,)), params)
 
     assert "= ?" in predicate
     assert "starts_with" not in predicate
@@ -96,15 +101,15 @@ def test_exact_signal_uses_equality():
 def test_prefix_signal_uses_starts_with_not_like():
     """``starts_with`` compara literalmente; ``LIKE 'x%'`` trataria ``_`` da
     query como coringa."""
-    signal = SignatureSignal(
-        table=TB_BPP_CLEAN,
+    signal = RuleCondition(
+        clean_table=TB_BPP_CLEAN,
         cd_conta="2.01",
         ds_conta_normalized="passivos financeiros",
         starts_with=True,
     )
     params: list[object] = []
 
-    predicate = signature_predicate(SignatureRule("p", (signal,)), "c", params)
+    predicate = rule_conditions_sql(StructuralRule("p", (signal,)), params)
 
     assert "starts_with(" in predicate
     assert "LIKE" not in predicate.upper()
@@ -112,7 +117,7 @@ def test_prefix_signal_uses_starts_with_not_like():
 
 
 def test_params_follow_signal_order():
-    params, _, _ = _params_and_flags()
+    params, _ = _params_and_flags()
 
     assert params == [
         "1.01",
@@ -125,92 +130,92 @@ def test_params_follow_signal_order():
 # ── flags ─────────────────────────────────────────────────────────────────────
 
 
-def test_flags_returns_one_alias_per_rule():
-    _, _, aliases = _params_and_flags()
+def test_flags_name_one_column_per_rule():
+    _, flags = _params_and_flags()
 
-    assert aliases == ["sig_0"]
+    assert "AS rule_0_match" in flags
 
 
 def test_flags_supports_multiple_rules():
     rules = [
         BANKING_RULE,
-        SignatureRule(
+        StructuralRule(
             profile_id="insurance",
-            signals=(
-                SignatureSignal(TB_BPA_CLEAN, "1.01", "ativos intangiveis"),
+            conditions=(
+                RuleCondition(TB_BPA_CLEAN, "1.01", "ativos intangiveis"),
             ),
         ),
     ]
-    params, flags, aliases = _params_and_flags(rules)
+    params, flags = _params_and_flags(rules)
 
-    assert aliases == ["sig_0", "sig_1"]
-    assert flags.count("AS sig_") == 2
+    assert "AS rule_0_match" in flags
+    assert "AS rule_1" in flags
     assert len(params) == 6
 
 
 # ── classificação ─────────────────────────────────────────────────────────────
 
 
-def test_profile_id_precedence_puts_signature_first():
-    profile_sql, _ = classification_sql(
-        SIGNATURE_RULES,
-        signature_exprs=["s.sig_0"],
-        setor_expr="c.setor_ativ",
-        in_cadastro_expr="c.CNPJ_CIA",
-        override_expr="spm.profile_id",
-    )
+def test_profile_id_uses_signature_then_default():
+    """Sem override, são duas vias: a assinatura ou o fallback."""
+    profile_sql, _ = classification_sql(STRUCTURAL_RULES)
 
-    assert profile_sql.index("WHEN s.sig_0 THEN 'banking'") < profile_sql.index(
-        f"ELSE COALESCE(spm.profile_id, '{FALLBACK_PROFILE}')"
-    )
-
-
-def test_profile_id_falls_back_to_default_without_override():
-    profile_sql, _ = classification_sql(
-        SIGNATURE_RULES,
-        signature_exprs=["s.sig_0"],
-        setor_expr="c.setor_ativ",
-        in_cadastro_expr="c.CNPJ_CIA",
-        override_expr="NULL",
-    )
-
-    assert profile_sql.endswith(f"ELSE COALESCE(NULL, '{FALLBACK_PROFILE}') END")
+    assert profile_sql == f"CASE WHEN rm.rule_0_match THEN 'banking' ELSE '{FALLBACK_PROFILE}' END"
 
 
 @pytest.mark.parametrize(
     "trecho",
     [
-        "WHEN s.sig_0 THEN 'structure:banking:bpa.1.01+bpp.2.01'",
-        "WHEN spm.profile_id IS NOT NULL  THEN 'override:setor:'",
+        "WHEN rm.rule_0_match THEN 'structure:banking:bpa.1.01+bpp.2.01'",
         "WHEN c.CNPJ_CIA IS NULL THEN 'default:sem_cadastro:sem_assinatura'",
         "THEN 'default:setor_vazio'",
-        "ELSE 'default:setor_nao_mapeado:'",
+        "ELSE 'default:setor:'",
     ],
 )
 def test_rule_applied_vocabulary(trecho):
-    """Cada causa tem texto próprio: 'setor vazio', 'setor não mapeado' e 'sem
+    """Cada causa tem texto próprio: 'setor vazio', 'setor preenchido' e 'sem
     cadastro' têm consertos diferentes e precisam ser distinguíveis."""
-    _, applied_sql = classification_sql(
-        SIGNATURE_RULES,
-        signature_exprs=["s.sig_0"],
-        setor_expr="c.setor_ativ",
-        in_cadastro_expr="c.CNPJ_CIA",
-        override_expr="spm.profile_id",
-    )
+    _, applied_sql = classification_sql(STRUCTURAL_RULES)
 
     assert trecho in applied_sql
 
 
+def test_rule_applied_records_the_sector():
+    """O setor entra no rótulo, não na decisão — é o que permite auditar
+    *qual* empresa caiu no default e por quê."""
+    _, applied_sql = classification_sql(STRUCTURAL_RULES)
+
+    assert "|| trim(c.setor_ativ)" in applied_sql
+
+
 def test_classification_sql_without_rules_still_valid():
-    """Lista vazia de regras degrada para override/default sem gerar SQL inválido
-    — é o que mantém o módulo utilizável se SIGNATURE_RULES for esvaziada."""
-    profile_sql, applied_sql = classification_sql(
-        [],
-        signature_exprs=[],
-        setor_expr="c.setor_ativ",
-        in_cadastro_expr="c.CNPJ_CIA",
-        override_expr="spm.profile_id",
-    )
+    """Lista vazia de regras degrada para o fallback sem gerar SQL inválido —
+    é o que mantém o módulo utilizável se STRUCTURAL_RULES for esvaziada."""
+    profile_sql, applied_sql = classification_sql([])
 
     assert profile_sql.startswith("CASE  ELSE")
     assert applied_sql.startswith("CASE  WHEN")
+
+
+def test_case_refers_to_exactly_the_flags_emitted():
+    """`rule_match_flags_sql` e `classification_sql` derivam os nomes de
+    `rule_match_alias`. Antes o caller montava a lista, e um nome errado só aparecia
+    como erro de SQL em runtime; agora a concordância é testável."""
+    rules = [
+        BANKING_RULE,
+        StructuralRule(
+            profile_id="insurance",
+            conditions=(RuleCondition(TB_BPA_CLEAN, "1.01", "ativos intangiveis"),),
+        ),
+    ]
+    _, flags = _params_and_flags(rules)
+    profile_sql, applied_sql = classification_sql(rules)
+
+    emitted = {f"AS rule_{i}_match" for i in range(len(rules))}
+    for fragment in (profile_sql, applied_sql):
+        referenced = {
+            f"AS {alias.split('.', 1)[1]}"
+            for alias in re.findall(r"\b(rm\.rule_\d+_match)\b", fragment)
+        }
+        assert referenced, fragment
+        assert referenced <= emitted, (referenced, emitted)

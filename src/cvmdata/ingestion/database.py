@@ -1,9 +1,3 @@
-"""Abertura da conexão DuckDB.
-
-O schema — todo ``CREATE TABLE`` e a reconciliação de bancos legados — vive em
-:mod:`cvmdata.ingestion.schema`. Aqui fica só como o banco é aberto.
-"""
-
 from __future__ import annotations
 
 import logging
