@@ -1,36 +1,40 @@
 # cvmdata
 
-Pipeline para processamento dos dados abertos da CVM, desenvolvido para calcular indicadores fundamentalistas de empresas brasileiras de capital aberto. Por padrão, processa os últimos cinco anos de demonstrações financeiras e gera 15 indicadores fundamentalistas trimestrais para todas as empresas disponíveis na base de dados da CVM.
+**cvmdata** é um motor de dados para análise fundamentalista de empresas brasileiras de capital aberto. Ele automatiza todo o pipeline de dados públicos da CVM — desde o download e extração dos arquivos ITR e DFP até a normalização das demonstrações financeiras e o cálculo dos indicadores.
+
+O motor trata as diferenças nos planos de contas entre setores, permitindo calcular **18 indicadores fundamentalistas trimestrais** de forma padronizada. O histórico é parametrizável desde **2011**; por padrão, o processamento considera os últimos **5 anos**.
+
+Os resultados são consolidados em **DuckDB**, totalizando aproximadamente **200 mil a 450 mil indicadores**, dependendo do período e da cobertura processada.
 
 ```
-Indicadores — 33.000.167/0001-01 - PETROBRAS 
+$ python scripts/indicators.py 
+
+  Indicadores — 33.000.167/0001-01 — PETROBRAS (PETR)   
 ┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┓
 ┃ dt_refer   ┃ indicador           ┃             valor ┃
 ┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━┩
-│ 2021-03-31 │ cobertura_juros     │           -1.0789 │
-│ 2021-03-31 │ divida_bruta        │ 404316000000.0000 │
-│ 2021-03-31 │ divida_liquida      │ 332862000000.0000 │
-│ 2021-03-31 │ divida_liquida_pl   │            1.0394 │
-│ 2021-03-31 │ endividamento_geral │           67.9204 │
-│ 2021-03-31 │ giro_ativo          │            0.0863 │
-| ...        | ...                 | ...               |
-│ 2025-09-30 │ roa                 │            6.4346 │
-│ 2025-09-30 │ roe                 │           18.3523 │
-│ 2025-12-31 │ cobertura_juros     │          -43.9300 │
-│ 2025-12-31 │ divida_bruta        │ 384025000000.0000 │
-│ 2025-12-31 │ divida_liquida      │ 333417000000.0000 │
-│ 2025-12-31 │ divida_liquida_pl   │            0.7984 │
-│ 2025-12-31 │ endividamento_geral │           65.8664 │
-│ 2025-12-31 │ giro_ativo          │            0.4067 │
-│ 2025-12-31 │ liquidez_corrente   │            0.7059 │
-│ 2025-12-31 │ liquidez_geral      │            0.3498 │
-│ 2025-12-31 │ liquidez_imediata   │            0.1795 │
-│ 2025-12-31 │ liquidez_seca       │            0.4782 │
-│ 2025-12-31 │ margem_bruta        │           47.6331 │
-│ 2025-12-31 │ margem_liquida      │           22.2300 │
-│ 2025-12-31 │ margem_operacional  │           29.2691 │
-│ 2025-12-31 │ roa                 │            9.0409 │
-│ 2025-12-31 │ roe                 │           26.4867 │
+│ 2011-03-31 │ capital_giro        │  59446049000.0000 │
+│ 2011-03-31 │ cobertura_juros     │          -17.8491 │
+│ 2011-03-31 │ divida_bruta        │ 128999907000.0000 │
+│ ...        │ ...                 │ ...               │
+│ 2026-06-30 │ capital_giro        │ -26401000000.0000 │
+│ 2026-06-30 │ cobertura_juros     │          -14.1391 │
+│ 2026-06-30 │ divida_bruta        │ 366533000000.0000 │
+│ 2026-06-30 │ divida_liquida      │ 312769000000.0000 │
+│ 2026-06-30 │ divida_liquida_pl   │            0.6491 │
+│ 2026-06-30 │ endividamento_geral │           62.3263 │
+│ 2026-06-30 │ endividamento_pl    │          165.4370 │
+│ 2026-06-30 │ giro_ativo          │            0.4288 │
+│ 2026-06-30 │ liquidez_corrente   │            0.8544 │
+│ 2026-06-30 │ liquidez_geral      │            0.3766 │
+│ 2026-06-30 │ liquidez_imediata   │            0.1850 │
+│ 2026-06-30 │ liquidez_seca       │            0.5771 │
+│ 2026-06-30 │ margem_bruta        │           50.5954 │
+│ 2026-06-30 │ margem_ebit         │           33.8648 │
+│ 2026-06-30 │ margem_liquida      │           24.3861 │
+│ 2026-06-30 │ roa                 │           10.4577 │
+│ 2026-06-30 │ roe                 │           27.7586 │
+│ 2026-06-30 │ roic                │           16.1892 │
 └────────────┴─────────────────────┴───────────────────┘
 ```
 
@@ -57,12 +61,8 @@ Segue lista de fórmulas e mapeamento de contas CVM, de cada indicador: [docs/an
 
 ```bash
 git clone https://github.com/dalmofelipe/cvmdata.git
-
 cd cvmdata
-
 uv sync
-
-uv sync --extra dev # apenas para desenvolvimento
 ```
 
 
@@ -81,14 +81,14 @@ source .venv/bin/activate
 Execute o pipeline completo (configuração padrão)
 
 ```sh
-# Importante: execute o comando no diretório raiz do projeto
+# Importante: execute um dos comandos no diretório raiz do projeto
 cvmdata
 
 # Ou
 uv run cvmdata
 ```
 
-O tempo para concluir o pipeline pode variar entre 3 e 10 minutos. Essa variação depende da configuração da máquina utilizada e da personalização do pipeline.
+O tempo para concluir o pipeline pode variar entre 3 e 10 minutos. Essa variação depende da configuração da máquina utilizada, velocidade de internet e da personalização do pipeline.
 
 
 ### Personalizando o pipeline
@@ -121,9 +121,15 @@ _O `.env` acima, personaliza o pipeline para baixar novamente os documentos e re
 Lista completa de variáveis em: [docs/pipeline.md](docs/pipeline.md)
 
 
-### Scripts
+## Scripts
 
-`indicators.py`: consulta rápida aos indicadores pelo terminal
+Todos scripts estão localizados na pasta `scripts/` e podem ser executados diretamente pelo terminal.
+
+Caso o arquivo do database estiver em uso serão exibidos erros de acesso. Feche o DbGate ou qualquer outro programa que esteja utilizando o arquivo `cvmdata.duckdb` antes de executar os scripts.
+
+### `indicators.py`
+
+Consulta rápida aos indicadores pelo terminal
 
 ```sh
 # Instale dependencias de scripts
@@ -132,28 +138,37 @@ uv sync --extras scripts
 # por padrão retorna todos indicadores da PETROBRAS
 python scripts/indicators.py
 
-# Filtre por CNPJ e/ou ANO especifico.
-# O comando abaixo retorna os indicadores de 2026 da VALE S.A.
-python scripts/indicators.py --cnpj "33.592.510/0001-54" --year 2026
-
 # Filtre pelo código CVM da empresa
 python scripts/indicators.py --cod_cvm "200"
 
-# Filtre pelo ticker (4 letras maiúsculas)
-python scripts/indicators.py --ticker "PETR"
+# Filtre pelo ticker
+python scripts/indicators.py --ticker "petr"
+
+# Combine e filtre por CNPJ, ticker e/ou ANO especifico.
+python scripts/indicators.py --cnpj "33.592.510/0001-54" --year 2026
+python scripts/indicators.py --ticker "PETR" --year 2024
 
 # Busque pela denominação comercial (mínimo 4 caracteres).
-# Quando a busca retorna mais de uma empresa, uma tabela
-# de seleção é exibida com CNPJ, COD_CVM, TICKER e NOME.
+# Quando a busca retorna mais de uma empresa, será exibida 
+# uma tabela com as informações de cada uma delas.
 python scripts/indicators.py --name "BRASIL"
-
-# Os filtros podem ser combinados (AND)
-python scripts/indicators.py --ticker "PETR" --year 2024
 ```
 
+### `report.py`
 
-### DBGate
+Compara indicadores do cvmdata com plataformas externas exibindo devios conforme a tolerância configurada.
 
-O banco de dados DuckDB gerado, pode ser explorado utilizando o `DbGate Community`.
+```sh
+uv sync --extras scripts
+
+python scripts/report.py
+```
+
+Exibe um gera um relatório `report.csv` na raiz da pasta scripts/.
+
+
+## DBGate
+
+Recomendo o uso do `DbGate Community` para explorar o banco de dados DuckDB gerado.
 
 Link: [DbGate Community](https://www.dbgate.io/download-community/)
