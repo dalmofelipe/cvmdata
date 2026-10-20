@@ -8,6 +8,7 @@ plataforma em ``Company.platforms`` com um dicionário
 
 from __future__ import annotations
 
+import argparse
 import csv
 from dataclasses import dataclass
 from pathlib import Path
@@ -341,16 +342,56 @@ def render_report(rows: list[dict[str, object]]) -> Table:
     return table
 
 
-def main() -> None:
+def summarize_report(rows: list[dict[str, object]]) -> str:
+    exact = sum(row["desvio"] == 0 for row in rows)
+    exceeded = sum(
+        row["desvio"] is not None and abs(row["desvio"]) > TOLERANCE
+        for row in rows
+    )
+    intermediate = sum(
+        row["desvio"] is not None
+        and row["desvio"] != 0
+        and abs(row["desvio"]) <= TOLERANCE
+        for row in rows
+    )
+    unavailable = sum(row["desvio"] is None for row in rows)
+    return (
+        "Resumo: "
+        f"{len(rows)} comparações — "
+        f"{exact} exatas, "
+        f"{intermediate} dentro da tolerância, "
+        f"{exceeded} fora da tolerância, "
+        f"{unavailable} sem comparação."
+    )
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Compara indicadores do cvmdata com plataformas externas."
+    )
+    parser.add_argument(
+        "--terminal",
+        action="store_true",
+        help="Exibe a tabela detalhada no terminal e não gera o CSV.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = _parse_args(argv)
     if not settings.db_path.exists():
         raise FileNotFoundError(f"Banco não encontrado: {settings.db_path}")
     if not 0 <= TOLERANCE:
         raise ValueError("TOLERANCE deve ser maior ou igual a zero")
 
     rows = build_report(REPORT_COMPANY)
-    write_csv(rows)
-    Console().print(render_report(rows))
-    Console().print(f"CSV salvo em {REPORT_PATH}")
+    console = Console()
+    if args.terminal:
+        console.print(render_report(rows))
+    else:
+        write_csv(rows)
+        console.print(summarize_report(rows))
+        console.print(f"CSV salvo em {REPORT_PATH}")
 
 
 if __name__ == "__main__":

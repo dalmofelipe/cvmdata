@@ -156,15 +156,28 @@ python scripts/indicators.py --name "BRASIL"
 
 ### `report.py`
 
-Compara indicadores do cvmdata com plataformas externas exibindo devios conforme a tolerância configurada.
+Compara indicadores do `cvmdata` com plataformas externas, calcula os desvios
+conforme a tolerância configurada e gera um relatório no terminal ou em CSV.
 
 ```sh
-uv sync --extras scripts
+# Instale as dependências dos scripts
+uv sync --extra scripts
 
-python scripts/report.py
+# Execução padrão: gera o CSV e exibe um resumo no terminal
+uv run python scripts/report.py
+
+# Exibe a tabela detalhada no terminal sem gerar o CSV
+uv run python scripts/report.py --terminal
 ```
 
-Exibe um gera um relatório `report.csv` na raiz da pasta scripts/.
+O CSV é gerado em:
+
+```text
+scripts/report.csv
+```
+
+Consulte o [guia completo do script](docs/script_report.md) para aprender a
+adicionar novas empresas, plataformas, períodos e indicadores.
 
 
 ## DBGate

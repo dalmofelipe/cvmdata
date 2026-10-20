@@ -26,10 +26,25 @@ Na raiz do projeto, instale as dependências dos scripts:
 uv sync --extra scripts
 ```
 
-Depois execute:
+Por padrão, o script gera o CSV e exibe no terminal somente um resumo:
 
 ```sh
 uv run python scripts/report.py
+```
+
+O resumo informa o total de comparações e separa os resultados em:
+
+- valores exatos, com desvio `0%`;
+- valores diferentes, mas dentro da tolerância;
+- valores fora da tolerância;
+- valores sem comparação, quando algum valor é `None` ou o valor externo é
+  zero.
+
+Para exibir a tabela detalhada no terminal, use:
+
+```sh
+# Exibe a tabela detalhada no terminal e não gera o CSV.
+uv run python scripts/report.py --terminal
 ```
 
 O banco utilizado é o configurado pelo projeto, normalmente:
@@ -45,7 +60,7 @@ projeto, por exemplo:
 CVM_DATA_DIR=/caminho/para/data uv run python scripts/report.py
 ```
 
-O arquivo CSV é sempre criado no mesmo diretório do script:
+No modo padrão, o arquivo é criado no mesmo diretório do script:
 
 ```text
 scripts/report.csv
