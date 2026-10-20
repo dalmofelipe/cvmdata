@@ -64,7 +64,7 @@ class ReportCompany:
 # ITAÚ UNIBANCO (banking) -------------------------------------------
 
 
-STATUS_INVEST_CVM_ITUB_CNPJ = "60.872.504/0001-23"
+ITUB_CNPJ = "60.872.504/0001-23"
 STATUS_INVEST_CVM_ITUB_INDICATORS: PlatformIndicators = {
     Period(2026, 6): [
         Indicator("divida_liquida_pl", None),
@@ -94,7 +94,7 @@ STATUS_INVEST_CVM_ITUB_INDICATORS: PlatformIndicators = {
 # PETROBRAS (default) -------------------------------------------
 
 
-DADOS_DE_MERCADO_CVM_PETR_CNPJ = "33.000.167/0001-01"
+PETR_CNPJ = "33.000.167/0001-01"
 DADOS_DE_MERCADO_CVM_PETR_INDICATORS: PlatformIndicators = {
     Period(2026, 6): [
         Indicator("capital_giro", -26401 * 1_000_000),
@@ -108,7 +108,8 @@ DADOS_DE_MERCADO_CVM_PETR_INDICATORS: PlatformIndicators = {
         Indicator("liquidez_corrente", 0.85),
         Indicator("liquidez_seca", 0.58),
         Indicator("liquidez_imediata", 0.18),
-        Indicator("roa", 0.10 * 100), # A dados de mercado é unica que calcula ROA com valor decimal.
+        # A dados de mercado é unica que calcula ROA com valor decimal.
+        Indicator("roa", 0.10 * 100), 
         Indicator("roe", 27.76),
         Indicator("roic", 15.60),
     ],
@@ -131,18 +132,109 @@ DADOS_DE_MERCADO_CVM_PETR_INDICATORS: PlatformIndicators = {
 }
 
 
+## BB SEGURADORA (provavel insurance profile ou policy) -----------------
+
+
+BBSE_CNPJ: str = "17.344.597/0001-94"
+DADOS_DE_MERCADO_CVM_BBSE_INDICATORS: PlatformIndicators = {
+    Period(2026, 6): [
+        Indicator("capital_giro", 1062 * 1_000_000),
+        Indicator("endividamento_pl", 101.31),
+        Indicator("giro_ativo", None),
+        Indicator("margem_bruta", None),
+        Indicator("margem_ebit", None),
+        Indicator("margem_liquida", None),
+        Indicator("liquidez_corrente", 1.15),
+        Indicator("liquidez_seca", None),
+        Indicator("liquidez_imediata", 0.86),
+        Indicator("roa", 0.42 * 100),
+        Indicator("roe", 84.38),
+    ],
+    Period(2022, 12): [
+        Indicator("capital_giro", 712 * 1_000_000),
+        Indicator("endividamento_pl", 112.34),
+        Indicator("giro_ativo", 0.0),
+        Indicator("margem_bruta", None),
+        Indicator("margem_ebit", None),
+        Indicator("margem_liquida", None),
+        Indicator("liquidez_corrente", 1.11),
+        Indicator("liquidez_seca", None),
+        Indicator("liquidez_imediata", 0.93),
+        Indicator("roa", 0.37 * 100),
+        Indicator("roe", 79.57),
+    ],
+}
+FUNDAMENTUS_CVM_BBSE_INDICATORS: PlatformIndicators = {
+    Period(2026, 6): [
+        Indicator("roe", 84.40),
+    ]
+}
+STATUS_INVEST_CVM_BBSE_INDICATORS: PlatformIndicators = {
+    Period(2026, 6): [
+        Indicator("divida_liquida_pl", 0.60),
+        Indicator("giro_ativo", 0.0),
+        Indicator("margem_bruta", None),
+        Indicator("margem_ebit", None),
+        Indicator("margem_liquida", None),
+        Indicator("liquidez_corrente", 1.15),
+        Indicator("roa", 41.91),
+        Indicator("roe", 84.38),
+        Indicator("roic", 33.33),
+    ],
+    Period(2024, 12): [
+        Indicator("divida_liquida_pl", None),
+        Indicator("giro_ativo", 0.0),
+        Indicator("margem_bruta", None),
+        Indicator("margem_ebit", None),
+        Indicator("margem_liquida", None),
+        Indicator("liquidez_corrente", 1.20),
+        Indicator("roa", 40.26),
+        Indicator("roe", 89.77),
+        Indicator("roic", None),
+    ]
+}
+INVESTIDOR10_CVM_BBSE_INDICATORS: PlatformIndicators = {
+    Period(2026, 6): [
+        Indicator("divida_liquida_pl", -0.59),
+        Indicator("giro_ativo", 0.0),
+        Indicator("margem_bruta", 0.0),
+        Indicator("margem_ebit", 0.0),
+        Indicator("margem_liquida", 0.0),
+        Indicator("liquidez_corrente", 1.15),
+        Indicator("roa", 41.91),
+        Indicator("roe", 84.38),
+        Indicator("roic", 73.78),
+    ]
+}
+
+
+# ---------------------------------------------------------------------------------
+
+
 REPORT_COMPANY = ReportCompany(
     companies=[
         Company(
-            cnpj=STATUS_INVEST_CVM_ITUB_CNPJ,
+            cnpj=ITUB_CNPJ,
             platforms={"Status Invest": STATUS_INVEST_CVM_ITUB_INDICATORS},
         ),
         Company(
-            cnpj=DADOS_DE_MERCADO_CVM_PETR_CNPJ,
+            cnpj=PETR_CNPJ,
             platforms={"Dados de Mercado": DADOS_DE_MERCADO_CVM_PETR_INDICATORS},
         ),
+        Company(
+            cnpj=BBSE_CNPJ,
+            platforms={
+                "Dados de Mercado": DADOS_DE_MERCADO_CVM_BBSE_INDICATORS,
+                "Fundamentus": FUNDAMENTUS_CVM_BBSE_INDICATORS,
+                "Status Invest": STATUS_INVEST_CVM_BBSE_INDICATORS,
+                "Investidor 10": INVESTIDOR10_CVM_BBSE_INDICATORS
+            }
+        )
     ]
 )
+
+
+# ---------------------------------------------------------------------------------
 
 
 def _indicator_names(platforms: dict[str, PlatformIndicators]) -> list[str]:
