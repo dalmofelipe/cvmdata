@@ -110,11 +110,11 @@ def test_bank_integration_indicators_inserted(db):
         FIXTURES_DIR / "sample_bank_dre.csv",
     )
     count = db.execute("SELECT COUNT(*) FROM indicators").fetchone()[0]
-    assert count > 0
+    assert count == EXPECTED_INDICATOR_COUNT
 
 
 def test_bank_integration_roe_not_none(db):
-    """ROE de BCO Brasil não é None — 3.11 (lucro) e 2.03 (PL/Provisões) presentes."""
+    """ROE de BCO Brasil usa o PL resolvido no perfil banking."""
     _load_and_calc(
         db,
         FIXTURES_DIR / "sample_bank_bpa.csv",
@@ -123,7 +123,7 @@ def test_bank_integration_roe_not_none(db):
     )
     row = db.execute("SELECT valor FROM indicators WHERE indicador = 'roe'").fetchone()
     assert row is not None
-    assert row[0] is not None
+    assert row[0] == pytest.approx(73.4570460576)
 
 
 # ── Inter: ausente do cadastro → assinatura estrutural ──────────────────────
@@ -384,7 +384,8 @@ def test_industrial_roe_not_none(db):
         FIXTURES_DIR / "sample_industrial_dre.csv",
     )
     row = db.execute("SELECT valor FROM indicators WHERE indicador = 'roe'").fetchone()
-    assert row is not None and row[0] is not None
+    assert row is not None
+    assert row[0] == pytest.approx(10.0700925679)
 
 
 def test_industrial_no_none_indicators(db):

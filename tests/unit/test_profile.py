@@ -11,6 +11,7 @@ a regra vira ``EXISTS ... AND ...`` na ordem certa e que os params acompanham.
 from __future__ import annotations
 
 import re
+from dataclasses import FrozenInstanceError
 
 import pytest
 
@@ -55,7 +56,7 @@ def test_rule_applied_is_stable_identifier():
 
 
 def test_conditions_are_immutable():
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         BANKING_RULE.conditions[0].cd_conta = "9.99"  # type: ignore[misc]
 
 
@@ -151,6 +152,15 @@ def test_flags_supports_multiple_rules():
     assert "AS rule_0_match" in flags
     assert "AS rule_1" in flags
     assert len(params) == 6
+
+
+def test_empty_rules_emit_valid_select_expression():
+    params: list[object] = []
+
+    flags = rule_matches_sql([], params)
+
+    assert flags == "TRUE AS no_rule_match"
+    assert params == []
 
 
 # ── classificação ─────────────────────────────────────────────────────────────

@@ -147,6 +147,9 @@ def rule_matches_sql(
     
     Referências: docs/profiles.md, docs/classificacao.md
     """
+    if not rules:
+        return "TRUE AS no_rule_match"
+
     matchings = [
         f"{rule_conditions_sql(rule, params)} AS {rule_match_alias(index)}"
         for index, rule in enumerate(rules)
