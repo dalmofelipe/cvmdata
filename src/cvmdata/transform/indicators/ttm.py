@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import duckdb
 
-from cvmdata.ingestion.tables import DRE_CLEAN
+from cvmdata.ingestion.tables import TB_DRE_CLEAN
 from cvmdata.transform.account_map import ALL_DRE_CODES, get_component
-from cvmdata.transform.dre_tail_map import get_tail_component
 from cvmdata.transform.indicators.models import Components, ReportingPeriod
+from cvmdata.transform.text_map import resolve_tail
 
 # Fórmula TTM completa, com fallback gradual, expressa em SQL:
 #   1. Sem YTD atual   -> retorna FY anterior (ou NULL)
@@ -36,7 +36,7 @@ WITH dre_wide AS MATERIALIZED (
         MAX(CASE WHEN ORDEM_EXERC = 'ÚLTIMO' THEN VL_CONTA END) AS ultimo_val,
         MAX(CASE WHEN ORDEM_EXERC = 'PENÚLTIMO' THEN VL_CONTA END) AS penultimo_val,
         MAX(DS_CONTA) AS ds_conta
-    FROM {DRE_CLEAN}
+    FROM {TB_DRE_CLEAN}
     WHERE CD_CONTA = ANY(?) {{filter_clause}}
     GROUP BY CNPJ_CIA, DT_REFER, CD_CONTA, source
 ),
@@ -118,7 +118,7 @@ def fetch_all_dre_components(
         profile_id = profiles.get(cnpj_r, "default")
         name = get_component(cd_conta, profile_id)
         if name is None and ds_conta is not None:
-            name = get_tail_component(ds_conta, cd_conta)
+            name = resolve_tail(ds_conta, cd_conta)
         if name:
             valor = float(ttm_valor) if ttm_valor is not None else None
             period = ReportingPeriod(cnpj_r, dt_r)

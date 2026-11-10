@@ -5,7 +5,7 @@ from __future__ import annotations
 import duckdb
 import pytest
 
-from cvmdata.ingestion.database import init_schema
+from cvmdata.ingestion.schema import init_schema
 from cvmdata.ingestion.tables import CLEAN_SUFFIX, RAW_PREFIX, clean_table_name
 from cvmdata.transform.normalize import normalize_all, normalize_table
 
@@ -69,6 +69,30 @@ def test_normalize_dedup_returns_correct_count(db: duckdb.DuckDBPyConnection) ->
     count = normalize_table("raw_bpa", db)
 
     assert count == 2
+
+
+def test_normalize_bpp_applies_balance_rules(db: duckdb.DuckDBPyConnection) -> None:
+    """BPP também descarta PENÚLTIMO e mantém a maior VERSAO."""
+    init_schema(db)
+    db.execute(
+        """
+        INSERT INTO raw_bpp VALUES
+            ('00.000.000/0001-91', '2024-03-31', 1, 'EMPRESA TEST', '001000',
+             'DF Consolidado - BPP', 'REAL', 'MIL', 'ÚLTIMO', '2024-03-31',
+             '2.03', 'Patrimônio Líquido', 1000, 'S', 'itr', 2024, 'con'),
+            ('00.000.000/0001-91', '2024-03-31', 2, 'EMPRESA TEST', '001000',
+             'DF Consolidado - BPP', 'REAL', 'MIL', 'ÚLTIMO', '2024-03-31',
+             '2.03', 'Patrimônio Líquido', 2000, 'S', 'itr', 2024, 'con'),
+            ('00.000.000/0001-91', '2024-03-31', 3, 'EMPRESA TEST', '001000',
+             'DF Consolidado - BPP', 'REAL', 'MIL', 'PENÚLTIMO', '2024-03-31',
+             '2.03', 'Patrimônio Líquido', 9999, 'S', 'itr', 2024, 'con')
+        """
+    )
+
+    count = normalize_table("raw_bpp", db)
+
+    assert count == 1
+    assert db.execute("SELECT VERSAO, VL_CONTA FROM bpp_clean").fetchone() == (2, 2_000_000)
 
 
 def test_normalize_removes_penultimo(db: duckdb.DuckDBPyConnection) -> None:
@@ -385,3 +409,28 @@ def test_normalize_dre_q1_single_line(db: duckdb.DuckDBPyConnection) -> None:
     assert count == 1
     row = db.execute("SELECT VL_CONTA FROM dre_clean").fetchone()
     assert float(row[0]) == pytest.approx(90.0)
+
+
+def test_normalize_dre_deduplicates_same_order_by_period_and_version(
+    db: duckdb.DuckDBPyConnection,
+) -> None:
+    """DRE mantém YTD, mas deduplica versões dentro do mesmo ORDEM_EXERC."""
+    init_schema(db)
+    _insert_dre(db, versao=1, dt_ini_exerc="2024-01-01", vl_conta=100.0)
+    _insert_dre(db, versao=2, dt_ini_exerc="2024-01-01", vl_conta=200.0)
+    _insert_dre(
+        db,
+        versao=3,
+        ordem_exerc="PENÚLTIMO",
+        dt_ini_exerc="2023-01-01",
+        vl_conta=300.0,
+    )
+
+    count = normalize_table("raw_dre", db)
+
+    assert count == 2
+    rows = db.execute(
+        "SELECT ORDEM_EXERC, VERSAO, VL_CONTA FROM dre_clean ORDER BY ORDEM_EXERC"
+    ).fetchall()
+    assert [(row[0], row[1]) for row in rows] == [("PENÚLTIMO", 3), ("ÚLTIMO", 2)]
+    assert [float(row[2]) for row in rows] == pytest.approx([300, 200])

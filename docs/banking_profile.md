@@ -1,13 +1,14 @@
 # Banking Profile
 
 ## Objetivo
-Documentar a analise dos codigos CVM usados por bancos e explicar por que o `ACCOUNT_MAP` atual (orientado a perfil industrial) gera indicadores nulos para instituicoes financeiras.
 
-Este documento e de planejamento e analise. Nao implementa alteracoes no pipeline.
+Documentar a analise dos codigos CVM usados por bancos e explicar por que o `ACCOUNT_MAP` orientado a perfil `default` gerava indicadores nulos (ou errados) para instituicoes financeiras.
+
+O perfil `banking` esta implementado. As secoes "Proposta" e " proximos passos" sao o registro do raciocinio que levou a ele; o estado atual esta em [setor_profile.md](setor_profile.md).
 
 ## Fontes analisadas
 - `src/cvmdata/transform/account_map.py`
-- `tests/test_indicators.py` (casos `xfail` com `sector_profile pending`)
+- `tests/integration/test_indicators.py`
 - `tests/fixtures/sample_bank_bpa.csv`
 - `tests/fixtures/sample_bank_bpp.csv`
 - `tests/fixtures/sample_bank_dre.csv`
@@ -16,7 +17,7 @@ Este documento e de planejamento e analise. Nao implementa alteracoes no pipelin
 - `data/raw/itr/2025/itr_cia_aberta_DRE_con_2025.csv` (CNPJ `60.872.504/0001-23`)
 
 ## Resumo executivo
-- O mapa atual assume contas industriais para divida (`2.01.04`, `2.02.01`) e lucro liquido (`3.11`).
+- O mapa atual assume contas default para divida (`2.01.04`, `2.02.01`) e lucro liquido (`3.11`).
 - Em bancos, essas contas podem nao existir, ou ter semantica diferente.
 - Evidencia real (Itau 2025 ITR) mostra ausencia de:
   - `1.01.01` (caixa)
@@ -27,8 +28,8 @@ Este documento e de planejamento e analise. Nao implementa alteracoes no pipelin
   - `3.11` (lucro liquido)
 - Com isso, indicadores dependentes ficam `None` com a estrategia atual.
 
-## Estado atual no codigo
-O `ACCOUNT_MAP` atual usa a seguinte logica principal:
+## Logica do perfil default (o problema)
+O `ACCOUNT_MAP` do perfil `default` usa a seguinte logica:
 - `divida_bruta = 2.01.04 + 2.02.01`
 - `divida_liquida = divida_bruta - 1.01.01 - 1.01.02`
 - `liquidez_seca = (1.01 - 1.01.04) / 2.01`
@@ -37,13 +38,13 @@ O `ACCOUNT_MAP` atual usa a seguinte logica principal:
 Ja existe anotacao explicita em `account_map.py` indicando necessidade de `sector_profile` para bancos.
 
 ## Evidencias de testes
-Em `tests/test_indicators.py`:
-- `test_bank_sector_liquidez_seca_not_none` esta `xfail`.
-  - Motivo: banco nao reporta `1.01.04` (estoques).
-- `test_bank_sector_divida_bruta_not_none` esta `xfail`.
-  - Motivo: banco nao reporta `2.01.04`.
+Os indicadores sem equivalente honesto no layout bancario ficam `None` de
+propósito, e o teste fixa esse comportamento:
+- `test_bank_sector_liquidez_seca_is_none` — banco nao reporta `1.01.04` (estoques).
+- `test_bank_sector_divida_bruta_is_none` — banco nao reporta `2.01.04` (emprestimos).
 
-Esses testes confirmam que os nulos em bancos sao comportamento esperado no estado atual, e nao falha de ingestao.
+A distinção importa: `None` porque a conta nao existe e nao tem substituto
+honesto é diferente de `None` por bug de ingestao.
 
 ## Evidencias de dados (fixtures bancarios)
 No fixture `sample_bank_*` (BCO Brasil):
@@ -56,7 +57,7 @@ Observacao: o fixture ajuda na reproducao de pipeline, mas nao cobre toda variac
 ## Evidencias de dados reais (Itau, ITR 2025)
 CNPJ analisado: `60.872.504/0001-23`.
 
-Cobertura dos codigos industriais no ITR 2025:
+Cobertura dos codigos default no ITR 2025:
 
 ### BPA
 - Presente: `1`, `1.01`, `1.02`, `1.02.01`
@@ -94,7 +95,7 @@ Indicadores com chance maior de continuar calculaveis:
 - `liquidez_geral` (`(1.01 + 1.02.01) / (2.01 + 2.02)`)
 - `endividamento_geral` (`(2.01 + 2.02) / 1`)
 
-## Proposta de mapeamento preliminar para `banking`
+## Mapeamento do perfil `banking` (implementado)
 Abaixo, proposta inicial de correspondencia por componente semantico.
 
 - `ativo_total` -> `1`
@@ -107,28 +108,44 @@ Abaixo, proposta inicial de correspondencia por componente semantico.
 - `emprestimos_cp` -> substituir por agregado financeiro de curto prazo do perfil bancario (nao `2.01.04`)
 - `passivo_nao_circulante` -> `2.02`
 - `emprestimos_lp` -> substituir por agregado financeiro de longo prazo do perfil bancario (nao `2.02.01`)
-- `patrimonio_liquido` -> avaliar por caso:
-  - em alguns bancos pode continuar em `2.03` (por fixture)
-  - em outros, `2.03` pode ter semantica de passivo financeiro
+- `patrimonio_liquido` -> **nao mapeado por codigo**; resolvido por rotulo
+  (`resolve_pl`). `2.03` significa PL no layout padrao, mas "Provisoes" em 19
+  bancos e "Passivos Financeiros ao Custo Amortizado" em 16; o PL no financeiro
+  fica em `2.07` ou `2.08` conforme o ano. Ver [setor_profile.md](setor_profile.md)
 - `receita_liquida` -> `3.01`
 - `resultado_bruto` -> `3.03`
 - `ebit` -> `3.05`
 - `despesas_financeiras` -> revisar `3.06.02` (em bancos pode ser imposto diferido)
 - `lucro_liquido` -> usar `3.09` quando `3.11` nao existir
 
-## Regras minimas recomendadas (planejamento)
-- Criar profile `banking` com precedencia por classificacao cadastral (`SETOR_ATIV`).
-- Aplicar fallback de conta por lista ordenada (ex.: `lucro_liquido`: `3.11`, depois `3.09`).
-- Marcar indicadores nao aplicaveis ao setor em `indicator_policy` (`disabled` ou `alt_formula`).
-- Registrar `profile_id`, `confidence` e `rule_version` para auditoria.
+## Decisoes que substituíram o plano inicial
+- **Precedencia por `SETOR_ATIV` foi descartada.** O setor nao e discriminador de
+  layout: bancos reportam layout padrao, e holdings reportam o financeiro. A
+  assinatura estrutural (`bpa.1.01` + `bpp.2.01`) classifica as 558 empresas do
+  universo real em 29 `banking` / 529 `default`, sem filtro `SIT`.
+- **`confidence` foi removido.** O perfil e uma asercao estrutural; `rule_applied`
+  registra a origem da decisao.
+- **PL por codigo foi descartado.** Resolvido por rotulo normalizado.
 
-## Riscos e pontos em aberto
-- O significado de `2.03` e `3.06.02` varia entre companhias; nao assumir sem validação por amostra maior.
+## Riscos e pontos em abertos
+- **Periodo a periodo**: a assinatura e avaliada por empresa, nao por periodo, e
+  o perfil vale para todo o historico. No universo validado nao ha hibrido: os
+  29 `banking` casam a assinatura em **todos** os 9 a 22 periodos que reportam.
+  Ainda assim, uma empresa que migre de layout receberia `banking` em todo o
+  historico, e componentes que dependem do layout (caixa, EBIT) divergiriam nos
+  periodos do outro. Reclassificar exigiria decisao por periodo, que nao existe.
+- O significado de `3.06.02` ainda varia entre companhias.
 - Bancos com operacoes de seguridade/previdencia podem misturar estruturas de conta.
-- Existe heterogeneidade entre ITR e DFP; regra final deve ser validada nas duas fontes.
 
-## Proximos passos sugeridos
-1. Fechar um dicionario de componentes do profile `banking` usando amostra de bancos relevantes.
-2. Definir matriz de aplicabilidade de indicadores para perfil bancario.
-3. Rodar teste de regressao comparando `default` vs `banking` em CNPJs de referencia.
-4. Promover os `xfail` bancarios para testes verdes apos implementacao do profile.
+
+
+
+### Observações
+
+- plataformas externas 
+  - https://statusinvest.com.br/acoes/bbas3
+  - https://investidor10.com.br/acoes/bbas3/
+  - https://www.fundamentus.com.br/detalhes.php?papel=BBAS3
+  - https://www.dadosdemercado.com.br/acoes/bbas3
+- `BMEB3 17.184.037/0001-10	1325	BANCO MERCANTIL BRASIL SA` calcula corretamente (roe, roa, margem bruta e liquida, giro ativo), futuramente os demais serão filtrados pelo indicator policy.
+- `BBSA3 00.000.000/0001-91	BANCO DO BRASIL SA` calcula indicadores com valores bem aproximados, comparado a maioria das plataformas externas. 

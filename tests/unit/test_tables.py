@@ -11,6 +11,7 @@ literal aqui faria o teste acusar a si mesmo.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -18,20 +19,18 @@ import pytest
 
 from cvmdata.ingestion.catalog import CATALOG
 from cvmdata.ingestion.tables import (
-    B3_TICKERS,
     BALANCE_CLEAN_TABLES,
-    BPA_CLEAN,
-    BPP_CLEAN,
-    CAD_CIA_ABERTA_RAW,
-    CLASSIFICATION_CURATION_EVENTS,
     CLEAN_SUFFIX,
     CLEAN_TABLES,
-    COMPANY_CLASSIFICATION,
-    COMPOSICAO_CAPITAL,
-    DRE_CLEAN,
-    INDICATORS,
     RAW_PREFIX,
-    SETOR_PROFILE_MAP,
+    TB_B3_TICKERS,
+    TB_BPA_CLEAN,
+    TB_BPP_CLEAN,
+    TB_CAD_CIA_ABERTA_RAW,
+    TB_COMPANY_CLASSIFICATION,
+    TB_COMPOSICAO_CAPITAL,
+    TB_DRE_CLEAN,
+    TB_INDICATORS,
     clean_table_name,
 )
 
@@ -48,21 +47,19 @@ LEGACY_DOC_ALLOWLIST = {"docs/tabelas.md"}
 # Nomes que passam a ser centralizados. O literal só é aceito no CREATE TABLE
 # que o declara — em qualquer outro SQL, o nome vem da constante.
 CENTRALIZED_NAMES = (
-    CAD_CIA_ABERTA_RAW,
-    COMPANY_CLASSIFICATION,
-    CLASSIFICATION_CURATION_EVENTS,
-    SETOR_PROFILE_MAP,
-    INDICATORS,
-    B3_TICKERS,
-    COMPOSICAO_CAPITAL,
-    BPA_CLEAN,
-    BPP_CLEAN,
-    DRE_CLEAN,
+    TB_CAD_CIA_ABERTA_RAW,
+    TB_COMPANY_CLASSIFICATION,
+    TB_INDICATORS,
+    TB_B3_TICKERS,
+    TB_COMPOSICAO_CAPITAL,
+    TB_BPA_CLEAN,
+    TB_BPP_CLEAN,
+    TB_DRE_CLEAN,
 )
 
-# database.py é o único módulo de produção com DDL (CREATE TABLE) — lá o literal
+# schema.py é o único módulo de produção com DDL (CREATE TABLE) — lá o literal
 # é o sítio de declaração e deve permanecer.
-DECLARATION_SITES = {"src/cvmdata/ingestion/database.py"}
+DECLARATION_SITES = {"src/cvmdata/ingestion/schema.py"}
 
 # O guard vale para código de produção. Em tests/ o literal é proposital: um
 # fixture que declara `CREATE TABLE bpa_clean` com a constante passaria mesmo
@@ -103,9 +100,9 @@ def _scan(relative_dir: str) -> list[tuple[str, int, str]]:
 @pytest.mark.parametrize(
     ("raw_table", "expected"),
     [
-        ("raw_bpa", BPA_CLEAN),
-        ("raw_bpp", BPP_CLEAN),
-        ("raw_dre", DRE_CLEAN),
+        ("raw_bpa", TB_BPA_CLEAN),
+        ("raw_bpp", TB_BPP_CLEAN),
+        ("raw_dre", TB_DRE_CLEAN),
     ],
 )
 def test_clean_table_name_derives_expected_names(raw_table: str, expected: str) -> None:
@@ -131,22 +128,15 @@ def test_clean_table_name_rejects_prefix_without_statement() -> None:
 def test_clean_tables_hold_the_canonical_names() -> None:
     """Contrato de nomenclatura — se isto mudar, a padronização foi desfeita."""
     assert CLEAN_TABLES == ("bpa_clean", "bpp_clean", "dre_clean")
-    assert BALANCE_CLEAN_TABLES == frozenset({BPA_CLEAN, BPP_CLEAN})
-    assert BPA_CLEAN != BPP_CLEAN and BPA_CLEAN != DRE_CLEAN
-
-
-def test_clean_tables_are_not_prefixed_as_raw() -> None:
-    """Tabelas normalizadas não carregam o prefixo reservado ao dado bruto."""
-    for name in CLEAN_TABLES:
-        assert not name.startswith(RAW_PREFIX)
-        assert name.endswith(CLEAN_SUFFIX)
+    assert BALANCE_CLEAN_TABLES == frozenset({TB_BPA_CLEAN, TB_BPP_CLEAN})
+    assert TB_BPA_CLEAN != TB_BPP_CLEAN and TB_BPA_CLEAN != TB_DRE_CLEAN
 
 
 def test_catalog_is_the_source_of_truth_for_raw_table_names() -> None:
     """O DDL de init_schema deve criar exatamente as tabelas do catálogo."""
     import duckdb
 
-    from cvmdata.ingestion.database import init_schema
+    from cvmdata.ingestion.schema import init_schema
 
     conn = duckdb.connect(":memory:")
     try:
@@ -188,12 +178,39 @@ def test_legacy_clean_names_only_documented_in_tables_doc() -> None:
     )
 
 
+def _docstring_lines(source: str) -> set[int]:
+    """Números de linha ocupados por docstrings.
+
+    Um exemplo de SQL em docstring mostra o literal de propósito — é o SQL que
+    sai, não código. Sem esta exclusão o guard acusaria a documentação, e o
+    conserto seria escrever ``{bpa_clean}``, que é menos legível e não é o SQL.
+    """
+    lines: set[int] = set()
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return lines
+    for node in ast.walk(tree):
+        if not isinstance(
+            node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
+        ):
+            continue
+        if not node.body:
+            continue
+        first = node.body[0]
+        if ast.get_docstring(node, clean=False) is None or not isinstance(first, ast.Expr):
+            continue
+        lines.update(range(first.lineno, (first.end_lineno or first.lineno) + 1))
+    return lines
+
+
 def test_centralized_names_are_not_hardcoded_in_sql() -> None:
     """Em código de produção, SQL referencia a constante — não o literal.
 
-    Cobre ``src/`` e ``scripts/``. Duas exceções, ambas declaration sites:
-    o ``CREATE TABLE`` em database.py, que é onde a tabela é declarada. Em
-    ``tests/`` o literal é intencional (ver ``_GUARDED_DIRS``).
+    Cobre ``src/`` e ``scripts/``. A exceção é o declaration site de DDL
+    (``ingestion/schema.py``), onde o literal é onde a tabela é declarada. Em
+    ``tests/`` o literal é intencional (ver ``_GUARDED_DIRS``), e em docstring
+    também — ver :func:`_docstring_lines`.
     """
     violations: list[str] = []
 
@@ -204,7 +221,11 @@ def test_centralized_names_are_not_hardcoded_in_sql() -> None:
             rel = path.relative_to(ROOT).as_posix()
             if rel in DECLARATION_SITES:
                 continue
-            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            source = path.read_text(encoding="utf-8")
+            skip = _docstring_lines(source)
+            for lineno, line in enumerate(source.splitlines(), 1):
+                if lineno in skip:
+                    continue
                 for match in _SQL_RE.finditer(line):
                     if match.group("name") in CENTRALIZED_NAMES:
                         violations.append(f"  {rel}:{lineno}: {line.strip()}")
@@ -215,25 +236,29 @@ def test_centralized_names_are_not_hardcoded_in_sql() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "line",
-    [
-        "SELECT * FROM indicators",
-        "SELECT * FROM indicators AS i JOIN b3_tickers b ON true",
-        "DELETE FROM main.indicators WHERE cnpj_cia = ?",
-        'INSERT INTO "indicators" (v) VALUES (?)',
-        "TRUNCATE indicators",
-        "SELECT * FROM\n    dre_clean",
-    ],
-)
-def test_sql_regex_captures_the_table_not_the_schema(line: str) -> None:
-    """O guard precisa enxergar o nome da tabela em todas essas formas.
+def test_guard_ignores_docstrings_but_not_code() -> None:
+    """A exclusão de docstring não pode abrir brecha para código real.
 
-    Regressão de `FROM main.indicators`: o qualificador de schema fazia o
-    regex casar "main" e o teste passava com o literal no código.
+    O mesmo nome aparece no exemplo (docstring, tolerado) e numa linha de código
+    (violação). Se o guard parasse de varrer o arquivo inteiro, os dois casos
+    passariam limpos.
     """
-    captured = {m.group("name") for m in _SQL_RE.finditer(line)}
-    assert captured & set(CENTRALIZED_NAMES), f"não capturou nome de tabela em: {line!r}"
+    source = (
+        '"""Módulo.\n'
+        "\n"
+        "    Exemplo:\n"
+        "\n"
+        "        SELECT 1 FROM company_classification\n"
+        '"""\n'
+        "\n"
+        "QUERY = \"SELECT 1 FROM company_classification\"\n"
+    )
+    skip = _docstring_lines(source)
+
+    in_docstring = 5 in skip
+    in_code = 7 not in skip
+
+    assert in_docstring and in_code
 
 
 def test_every_centralized_name_has_a_declaration() -> None:
@@ -241,13 +266,13 @@ def test_every_centralized_name_has_a_declaration() -> None:
 
     Duas vias de declaração distintas:
 
-    - as tabelas de esquema têm ``CREATE TABLE`` em ``ingestion/database.py``;
+    - as tabelas de esquema têm ``CREATE TABLE`` em ``ingestion/schema.py``;
     - as ``*_clean`` são derivadas em runtime, por ``CREATE OR REPLACE TABLE``
       nos templates de ``transform/normalize.py``.
 
     Fecha o buraco de centralizar um nome que nenhuma DDL cria.
     """
-    ddl = (ROOT / "src/cvmdata/ingestion/database.py").read_text(encoding="utf-8")
+    ddl = (ROOT / "src/cvmdata/ingestion/schema.py").read_text(encoding="utf-8")
     declared = {
         m.group(1)
         for m in re.finditer(

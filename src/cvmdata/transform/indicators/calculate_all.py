@@ -6,12 +6,12 @@ import logging
 
 import duckdb
 
-from cvmdata.ingestion.database import init_indicators_schema
-from cvmdata.ingestion.tables import BALANCE_CLEAN_TABLES, CLEAN_TABLES, DRE_CLEAN, INDICATORS
+from cvmdata.ingestion.schema import init_indicators_schema
+from cvmdata.ingestion.tables import BALANCE_CLEAN_TABLES, CLEAN_TABLES, TB_DRE_CLEAN, TB_INDICATORS
 from cvmdata.transform.indicators.balance import fetch_all_balance_components
 from cvmdata.transform.indicators.indicator_rows import IndicatorRow, build_indicator_rows
 from cvmdata.transform.indicators.ttm import Components, fetch_all_dre_components
-from cvmdata.transform.profile import fetch_profiles_from_classification
+from cvmdata.transform.profile.repository import fetch_profiles
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def _collect_components(
     tables: set[str],
 ) -> Components:
     """Funde componentes de balanço (BPA/BPP) e DRE (TTM) por ``ReportingPeriod``"""
-    profiles = fetch_profiles_from_classification(conn, cnpj)
+    profiles = fetch_profiles(conn, cnpj)
 
     has_balance = bool(tables & BALANCE_CLEAN_TABLES)
 
@@ -44,7 +44,7 @@ def _collect_components(
     )
     dre_comps = (
         fetch_all_dre_components(conn, cnpj, profiles)
-        if DRE_CLEAN in tables
+        if TB_DRE_CLEAN in tables
         else {}
     )
 
@@ -66,20 +66,24 @@ def _collect_components(
     return merged
 
 
-def _persist_rows(conn: duckdb.DuckDBPyConnection, cnpj: str | None, rows: list[IndicatorRow]) -> None:
+def _persist_rows(
+    conn: duckdb.DuckDBPyConnection,
+    cnpj: str | None,
+    rows: list[IndicatorRow]
+) -> None:
     """Substitui as linhas de ``indicators`` (do cnpj filtrado, ou todas) em uma transação."""
     conn.execute("BEGIN")
     try:
         if cnpj:
-            conn.execute(f"DELETE FROM {INDICATORS} WHERE cnpj_cia = ?", [cnpj])
+            conn.execute(f"DELETE FROM {TB_INDICATORS} WHERE cnpj_cia = ?", [cnpj])
         else:
-            conn.execute(f"TRUNCATE {INDICATORS}")
+            conn.execute(f"TRUNCATE {TB_INDICATORS}")
 
         if rows:
             cols = IndicatorRow.to_sql_columns(rows)
             conn.execute(
                 f"""
-                INSERT INTO {INDICATORS} (cnpj_cia, dt_refer, indicador, valor)
+                INSERT INTO {TB_INDICATORS} (cnpj_cia, dt_refer, indicador, valor)
                 SELECT
                     unnest(?) AS cnpj_cia, unnest(?)::DATE AS dt_refer,
                     unnest(?) AS indicador, unnest(?) AS valor

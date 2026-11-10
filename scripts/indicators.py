@@ -23,7 +23,7 @@ from rich.console import Console
 from rich.table import Table
 
 from cvmdata.config import settings
-from cvmdata.ingestion.tables import B3_TICKERS, COMPANY_CLASSIFICATION, INDICATORS
+from cvmdata.ingestion.tables import TB_B3_TICKERS, TB_COMPANY_CLASSIFICATION, TB_INDICATORS
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ NAME_MIN_LENGTH = 4  # mínimo de caracteres para --name
 
 def _b3_tickers_exists(conn: duckdb.DuckDBPyConnection) -> bool:
     result = conn.execute(
-        f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{B3_TICKERS}'"
+        f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{TB_B3_TICKERS}'"
     ).fetchone()
     return result[0] if result else False
 
@@ -45,10 +45,16 @@ def resolve_companies(
     cod_cvm: str | None = None,
     name: str | None = None,
 ) -> list[tuple[str, str, str, str | None]]:
-    """Resolve filtros de empresa para uma lista de (cnpj, cd_cvm, denom_comerc, ticker).
+    """Resolve filtros de empresa para uma lista de (cnpj, cd_cvm, nome, ticker).
 
     Retorna tuplas na ordem:
-        (cnpj_cia, cd_cvm, denom_comerc, ticker_root)
+        (cnpj_cia, cd_cvm, nome, ticker_root)
+
+    ``nome`` é denom_comerc, com denom_social como reserva: denom_comerc não é
+    preenchido para as empresas estrangeiras, que ficariam sem nome a exibir.
+
+    A busca por ``--name`` cobre os dois campos, para não exigir que o usuário
+    saiba em qual dos dois o nome da empresa foi cadastrado.
 
     O campo ticker_root é None quando a tabela b3_tickers não existe ou
     quando não há correspondência no LEFT JOIN.
@@ -63,12 +69,15 @@ def resolve_companies(
     conditions: list[str] = []
     params: list[str] = []
 
-    select_cols = "cc.cnpj_cia, cc.cd_cvm, cc.denom_comerc"
-    from_clause = f"FROM {COMPANY_CLASSIFICATION} cc"
+    select_cols = (
+        "cc.cnpj_cia, cc.cd_cvm,"
+        " COALESCE(NULLIF(cc.denom_comerc, ''), cc.denom_social) AS nome"
+    )
+    from_clause = f"FROM {TB_COMPANY_CLASSIFICATION} cc"
 
     if b3_exists:
         select_cols += ", bt.ticker_root"
-        from_clause += f" LEFT JOIN {B3_TICKERS} bt ON CAST(cc.cd_cvm AS INTEGER) = bt.cod_cvm"
+        from_clause += f" LEFT JOIN {TB_B3_TICKERS} bt ON CAST(cc.cd_cvm AS INTEGER) = bt.cod_cvm"
     else:
         select_cols += ", NULL AS ticker_root"
 
@@ -81,8 +90,14 @@ def resolve_companies(
         params.append(cod_cvm)
 
     if name is not None:
-        conditions.append("UPPER(cc.denom_comerc) LIKE ?")
-        params.append(f"%{name.upper()}%")
+        # denom_comerc não é preenchido para as empresas estrangeiras (Nu
+        # Holdings, Inter & Co, XP Investimentos, ...), então buscar só nele
+        # esconderia exatamente quem mais usa o layout financeiro.
+        conditions.append(
+            "(UPPER(cc.denom_comerc) LIKE ? OR UPPER(cc.denom_social) LIKE ?)"
+        )
+        pattern = f"%{name.upper()}%"
+        params.extend([pattern, pattern])
 
     if ticker is not None:
         conditions.append("UPPER(bt.ticker_root) = UPPER(?)")
@@ -101,7 +116,7 @@ def fetch_indicators(
 ) -> list[tuple[str, str, float | None]]:
     query = f"""
         SELECT dt_refer::VARCHAR, indicador, valor
-        FROM {INDICATORS}
+        FROM {TB_INDICATORS}
         WHERE cnpj_cia = ?
     """
     params: list[str | int] = [cnpj]
@@ -122,22 +137,22 @@ def render_company_selection_table(
     table.add_column("CNPJ")
     table.add_column("COD_CVM")
     table.add_column("TICKER")
-    table.add_column("DENOM_COMERCIAL")
+    table.add_column("NOME")
 
-    for cnpj, cd_cvm, denom_comerc, ticker_root in companies:
+    for cnpj, cd_cvm, nome, ticker_root in companies:
         ticker_str = ticker_root if ticker_root else "—"
-        table.add_row(cnpj, cd_cvm, ticker_str, denom_comerc)
+        table.add_row(cnpj, cd_cvm, ticker_str, nome)
 
     return table
 
 
 def render_indicators_table(
     cnpj: str,
-    denom_comerc: str,
+    nome: str,
     ticker_root: str | None,
     rows: list[tuple[str, str, float | None]],
 ) -> Table:
-    title = f"Indicadores — {cnpj} — {denom_comerc}"
+    title = f"Indicadores — {cnpj} — {nome}"
     if ticker_root:
         title += f" ({ticker_root})"
     table = Table(title=title)
@@ -243,7 +258,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # ── indicadores ─────────────────────────────────────────────────────────
 
-    cnpj, _, denom_comerc, ticker_root = companies[0]
+    cnpj, _, nome, ticker_root = companies[0]
 
     try:
         with duckdb.connect(str(settings.db_path), read_only=True) as conn:
@@ -257,7 +272,7 @@ def main(argv: list[str] | None = None) -> None:
         console.print(f"[yellow]Nenhum indicador encontrado para {cnpj}{filtro_ano}.[/yellow]")
         raise SystemExit(1)
 
-    console.print(render_indicators_table(cnpj, denom_comerc, ticker_root, rows))
+    console.print(render_indicators_table(cnpj, nome, ticker_root, rows))
 
 
 if __name__ == "__main__":

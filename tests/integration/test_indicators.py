@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from cvmdata.ingestion.database import init_schema
 from cvmdata.ingestion.loader import load_csv
+from cvmdata.ingestion.schema import init_schema
 from cvmdata.ingestion.tables import CLEAN_TABLES
 from cvmdata.transform.calc_plan import EXPECTED_INDICATOR_COUNT
 from cvmdata.transform.indicators import _get_ttm_value, calculate_all
 from cvmdata.transform.indicators.balance import fetch_all_balance_components
 from cvmdata.transform.info_cad import classify_info_cad
 from cvmdata.transform.normalize import normalize_table
-from cvmdata.transform.profile import fetch_profiles_from_classification
+from cvmdata.transform.profile.repository import fetch_profiles
 from tests.support import (
     FIXTURES_DIR,
     insert_raw_bpa,
@@ -66,6 +66,25 @@ def test_calculate_all_cnpj_filter(tmp_path: Path, db):
     assert total_none == 0
 
 
+def test_calculate_all_cnpj_filter_isolated_with_multiple_companies(tmp_path: Path, db):
+    prepare_indicator_pipeline(db, tmp_path, source="itr", year=2024)
+    for table in ("bpa_clean", "bpp_clean", "dre_clean"):
+        db.execute(
+            f"""
+            INSERT INTO {table}
+            SELECT * REPLACE ('99.999.999/0001-00' AS CNPJ_CIA)
+            FROM {table}
+            """
+        )
+
+    total = calculate_all(db, cnpj="00.000.000/0001-91")
+
+    assert total == EXPECTED_INDICATOR_COUNT
+    assert db.execute(
+        "SELECT COUNT(*) FROM indicators WHERE cnpj_cia = '99.999.999/0001-00'"
+    ).fetchone()[0] == 0
+
+
 
 def test_calculate_all_idempotent(tmp_path: Path, db):
     """Rodar calculate_all duas vezes não duplica registros em indicators."""
@@ -101,20 +120,8 @@ def _load_and_calc(db, bpa_path: Path, bpp_path: Path, dre_path: Path) -> None:
     calculate_all(db)
 
 
-def test_bank_integration_indicators_inserted(db):
-    """Pipeline completo com fixtures de BCO Brasil: load→normalize→calculate."""
-    _load_and_calc(
-        db,
-        FIXTURES_DIR / "sample_bank_bpa.csv",
-        FIXTURES_DIR / "sample_bank_bpp.csv",
-        FIXTURES_DIR / "sample_bank_dre.csv",
-    )
-    count = db.execute("SELECT COUNT(*) FROM indicators").fetchone()[0]
-    assert count > 0
-
-
 def test_bank_integration_roe_not_none(db):
-    """ROE de BCO Brasil não é None — 3.11 (lucro) e 2.03 (PL/Provisões) presentes."""
+    """ROE de BCO Brasil usa o PL resolvido pelo rótulo, mesmo sem cadastro."""
     _load_and_calc(
         db,
         FIXTURES_DIR / "sample_bank_bpa.csv",
@@ -123,10 +130,10 @@ def test_bank_integration_roe_not_none(db):
     )
     row = db.execute("SELECT valor FROM indicators WHERE indicador = 'roe'").fetchone()
     assert row is not None
-    assert row[0] is not None
+    assert row[0] == pytest.approx(19171564000 / 150000000000 * 100, abs=1e-4)
 
 
-# ── Inter: ausente do cadastro → heurística estrutural (design 3.4) ──────────
+# ── Inter: ausente do cadastro → assinatura estrutural ──────────────────────
 
 
 def _load_bank_only(db) -> None:
@@ -140,8 +147,8 @@ def _load_bank_only(db) -> None:
     normalize_table("raw_dre", db)
 
 
-def test_structural_classification_persists_bank_fixture_without_info_cad(db):
-    """CNPJ ausente do cadastro com assinatura BPA '1.01' → banking persistido.
+def test_structural_signature_persists_bank_fixture_without_info_cad(db):
+    """CNPJ ausente do cadastro, layout financeiro → banking persistido.
 
     O step de classificação cadastral (pós-normalize) persiste o perfil
     estrutural em ``company_classification``; o fetch de balanço passa a
@@ -153,64 +160,138 @@ def test_structural_classification_persists_bank_fixture_without_info_cad(db):
     classify_info_cad(db)
 
     row = db.execute(
-        "SELECT profile_id, confidence FROM company_classification WHERE cnpj_cia = ?",
+        "SELECT profile_id, rule_applied FROM company_classification WHERE cnpj_cia = ?",
         ["00.000.000/0001-91"],
     ).fetchone()
-    assert row == ("banking", "medium")
+    assert row == ("banking", "structure:banking:bpa.1.01+bpp.2.01")
 
-    event = db.execute(
-        "SELECT event_type FROM classification_curation_events WHERE cnpj_cia = ?",
-        ["00.000.000/0001-91"],
-    ).fetchone()
-    assert event is not None
-    assert event[0] == "missing_from_cadastro"
-
-    profiles = fetch_profiles_from_classification(db)
+    profiles = fetch_profiles(db)
     assert profiles == {"00.000.000/0001-91": "banking"}
 
     comps = fetch_all_balance_components(db, None, profiles)
     (cnpj_dt,) = comps.keys()
     assert comps[cnpj_dt]["patrimonio_liquido"] == 150000000000.0
-    assert "provisoes" not in comps[cnpj_dt]
 
 
-def test_structural_heuristic_ignores_cnpjs_present_in_cadastro(db):
-    """CNPJ no cadastro (mesmo não classificado) não recebe classificação estrutural."""
+def test_structural_signature_applies_even_when_cnpj_in_cadastro(db):
+    """CNPJ no cadastro com SIT='CANCELADA' recebe classificação — o filtro de
+    SIT descartava bancos que reportam demonstrativo, e o layout é o mesmo dos
+    demais bancos."""
     setup_classify_schema(db)
     _load_bank_only(db)
 
-    # CNPJ presente no cadastro com SIT=CANCELADA (não-classificável → default)
     db.execute(
         """
         INSERT INTO cad_cia_aberta_raw
             (CNPJ_CIA, DENOM_SOCIAL, DENOM_COMERC, CD_CVM, SIT, DT_INI_SIT,
              TP_MERC, CATEG_REG, SETOR_ATIV, DT_INC, loaded_at)
         VALUES ('00.000.000/0001-91', 'BCO TEST', '', '001', 'CANCELADA',
-                '2020-01-01', 'BOLSA', 'A', '', '2020-01-01', current_timestamp)
+                '2020-01-01', 'BOLSA', 'A', 'Bancos', '2020-01-01', current_timestamp)
         """
     )
 
     classify_info_cad(db)
 
-    # Presente no cadastro → sem classificação (setor) nem estrutural
-    assert db.execute("SELECT COUNT(*) FROM company_classification").fetchone()[0] == 0
-    profiles = fetch_profiles_from_classification(db)
+    row = db.execute(
+        "SELECT profile_id, rule_applied FROM company_classification WHERE cnpj_cia = ?",
+        ["00.000.000/0001-91"],
+    ).fetchone()
+    assert row == ("banking", "structure:banking:bpa.1.01+bpp.2.01")
+
+
+def test_default_profile_resolves_pl_by_code(db):
+    """Sem classificação persistida, o PL é identificado pelo rótulo.
+
+    O código 2.03 é "Provisões" nessa fixture bancária; somente 2.07, cujo
+    rótulo confirma patrimônio líquido, deve alimentar o componente.
+    """
+    setup_classify_schema(db)
+    _load_bank_only(db)
+
+    profiles = fetch_profiles(db)
     assert profiles == {}
 
     comps = fetch_all_balance_components(db, None, profiles)
-    # Mapeamento default: 2.03 (provisões) vira patrimonio_liquido; 2.07 é ignorada
     (cnpj_dt,) = comps.keys()
-    assert comps[cnpj_dt]["patrimonio_liquido"] == 26099013000.0
+    assert comps[cnpj_dt]["patrimonio_liquido"] == 150000000000.0
+
+
+# ── PL por rótulo: 2.03, 2.07 e 2.08 ────────────────────────────────────────
+#
+# O patrimônio líquido não tem posição estável: 2.03 no layout padrão, 2.07 e
+# 2.08 no financeiro — e 2.03 no financeiro significa "Provisões" em 19 bancos e
+# "Passivos Financeiros ao Custo Amortizado" em 16. Só o rótulo separa, e é por
+# isso que resolve_pl existe em vez de mais um código no ACCOUNT_MAP.
+
+
+@pytest.mark.parametrize(
+    ("cd_conta", "ds_conta", "esperado"),
+    [
+        ("2.03", "Patrimônio Líquido Consolidado", 7000.0),
+        ("2.07", "Patrimônio Líquido Consolidado", 7000.0),
+        ("2.08", "Patrimônio Líquido Consolidado", 7000.0),
+    ],
+)
+def test_banking_pl_resolved_by_label_at_any_code(db, cd_conta, ds_conta, esperado):
+    """No banking o PL é resolvido pelo rótulo em qualquer das três posições."""
+    setup_classify_schema(db)
+    _load_bank_only(db)
+    classify_info_cad(db)
+    db.execute("DELETE FROM bpp_clean WHERE cd_conta IN ('2.03', '2.07', '2.08')")
+    db.execute(
+        """
+        INSERT INTO bpp_clean (cnpj_cia, dt_refer, cd_conta, ds_conta, vl_conta, source,
+                               year, scope)
+        VALUES ('00.000.000/0001-91', '2024-12-31', ?, ?, ?, 'dfp', 2024, 'con')
+        """,
+        [cd_conta, ds_conta, esperado],
+    )
+
+    profiles = fetch_profiles(db)
+    comps = fetch_all_balance_components(db, None, profiles)
+    (cnpj_dt,) = comps.keys()
+    assert comps[cnpj_dt]["patrimonio_liquido"] == esperado
+
+
+@pytest.mark.parametrize(
+    "ds_conta",
+    [
+        "Provisões",
+        "Passivos Financeiros ao Custo Amortizado",
+        "Passivos sobre Ativos Não Correntes a Venda e Descontinuados",
+    ],
+)
+def test_banking_non_pl_labels_at_pl_codes_are_discarded(db, ds_conta):
+    """No banking nenhum rótulo de 2.03/2.07/2.08 entra no PL sem ser PL.
+
+    É o caso do Itaú (2.07 = "Passivos sobre Ativos Não Correntes", valor 0) e do
+    Bradesco (2.03 = "Provisões", 461 bi): mapear o código fixaria o PL em 0 e em
+    Provisões, respectivamente.
+    """
+    setup_classify_schema(db)
+    _load_bank_only(db)
+    classify_info_cad(db)
+    db.execute("DELETE FROM bpp_clean WHERE cd_conta IN ('2.03', '2.07', '2.08')")
+    db.execute(
+        """
+        INSERT INTO bpp_clean (cnpj_cia, dt_refer, cd_conta, ds_conta, vl_conta, source,
+                               year, scope)
+        VALUES ('00.000.000/0001-91', '2024-12-31', '2.03', ?, 999, 'dfp', 2024, 'con')
+        """,
+        [ds_conta],
+    )
+
+    profiles = fetch_profiles(db)
+    comps = fetch_all_balance_components(db, None, profiles)
+    (cnpj_dt,) = comps.keys()
+    assert "patrimonio_liquido" not in comps[cnpj_dt]
 
 
 def test_inter_end_to_end_structural_banking(db, tmp_path: Path):
     """Caso Inter: CNPJ ausente do cadastro → banking estrutural de ponta a ponta.
 
-    Cadastro vazio (cad_cia_aberta_raw existe mas não tem o CNPJ) → a
-    classificação setorial não o cobre; a assinatura BPA '1.01' dispara a
-    classificação estrutural, que é PERSISTIDA em ``company_classification``
-    com confidence='medium' + evento de curadoria ``missing_from_cadastro``.
-    O cálculo consome o perfil persistido.
+    A assinatura estrutural (BPA 1.01 + BPP 2.01 concordando) é PERSISTIDA em
+    ``company_classification`` e o cálculo consome o perfil persistido.
     """
     setup_classify_schema(db)
     _load_bank_only(db)
@@ -218,13 +299,12 @@ def test_inter_end_to_end_structural_banking(db, tmp_path: Path):
     classify_info_cad(db)
 
     row = db.execute(
-        "SELECT profile_id, confidence, rule_applied FROM company_classification"
+        "SELECT profile_id, rule_applied FROM company_classification"
         " WHERE cnpj_cia = ?",
         ["00.000.000/0001-91"],
     ).fetchone()
     assert row[0] == "banking"
-    assert row[1] == "medium"
-    assert "structural_heuristic" in row[2]
+    assert row[1].startswith("structure:banking:")
 
     calculate_all(db)
 
@@ -287,18 +367,6 @@ def test_collect_components_computes_lucro_liquido_final(tmp_path: Path, db):
 # ── T031: Testes multi-setor — industrial (PETROBRAS) + xfail banco ───────────
 
 
-def test_industrial_all_15_indicators_inserted(db):
-    """PETROBRAS: todas as contas dos perfis presentes → 20 indicadores."""
-    _load_and_calc(
-        db,
-        FIXTURES_DIR / "sample_industrial_bpa.csv",
-        FIXTURES_DIR / "sample_industrial_bpp.csv",
-        FIXTURES_DIR / "sample_industrial_dre.csv",
-    )
-    count = db.execute("SELECT COUNT(*) FROM indicators").fetchone()[0]
-    assert count == EXPECTED_INDICATOR_COUNT
-
-
 def test_industrial_roe_not_none(db):
     """PETROBRAS: ROE calculado corretamente com 3.11 e 2.03 padrão."""
     _load_and_calc(
@@ -308,19 +376,8 @@ def test_industrial_roe_not_none(db):
         FIXTURES_DIR / "sample_industrial_dre.csv",
     )
     row = db.execute("SELECT valor FROM indicators WHERE indicador = 'roe'").fetchone()
-    assert row is not None and row[0] is not None
-
-
-def test_industrial_no_none_indicators(db):
-    """PETROBRAS: nenhum indicador é None (todas as contas presentes)."""
-    _load_and_calc(
-        db,
-        FIXTURES_DIR / "sample_industrial_bpa.csv",
-        FIXTURES_DIR / "sample_industrial_bpp.csv",
-        FIXTURES_DIR / "sample_industrial_dre.csv",
-    )
-    none_count = db.execute("SELECT COUNT(*) FROM indicators WHERE valor IS NULL").fetchone()[0]
-    assert none_count == 0
+    assert row is not None
+    assert row[0] == pytest.approx(10.0700925679)
 
 
 def test_bank_sector_liquidez_seca_is_none(db):

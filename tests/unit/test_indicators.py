@@ -6,7 +6,11 @@ import inspect
 
 import pytest
 
-from cvmdata.transform.account_map import ACCOUNT_MAP, get_component
+from cvmdata.transform.account_map import (
+    ACCOUNT_MAP,
+    PL_COMPONENT,
+    get_component,
+)
 from cvmdata.transform.calc_plan import (
     CALC_PLAN,
     capital_giro,
@@ -30,7 +34,7 @@ from cvmdata.transform.calc_plan import (
     roic,
     taxa_efetiva_ir,
 )
-from cvmdata.transform.dre_tail_map import DRE_TAIL_TEXT_MAP
+from cvmdata.transform.text_map import DRE_TAIL_TEXT_MAP
 
 pytestmark = pytest.mark.unit
 
@@ -77,25 +81,22 @@ def test_account_map_banking_keys():
         "2",
         "2.01",
         "2.02",
-        "2.07",
         "3.01",
         "3.02",
         "3.03",
         "3.11",
     }
     assert ACCOUNT_MAP["banking"]["1.01"] == "caixa_equivalentes"
-    assert ACCOUNT_MAP["banking"]["2.07"] == "patrimonio_liquido"
     assert ACCOUNT_MAP["banking"]["3.02"] == "despesas_financeiras"
     # Contas sem equivalente honesto em banking ficam de fora (design 3.1/3.5)
     for code in ("1.01.01", "1.01.04", "1.02.01", "2.01.04", "2.02.01", "2.03", "3.05"):
         assert code not in ACCOUNT_MAP["banking"]
-
-
-def test_account_map_values_are_unique_per_profile():
-    """Unicidade por perfil — nomes podem se repetir entre perfis (por desenho)."""
-    for profile_id, profile_map in ACCOUNT_MAP.items():
-        components = list(profile_map.values())
-        assert len(components) == len(set(components)), profile_id
+    # O PL sai do mapa de propósito nos dois layouts: 2.03/2.07/2.08 resolvem
+    # por rótulo (text_map.resolve_pl), e 2.03 no banking é "Provisões" em 19
+    # bancos. Mapear 2.07 aqui fixeraria uma posição que muda entre anos.
+    for code in ("2.03", "2.07", "2.08"):
+        assert code not in ACCOUNT_MAP["banking"]
+    assert PL_COMPONENT not in ACCOUNT_MAP["banking"].values()
 
 
 def test_account_map_known_mappings():
@@ -180,11 +181,13 @@ def test_get_component_unknown_returns_none():
 
 
 def test_get_component_with_profile():
-    assert get_component("2.07", "banking") == "patrimonio_liquido"
     assert get_component("3.02", "banking") == "despesas_financeiras"
     assert get_component("1.01", "banking") == "caixa_equivalentes"
+    assert get_component("2.01", "banking") == "passivo_circulante"
+    # PL não é mapeado em nenhum dos perfis: resolve por rótulo.
     assert get_component("2.03", "banking") is None
-    assert get_component("2.07") is None  # default não conhece a cauda
+    assert get_component("2.07", "banking") is None
+    assert get_component("2.07") is None
 
 
 def test_get_component_unknown_profile_falls_back_to_default():

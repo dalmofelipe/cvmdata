@@ -5,8 +5,8 @@ from pathlib import Path
 
 import duckdb
 
-from cvmdata.ingestion.database import init_info_cad_schema, init_schema
 from cvmdata.ingestion.loader import load_csv
+from cvmdata.ingestion.schema import init_info_cad_schema, init_schema
 from cvmdata.transform.normalize import normalize_table
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"

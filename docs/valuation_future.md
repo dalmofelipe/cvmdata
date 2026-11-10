@@ -1,4 +1,4 @@
-# Indicadores de Valuation — Trabalho Futuro
+# Indicadores de Valuation — Trabalho Futuro FASE B3
 
 > **Status**: fora do escopo do pipeline atual (`001-cvm-pipeline`).
 > Os indicadores abaixo requerem dados de mercado (preço da ação, proventos distribuídos) que **não estão presentes nos arquivos CVM**. Este documento serve como referência de design para a iteração seguinte.

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from cvmdata.ingestion.downloader import _should_extract
+from cvmdata.ingestion.downloader import (
+    _should_extract,
+    download_info_cad,
+    download_zip,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -45,3 +49,57 @@ def test_extract_zip_creates_csvs(tmp_path):
     assert len(extracted) == 2
     assert extracted[0].name == "itr_cia_aberta_BPA_con_2024.csv"
     assert extracted[1].name == "itr_cia_aberta_composicao_capital_2024.csv"
+
+
+def test_download_zip_skips_existing_file_without_force(tmp_path, monkeypatch):
+    dest = tmp_path / "data.zip"
+    dest.write_bytes(b"old")
+
+    def fail_stream(*args, **kwargs):
+        raise AssertionError("download should be skipped")
+
+    monkeypatch.setattr("cvmdata.ingestion.downloader.httpx.stream", fail_stream)
+
+    assert download_zip("https://example.test/data.zip", dest) == dest
+    assert dest.read_bytes() == b"old"
+
+
+class _FakeResponse:
+    def __init__(self, chunks: list[bytes], error: Exception | None = None):
+        self.chunks = chunks
+        self.error = error
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def raise_for_status(self):
+        if self.error:
+            raise self.error
+
+    def iter_bytes(self, chunk_size: int):
+        yield from self.chunks
+
+
+def test_download_info_cad_removes_tmp_after_failure(tmp_path, monkeypatch):
+    meta = tmp_path / "meta_cad_cia_aberta.txt"
+    meta.write_text("previous", encoding="utf-8")
+    calls = 0
+
+    def stream(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return _FakeResponse([b"new"])
+        return _FakeResponse([b"partial"], RuntimeError("network failure"))
+
+    monkeypatch.setattr("cvmdata.ingestion.downloader.httpx.stream", stream)
+
+    with pytest.raises(RuntimeError, match="network failure"):
+        download_info_cad("meta-url", "csv-url", tmp_path, force=True)
+
+    assert meta.read_text(encoding="utf-8") == "new"
+    assert not (tmp_path / "cad_cia_aberta.csv.tmp").exists()
+    assert not (tmp_path / "meta_cad_cia_aberta.txt.tmp").exists()
