@@ -45,8 +45,8 @@ def test_parse_years_error_reports_valid_range_and_offending_years() -> None:
 
     message = str(exc_info.value)
     assert "2011-2026" in message
-    assert "2000" in message
-    assert "2030" in message
+    assert "Anos inválidos: 2000, 2001" in message
+    assert message.endswith("2030.\n Recebido: '2000:2030'")
 
 
 @pytest.mark.parametrize(

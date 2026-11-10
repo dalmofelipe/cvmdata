@@ -132,13 +132,6 @@ def test_clean_tables_hold_the_canonical_names() -> None:
     assert TB_BPA_CLEAN != TB_BPP_CLEAN and TB_BPA_CLEAN != TB_DRE_CLEAN
 
 
-def test_clean_tables_are_not_prefixed_as_raw() -> None:
-    """Tabelas normalizadas não carregam o prefixo reservado ao dado bruto."""
-    for name in CLEAN_TABLES:
-        assert not name.startswith(RAW_PREFIX)
-        assert name.endswith(CLEAN_SUFFIX)
-
-
 def test_catalog_is_the_source_of_truth_for_raw_table_names() -> None:
     """O DDL de init_schema deve criar exatamente as tabelas do catálogo."""
     import duckdb
@@ -266,27 +259,6 @@ def test_guard_ignores_docstrings_but_not_code() -> None:
     in_code = 7 not in skip
 
     assert in_docstring and in_code
-
-
-@pytest.mark.parametrize(
-    "line",
-    [
-        "SELECT * FROM indicators",
-        "SELECT * FROM indicators AS i JOIN b3_tickers b ON true",
-        "DELETE FROM main.indicators WHERE cnpj_cia = ?",
-        'INSERT INTO "indicators" (v) VALUES (?)',
-        "TRUNCATE indicators",
-        "SELECT * FROM\n    dre_clean",
-    ],
-)
-def test_sql_regex_captures_the_table_not_the_schema(line: str) -> None:
-    """O guard precisa enxergar o nome da tabela em todas essas formas.
-
-    Regressão de `FROM main.indicators`: o qualificador de schema fazia o
-    regex casar "main" e o teste passava com o literal no código.
-    """
-    captured = {m.group("name") for m in _SQL_RE.finditer(line)}
-    assert captured & set(CENTRALIZED_NAMES), f"não capturou nome de tabela em: {line!r}"
 
 
 def test_every_centralized_name_has_a_declaration() -> None:

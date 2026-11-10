@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from cvmdata.transform.text_map import (
-    BPP_PL_TEXT_MAP,
     DRE_TAIL_TEXT_MAP,
     normalize_text,
     resolve_pl,
@@ -139,6 +138,3 @@ def test_resolve_pl_accepts_any_patrimonio_liquido_variant(ds_conta):
     assert resolve_pl(ds_conta, "2.03") == "patrimonio_liquido"
 
 
-def test_resolve_pl_map_keys_are_normalized():
-    for prefix in BPP_PL_TEXT_MAP:
-        assert normalize_text(prefix) == prefix

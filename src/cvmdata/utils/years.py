@@ -22,6 +22,7 @@ class YearsParseError(ValueError):
     value: str
     min_year: int | None = None
     max_year: int | None = None
+    invalid_years: tuple[int, ...] = ()
 
     def __str__(self) -> str:
         msg = (
@@ -31,6 +32,8 @@ class YearsParseError(ValueError):
         )
         if self.min_year is not None and self.max_year is not None:
             msg += f"\n Intervalo válido: {self.min_year}-{self.max_year}."
+        if self.invalid_years:
+            msg += f"\n Anos inválidos: {', '.join(map(str, self.invalid_years))}."
         return f"{msg}\n Recebido: {self.value!r}"
 
 
@@ -93,6 +96,11 @@ def parse_years(value: str, *, today: date | None = None) -> list[int]:
     max_year = _max_valid_year(today)
     invalid = sorted({y for y in years if not (MIN_VALID_YEAR <= y <= max_year)})
     if invalid:
-        raise YearsParseError(value=value, min_year=MIN_VALID_YEAR, max_year=max_year)
+        raise YearsParseError(
+            value=value,
+            min_year=MIN_VALID_YEAR,
+            max_year=max_year,
+            invalid_years=tuple(invalid),
+        )
 
     return sorted(set(years))

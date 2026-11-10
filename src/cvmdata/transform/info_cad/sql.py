@@ -184,8 +184,14 @@ def classification_sql(rules: list[StructuralRule]) -> tuple[str, str]:
         profile_branches = ""
         applied_branches = ""
 
+    profile_sql = (
+        f"CASE {profile_branches} ELSE {_sql_str(FALLBACK_PROFILE)} END"
+        if profile_branches
+        else f"CASE WHEN TRUE THEN {_sql_str(FALLBACK_PROFILE)} END"
+    )
+
     return (
-        f"CASE {profile_branches} ELSE {_sql_str(FALLBACK_PROFILE)} END",
+        profile_sql,
         f"CASE {applied_branches}"
         f" WHEN c.CNPJ_CIA IS NULL THEN 'default:sem_cadastro:sem_assinatura'"
         f" WHEN c.setor_ativ IS NULL OR trim(c.setor_ativ) = '' THEN 'default:setor_vazio'"

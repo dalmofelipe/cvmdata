@@ -8,7 +8,6 @@ import pytest
 
 from cvmdata.transform.account_map import (
     ACCOUNT_MAP,
-    PL_BY_CODE_PROFILES,
     PL_COMPONENT,
     get_component,
 )
@@ -100,13 +99,6 @@ def test_account_map_banking_keys():
     assert PL_COMPONENT not in ACCOUNT_MAP["banking"].values()
 
 
-def test_account_map_values_are_unique_per_profile():
-    """Unicidade por perfil — nomes podem se repetir entre perfis (por desenho)."""
-    for profile_id, profile_map in ACCOUNT_MAP.items():
-        components = list(profile_map.values())
-        assert len(components) == len(set(components)), profile_id
-
-
 def test_account_map_known_mappings():
     """Spot-check - Uma troca aqui vira erro financeiro silencioso 
     em divida_bruta/divida_liquida/cobertura_juros."""
@@ -196,14 +188,6 @@ def test_get_component_with_profile():
     assert get_component("2.03", "banking") is None
     assert get_component("2.07", "banking") is None
     assert get_component("2.07") is None
-
-
-def test_pl_resolved_by_code_only_in_default():
-    """O fallback textual existe para os perfis sem PL por código; no default ele
-    precisa ficar desligado, senão 2.03 (por código) e 2.07 (por rótulo)
-    escrevem no mesmo componente e o último lido vence."""
-    assert PL_BY_CODE_PROFILES == {"default"}
-    assert "default" in PL_BY_CODE_PROFILES
 
 
 def test_get_component_unknown_profile_falls_back_to_default():

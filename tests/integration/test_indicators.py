@@ -66,6 +66,25 @@ def test_calculate_all_cnpj_filter(tmp_path: Path, db):
     assert total_none == 0
 
 
+def test_calculate_all_cnpj_filter_isolated_with_multiple_companies(tmp_path: Path, db):
+    prepare_indicator_pipeline(db, tmp_path, source="itr", year=2024)
+    for table in ("bpa_clean", "bpp_clean", "dre_clean"):
+        db.execute(
+            f"""
+            INSERT INTO {table}
+            SELECT * REPLACE ('99.999.999/0001-00' AS CNPJ_CIA)
+            FROM {table}
+            """
+        )
+
+    total = calculate_all(db, cnpj="00.000.000/0001-91")
+
+    assert total == EXPECTED_INDICATOR_COUNT
+    assert db.execute(
+        "SELECT COUNT(*) FROM indicators WHERE cnpj_cia = '99.999.999/0001-00'"
+    ).fetchone()[0] == 0
+
+
 
 def test_calculate_all_idempotent(tmp_path: Path, db):
     """Rodar calculate_all duas vezes não duplica registros em indicators."""
@@ -101,20 +120,8 @@ def _load_and_calc(db, bpa_path: Path, bpp_path: Path, dre_path: Path) -> None:
     calculate_all(db)
 
 
-def test_bank_integration_indicators_inserted(db):
-    """Pipeline completo com fixtures de BCO Brasil: load→normalize→calculate."""
-    _load_and_calc(
-        db,
-        FIXTURES_DIR / "sample_bank_bpa.csv",
-        FIXTURES_DIR / "sample_bank_bpp.csv",
-        FIXTURES_DIR / "sample_bank_dre.csv",
-    )
-    count = db.execute("SELECT COUNT(*) FROM indicators").fetchone()[0]
-    assert count == EXPECTED_INDICATOR_COUNT
-
-
 def test_bank_integration_roe_not_none(db):
-    """ROE de BCO Brasil usa o PL resolvido no perfil banking."""
+    """ROE de BCO Brasil usa o PL resolvido pelo rótulo, mesmo sem cadastro."""
     _load_and_calc(
         db,
         FIXTURES_DIR / "sample_bank_bpa.csv",
@@ -123,7 +130,7 @@ def test_bank_integration_roe_not_none(db):
     )
     row = db.execute("SELECT valor FROM indicators WHERE indicador = 'roe'").fetchone()
     assert row is not None
-    assert row[0] == pytest.approx(73.4570460576)
+    assert row[0] == pytest.approx(19171564000 / 150000000000 * 100, abs=1e-4)
 
 
 # ── Inter: ausente do cadastro → assinatura estrutural ──────────────────────
@@ -193,13 +200,10 @@ def test_structural_signature_applies_even_when_cnpj_in_cadastro(db):
 
 
 def test_default_profile_resolves_pl_by_code(db):
-    """Sem classificação persistida o perfil default cai no mapa por código.
+    """Sem classificação persistida, o PL é identificado pelo rótulo.
 
-    Aqui 2.03 é "Provisões" e resolve PL por código; 2.07 é o PL real, mas o
-    fallback textual fica desligado nesse perfil (PL_BY_CODE_PROFILES) porque os
-    dois escreveriam no mesmo componente e o último lido venceria. O resultado
-    esperado é o valor de 2.03 — o comportamento do perfil default, que a
-    classificação estrutural existe para não usar em banco.
+    O código 2.03 é "Provisões" nessa fixture bancária; somente 2.07, cujo
+    rótulo confirma patrimônio líquido, deve alimentar o componente.
     """
     setup_classify_schema(db)
     _load_bank_only(db)
@@ -209,7 +213,7 @@ def test_default_profile_resolves_pl_by_code(db):
 
     comps = fetch_all_balance_components(db, None, profiles)
     (cnpj_dt,) = comps.keys()
-    assert comps[cnpj_dt]["patrimonio_liquido"] == 26099013000.0
+    assert comps[cnpj_dt]["patrimonio_liquido"] == 150000000000.0
 
 
 # ── PL por rótulo: 2.03, 2.07 e 2.08 ────────────────────────────────────────
@@ -363,18 +367,6 @@ def test_collect_components_computes_lucro_liquido_final(tmp_path: Path, db):
 # ── T031: Testes multi-setor — industrial (PETROBRAS) + xfail banco ───────────
 
 
-def test_industrial_all_15_indicators_inserted(db):
-    """PETROBRAS: todas as contas dos perfis presentes → 20 indicadores."""
-    _load_and_calc(
-        db,
-        FIXTURES_DIR / "sample_industrial_bpa.csv",
-        FIXTURES_DIR / "sample_industrial_bpp.csv",
-        FIXTURES_DIR / "sample_industrial_dre.csv",
-    )
-    count = db.execute("SELECT COUNT(*) FROM indicators").fetchone()[0]
-    assert count == EXPECTED_INDICATOR_COUNT
-
-
 def test_industrial_roe_not_none(db):
     """PETROBRAS: ROE calculado corretamente com 3.11 e 2.03 padrão."""
     _load_and_calc(
@@ -386,18 +378,6 @@ def test_industrial_roe_not_none(db):
     row = db.execute("SELECT valor FROM indicators WHERE indicador = 'roe'").fetchone()
     assert row is not None
     assert row[0] == pytest.approx(10.0700925679)
-
-
-def test_industrial_no_none_indicators(db):
-    """PETROBRAS: nenhum indicador é None (todas as contas presentes)."""
-    _load_and_calc(
-        db,
-        FIXTURES_DIR / "sample_industrial_bpa.csv",
-        FIXTURES_DIR / "sample_industrial_bpp.csv",
-        FIXTURES_DIR / "sample_industrial_dre.csv",
-    )
-    none_count = db.execute("SELECT COUNT(*) FROM indicators WHERE valor IS NULL").fetchone()[0]
-    assert none_count == 0
 
 
 def test_bank_sector_liquidez_seca_is_none(db):

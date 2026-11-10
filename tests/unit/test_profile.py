@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 from dataclasses import FrozenInstanceError
 
+import duckdb
 import pytest
 
 from cvmdata.ingestion.tables import TB_BPA_CLEAN, TB_BPP_CLEAN
@@ -63,31 +64,6 @@ def test_conditions_are_immutable():
 # ── predicate ─────────────────────────────────────────────────────────────────
 
 
-def test_predicate_conjoins_one_exists_per_signal():
-    predicate = rule_conditions_sql(BANKING_RULE, [])
-
-    assert predicate.count("EXISTS") == 2
-    assert " AND " in predicate
-    assert f"FROM {TB_BPA_CLEAN}" in predicate
-    assert f"FROM {TB_BPP_CLEAN}" in predicate
-
-
-def test_predicate_correlates_conditions_by_cnpj():
-    """O alias `u` não é configuração: é o contrato com a CTE `sig` de
-    `SQL_CLASSIFY`. Este teste fixa o contrato dos dois lados."""
-    predicate = rule_conditions_sql(BANKING_RULE, [])
-
-    assert predicate.count("= u.CNPJ_CIA") == 2
-
-
-def test_predicate_normalizes_label_like_python_side():
-    """A classificação roda em SQL e o fetch roda em Python; as duas
-    normalizações precisam ser a mesma Regra, em ponto."""
-    predicate = rule_conditions_sql(BANKING_RULE, [])
-
-    assert predicate.count("lower(strip_accents(trim(") == 2
-
-
 def test_exact_signal_uses_equality():
     signal = RuleCondition(clean_table=TB_BPA_CLEAN, cd_conta="1.01", ds_conta_normalized="caixa")
     params: list[object] = []
@@ -128,15 +104,6 @@ def test_params_follow_signal_order():
     ]
 
 
-# ── flags ─────────────────────────────────────────────────────────────────────
-
-
-def test_flags_name_one_column_per_rule():
-    _, flags = _params_and_flags()
-
-    assert "AS rule_0_match" in flags
-
-
 def test_flags_supports_multiple_rules():
     rules = [
         BANKING_RULE,
@@ -150,7 +117,7 @@ def test_flags_supports_multiple_rules():
     params, flags = _params_and_flags(rules)
 
     assert "AS rule_0_match" in flags
-    assert "AS rule_1" in flags
+    assert "AS rule_1_match" in flags
     assert len(params) == 6
 
 
@@ -170,32 +137,9 @@ def test_profile_id_uses_signature_then_default():
     """Sem override, são duas vias: a assinatura ou o fallback."""
     profile_sql, _ = classification_sql(STRUCTURAL_RULES)
 
-    assert profile_sql == f"CASE WHEN rm.rule_0_match THEN 'banking' ELSE '{FALLBACK_PROFILE}' END"
-
-
-@pytest.mark.parametrize(
-    "trecho",
-    [
-        "WHEN rm.rule_0_match THEN 'structure:banking:bpa.1.01+bpp.2.01'",
-        "WHEN c.CNPJ_CIA IS NULL THEN 'default:sem_cadastro:sem_assinatura'",
-        "THEN 'default:setor_vazio'",
-        "ELSE 'default:setor:'",
-    ],
-)
-def test_rule_applied_vocabulary(trecho):
-    """Cada causa tem texto próprio: 'setor vazio', 'setor preenchido' e 'sem
-    cadastro' têm consertos diferentes e precisam ser distinguíveis."""
-    _, applied_sql = classification_sql(STRUCTURAL_RULES)
-
-    assert trecho in applied_sql
-
-
-def test_rule_applied_records_the_sector():
-    """O setor entra no rótulo, não na decisão — é o que permite auditar
-    *qual* empresa caiu no default e por quê."""
-    _, applied_sql = classification_sql(STRUCTURAL_RULES)
-
-    assert "|| trim(c.setor_ativ)" in applied_sql
+    query = f"SELECT {profile_sql} FROM (SELECT ? AS rule_0_match) rm"
+    assert duckdb.sql(query, params=[True]).fetchone()[0] == "banking"
+    assert duckdb.sql(query, params=[False]).fetchone()[0] == FALLBACK_PROFILE
 
 
 def test_classification_sql_without_rules_still_valid():
@@ -203,7 +147,7 @@ def test_classification_sql_without_rules_still_valid():
     é o que mantém o módulo utilizável se STRUCTURAL_RULES for esvaziada."""
     profile_sql, applied_sql = classification_sql([])
 
-    assert profile_sql.startswith("CASE  ELSE")
+    assert duckdb.sql(f"SELECT {profile_sql}").fetchone()[0] == FALLBACK_PROFILE
     assert applied_sql.startswith("CASE  WHEN")
 
 

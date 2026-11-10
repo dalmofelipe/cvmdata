@@ -7,6 +7,7 @@ import duckdb
 from cvmdata.ingestion.tables import TB_BPA_CLEAN, TB_BPP_CLEAN
 from cvmdata.transform.account_map import (
     ALL_BALANCE_CODES,
+    BPP_PL_CODES,
     PL_BY_CODE_PROFILES,
     get_component,
 )
@@ -65,7 +66,9 @@ def fetch_all_balance_components(
     for cnpj_r, dt_r, cd_conta, ds_conta, vl_conta, origem in rows:
         profile_id = profiles.get(cnpj_r, "default")
         name = get_component(cd_conta, profile_id)
-        if (
+        if origem == "bpp" and cd_conta in BPP_PL_CODES and ds_conta is not None:
+            name = resolve_pl(ds_conta, cd_conta)
+        elif (
             name is None
             and origem == "bpp"
             and ds_conta is not None

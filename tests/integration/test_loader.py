@@ -63,6 +63,22 @@ def test_load_csv_inserts_rows(tmp_path, db):
     assert row == ("itr", 2024, "con")
 
 
+def test_load_csv_filters_unmapped_accounts(tmp_path, db):
+    init_schema(db)
+    csv_path = make_balance_csv(
+        tmp_path / "itr_cia_aberta_BPA_con_2024.csv",
+        data_rows=[
+            ("1.01", "Ativo Circulante", "2024-12-31", 1000.0),
+            ("9.99", "Conta fora do mapa", "2024-12-31", 2000.0),
+        ],
+    )
+
+    count = load_csv(db, csv_path, "BPA", "itr", 2024, "con")
+
+    assert count == 1
+    assert db.execute("SELECT CD_CONTA FROM raw_bpa").fetchall() == [("1.01",)]
+
+
 def test_load_csv_idempotent(tmp_path, db):
     init_schema(db)
     csv_path = make_balance_csv(tmp_path / "itr_cia_aberta_BPA_con_2024.csv", rows=4)
